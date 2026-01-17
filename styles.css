@@ -1,0 +1,1627 @@
+/* =========================================================
+   Studio Schedule — styles.css (clean rebuild)
+   ========================================================= */
+
+/* -----------------------------
+   CSS variables + scheme
+------------------------------ */
+:root {
+  color-scheme: light dark;
+
+  --bg: #f6f7fb;
+  --card: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+  --border: #e2e8f0;
+  --gridHead: #f8fafc;
+
+  --accent: #ef4444;
+  --accentText: #ffffff;
+
+  --nowRowRGBA: rgba(255, 247, 194, 1);
+  --todayColRGBA: rgba(255, 245, 245, 1);
+  --shadowRGBA: rgba(15, 23, 42, 0.1);
+
+  --eventAlpha: 1;
+
+  --radius: 14px;
+
+  --timeCol: 76px;
+  --dayMinW: 150px; /* fallback; JS может заменить */
+  --dayW: 150px;    /* fallback; JS может заменить */
+  --slotH: 72px;    /* fallback; JS может заменить */
+  --cellPad: 6px;
+
+  --focus: 0 0 0 3px rgba(59, 130, 246, 0.35);
+  --tableFont: system-ui, -apple-system, Segoe UI, Roboto, Inter, sans-serif;
+
+  --evLineHeight: 1.12;
+  --evTitleW: 900;
+  --evMetaW: 600;
+  --evTitleSize1: 12px;
+  --evTitleSize2: 10px;
+  --evMetaSize1: 11px;
+  --evMetaSize2: 9px;
+
+  --evTitleSizeTiny: 10px;
+  --evMetaSizeTiny: 9px;
+  --evTitleSizeMicro: 9px;
+  --evMetaSizeMicro: 8px;
+
+  --evCardMinH: 68px; /* fallback; JS может заменить */
+
+  --ok: #16a34a;
+  --warn: #f59e0b;
+  --danger: #b91c1c;
+}
+
+html[data-scheme="light"] { color-scheme: light; }
+html[data-scheme="dark"]  { color-scheme: dark; }
+
+* { box-sizing: border-box; }
+
+html {
+  height: 100%;
+  overflow-y: scroll;
+}
+
+body {
+  margin: 0;
+  padding: 16px;
+  padding-bottom: 40px;
+  min-height: 100vh;
+
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--tableFont);
+
+  display: flex;
+  justify-content: center;
+
+  overflow-x: hidden;
+  transition: padding 0.3s ease;
+}
+
+.app {
+  max-width: 1280px;
+  width: 100%;
+  padding-bottom: 20px;
+}
+
+/* -----------------------------
+   Topbar
+------------------------------ */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 260px;
+}
+
+.logo {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--accent), #f59e0b);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.title h1 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.15;
+}
+
+.title .sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  flex: 1;
+}
+
+/* -----------------------------
+   Buttons
+------------------------------ */
+button {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+
+  border-radius: 10px;
+  padding: 7px 10px;
+
+  font-size: 13px;
+  line-height: 1;
+
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  transition: all 0.2s ease;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accentText);
+}
+
+button.ghost { background: transparent; }
+
+button.danger {
+  background: transparent;
+  border-color: rgba(185, 28, 28, 0.35);
+  color: var(--danger);
+}
+
+button:focus { outline: none; box-shadow: var(--focus); }
+button:active { transform: translateY(1px); }
+button[disabled] { opacity: 0.45; cursor: not-allowed; }
+
+button:hover:not([disabled]) { filter: brightness(0.97); }
+
+/* -----------------------------
+   Controls / Filters
+------------------------------ */
+.controls {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 30px var(--shadowRGBA);
+
+  padding: 10px;
+  margin-bottom: 10px;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.mt10 { margin-top: 10px; }
+
+.group {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.chip {
+  position: relative;
+  border-radius: 999px;
+  padding: 5px 10px;
+
+  font-size: 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--text);
+
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+
+  transition: all 0.2s ease;
+}
+
+.chip:hover:not(.active) { background: rgba(148, 163, 184, 0.1); }
+
+.chip.active {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.35);
+  font-weight: 700;
+}
+
+.chip.active::before {
+  content: "";
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+  border-radius: 50%;
+  border: 2px solid var(--card);
+}
+
+.chip .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.chip .count {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 220px;
+}
+
+.search input {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+.search input:focus {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.stats {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Textarea in modal */
+#evName {
+  font-family: var(--tableFont);
+  font-size: 14px;
+  line-height: 1.4;
+
+  padding: 10px 12px;
+
+  border: 1px solid var(--border);
+  border-radius: 8px;
+
+  background: var(--card);
+  color: var(--text);
+
+  width: 100%;
+  transition: border-color 0.2s;
+}
+
+#evName:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
+#evName::placeholder {
+  color: var(--muted);
+  opacity: 0.6;
+}
+
+.char-counter {
+  font-size: 11px;
+  color: var(--muted);
+  text-align: right;
+  margin-top: 4px;
+}
+
+.char-counter.warning { color: var(--warn); }
+.char-counter.danger  { color: var(--accent); }
+
+/* -----------------------------
+   Schedule grid
+------------------------------ */
+.schedule-wrap {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 30px var(--shadowRGBA);
+
+  overflow-x: auto;
+  overflow-y: hidden;
+
+  max-width: 100%;
+  width: 100%;
+
+  transition: all 0.3s ease;
+  margin-bottom: 40px;
+}
+
+.schedule {
+  display: grid;
+  width: max-content;
+  min-width: 100%;
+
+  grid-template-columns: var(--timeCol) repeat(7, minmax(var(--dayMinW), var(--dayW)));
+  border-left: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+}
+
+/* Measuring mode — снять clamp + дать max-content ширину */
+.schedule.measuring {
+  grid-template-columns: var(--timeCol) repeat(7, max-content);
+}
+
+.schedule.measuring .slot { height: auto !important; }
+
+.schedule.measuring .slot.tl-fill .slot-inner { height: auto !important; }
+
+.schedule.measuring .slot.tl-fill .event {
+  flex: 0 0 auto !important;
+  width: max-content !important;
+  max-width: none !important;
+}
+
+.schedule.measuring .event { overflow: visible !important; }
+
+.schedule.measuring .event .t,
+.schedule.measuring .event.double .t {
+  display: block !important;
+  -webkit-box-orient: initial !important;
+  overflow: visible !important;
+  white-space: normal !important;
+  text-overflow: clip !important;
+}
+
+.schedule.measuring .event .m,
+.schedule.measuring .event.double .m {
+  overflow: visible !important;
+  white-space: normal !important;
+  text-overflow: clip !important;
+}
+
+.cell {
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+
+  padding: var(--cellPad);
+  position: relative;
+
+  overflow: hidden;
+  transition: background-color 0.2s ease;
+}
+
+.head {
+  min-height: 42px;
+  background: var(--gridHead);
+
+  position: sticky;
+  top: 0;
+  z-index: 5;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.head .day-actions {
+  opacity: 0.6;
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.head .day-actions:hover { opacity: 1; }
+
+.time {
+  background: var(--gridHead);
+  text-align: right;
+  padding-right: 10px;
+
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 900;
+
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.time.now {
+  background: var(--nowRowRGBA);
+  color: var(--text);
+}
+
+.col-today { background: var(--todayColRGBA); }
+
+.droppable.drop-target {
+  outline: 2px solid rgba(59, 130, 246, 0.55);
+  outline-offset: -2px;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15) inset;
+  animation: pulse-drop 1s infinite;
+}
+
+@keyframes pulse-drop {
+  0%   { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+  70%  { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+}
+
+.slot {
+  position: relative;
+  width: 100%;
+  height: var(--slotH);
+  font-family: var(--tableFont);
+}
+
+.slot-inner {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+}
+
+/* Center one event (requires :has support; graceful degrade otherwise) */
+.slot-inner:has(.event:only-child:not(.double)) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.slot-inner:has(.event:only-child:not(.double)) .event {
+  position: relative !important;
+  top: auto !important;
+  left: 0 !important;
+  width: calc(100% - (var(--cellPad) * 2)) !important;
+}
+
+/* Empty hint */
+.empty-slot {
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.75;
+  text-align: center;
+  user-select: none;
+}
+
+.empty-global {
+  padding: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* -----------------------------
+   Event cards
+------------------------------ */
+.event {
+  position: absolute;
+
+  border-radius: 12px;
+  padding: 7px 8px;
+
+  cursor: pointer;
+  user-select: none;
+
+  overflow: hidden;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.2s ease;
+
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+
+  color: var(--ev-text, #fff);
+  line-height: var(--evLineHeight);
+}
+
+.event::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--ev-bg, #64748b);
+  opacity: var(--eventAlpha);
+  transition: opacity 0.3s ease;
+}
+
+.event > * {
+  position: relative;
+  z-index: 1;
+}
+
+.event:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+}
+
+.event.dim { opacity: 0.25; }
+
+.event .t{
+  font-weight: var(--evTitleW);
+  font-size: var(--evTitleSize1);
+  line-height: 1.3;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+
+  display: block;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+
+.event .m {
+  font-weight: var(--evMetaW);
+  font-size: var(--evMetaSize1);
+  opacity: 0.95;
+
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.event .grab {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+
+  opacity: 0;
+  transition: opacity 0.12s ease;
+
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.event:hover .grab { opacity: 0.9; }
+
+/* Double events */
+.event.double {
+  padding: 6px 7px;
+  gap: 2px;
+  line-height: 1.08;
+  z-index: 10;
+}
+
+.event.double .t {
+  font-size: var(--evTitleSize2);
+  line-height: 1.25;
+  -webkit-line-clamp: 3;
+}
+
+.event.double .m {
+  font-size: var(--evMetaSize2);
+}
+
+/* Side-by-side */
+.event.double.side-by-side { width: calc(50% - 4px) !important; }
+
+.event.double.side-by-side:first-child {
+  left: 6px !important;
+  border-radius: 10px 0 0 10px !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.event.double.side-by-side:last-child {
+  left: calc(50% + 2px) !important;
+  border-radius: 0 10px 10px 0 !important;
+}
+
+/* Stacked */
+.event.double.stacked {
+  left: 6px !important;
+  width: calc(100% - 12px) !important;
+}
+
+.event.double.stacked .t {
+  -webkit-line-clamp: 3; /* держим 3 для стабильной геометрии */
+}
+
+.event.double.stacked:first-child:not(:last-child) {
+  border-radius: 10px 10px 3px 3px !important;
+}
+
+.event.double.stacked:last-child:not(:first-child) {
+  border-radius: 3px 3px 10px 10px !important;
+}
+
+.event.double.stacked:only-child { border-radius: 10px !important; }
+
+.event.double.stacked:first-child + .event.double.stacked {
+  border-top: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+/* Tiny/Micro */
+.event.tiny {
+  padding: 5px 6px;
+  gap: 1px;
+  line-height: 1.08;
+}
+.event.tiny .t {
+  font-size: var(--evTitleSizeTiny);
+  -webkit-line-clamp: 3;
+  line-height: 1.2;
+}
+.event.tiny .m { font-size: var(--evMetaSizeTiny); }
+
+.event.micro {
+  padding: 4px 5px;
+  gap: 1px;
+  line-height: 1.06;
+}
+.event.micro .t {
+  font-size: var(--evTitleSizeMicro);
+  -webkit-line-clamp: 3;
+  line-height: 1.2;
+}
+.event.micro .m { font-size: var(--evMetaSizeMicro); }
+.event.micro .grab { font-size: 10px; right: 4px; top: 4px; }
+
+/* Segments */
+.event.seg-mid { border-radius: 0; }
+.event.seg-start { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.event.seg-end { border-top-left-radius: 0; border-top-right-radius: 0; }
+
+/* -----------------------------
+   List mode
+------------------------------ */
+
+/* В list-режиме сам слот не обязан быть flex — карточки лежат в .slot-inner */
+.slot.list-mode{
+  height: auto;
+  min-height: var(--slotH);
+  padding: 6px 0;
+  display: block;
+}
+
+/* Реальный контейнер карточек: тут и делаем отступ */
+.slot.list-mode .slot-inner{
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  /* важно: в базе .slot-inner = height:100% */
+  height: auto !important;
+  min-height: 0;
+}
+
+/* Карточка в list-режиме */
+.slot.list-mode .event.list{
+  position: relative !important;
+  left: auto !important;
+  top: auto !important;
+
+  width: 100% !important;
+  height: auto !important;
+  min-height: 34px;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+
+  /* не даём карточкам растягиваться и ломать gap */
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+/* Убираем старую логику через margin-bottom (gap теперь главный) */
+.slot.list-mode .event.list.double,
+.slot.list-mode .event.list.double:last-child{
+  margin-bottom: 0;
+}
+
+/* На всякий случай: в list-режиме double НЕ должен быть flex:1 */
+.slot.list-mode .event.double{
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+/* TIMELINE: 2 занятия в одном слоте */
+.schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill.two .slot-inner{
+  gap: 8px;
+}
+
+/* оставляем как было */
+.event.double .grab { right: 6px; top: 6px; font-size: 11px; }
+
+/* Применяется к каждому из 2 событий внутри такого .slot-inner */
+.schedule:not(.compact-mode):not(.list-mode) .slot-inner:has(> .event.double) .event {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;; /* Центрирование контента по вертикали */
+  align-items: flex-start; /* Выравнивание контента по левому краю */
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  margin: 0; /* Сбросить внешние отступы */
+  flex: none; /* Отключить flex-grow/shrink, так как grid управляет размерами */
+  min-height: unset; /* Сбросить min-height */
+  max-height: none; /* Сбросить max-height */
+}
+
+/* Применяется к .slot-inner, когда в нем 2 события в режиме timeline */
+.schedule:not(.compact-mode):not(.list-mode) .slot-inner:has(> .event.double) {
+  display: grid;
+  grid-template-rows: 1fr 1fr; /* Две равные части по высоте */
+  gap: 0px; /* Небольшой зазор между 'растянутыми' элементами, опционально */
+  align-items: stretch;
+  justify-items: stretch;
+  height: 100%; /* Убедиться, что занимает всю высоту .slot */
+  min-height: unset; /* Сбросить возможные ограничения min-height */
+}
+
+/* slot should fill cell height */
+.schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill {
+  height: 100%;
+  min-height: 0;
+}
+
+.schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill .slot-inner {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill.two .slot-inner {
+  gap: 1px; /* divider */
+}
+
+.schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill .event {
+  position: relative !important;
+  top: auto !important;
+  left: auto !important;
+  border-radius: 12px;
+
+  width: 100% !important;
+  height: auto !important;
+  min-height: 0 !important;
+
+  margin: 0 !important;
+  box-sizing: border-box;
+
+  overflow: visible !important;
+}
+
+.schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill .event::before{
+  border-radius: inherit; /* чтобы фон (before) не давал квадратные углы */
+}
+
+.schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill:not(.two) .event {
+  flex: 1 1 auto;
+}
+
+/* ===== TIMELINE ===== */
+.schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill .event .t {
+  display: -webkit-box !important;
+  -webkit-box-orient: vertical !important;
+  -webkit-line-clamp: 3 !important;
+
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere !important;
+  gap: 0 !important;
+}
+
+.schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill .event .m {
+  margin-top: 2px !important;   /* ВОТ ОН — отступ меты */
+
+  white-space: pre-wrap !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  overflow-wrap: anywhere !important;
+  gap: 0 !important;
+}
+
+.schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill .event.title-3 {
+  padding-bottom: 7px;
+}
+
+
+/* -----------------------------
+   Compact mode
+------------------------------ */
+.schedule.compact-mode {
+  grid-template-columns: repeat(7, minmax(var(--dayMinW), var(--dayW)));
+}
+
+.schedule.compact-mode .cell.time { display: none; }
+
+.slot.compact-mode {
+  height: auto;
+  min-height: 0;
+}
+
+.slot.compact-mode .slot-inner{
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--cellPad);
+  height: auto;
+  min-height: 0; 
+}
+
+.slot.compact-mode .event{
+  position: relative !important;
+  top: auto !important;
+  left: 0 !important;
+  width: 100% !important;
+
+  overflow: visible !important; /* чтобы текст не резало коробкой */
+}
+
+.slot.compact-mode .event .m{
+  white-space: pre-wrap;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.slot.compact-mode .empty-slot {
+  margin-top: 0;
+  padding: 20px 0;
+}
+
+/* -----------------------------
+   Modal / Backdrop
+------------------------------ */
+.backdrop {
+  position: fixed;
+  inset: 0;
+
+  background: rgba(2, 6, 23, 0.55);
+  display: none;
+
+  align-items: center;
+  justify-content: center;
+
+  padding: 14px;
+  z-index: 100;
+}
+
+.backdrop.show { display: flex; }
+
+.modal {
+  width: min(640px, 100%);
+  background: var(--card);
+  color: var(--text);
+
+  border: 1px solid var(--border);
+  border-radius: 16px;
+
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
+
+  display: flex;
+  flex-direction: column;
+
+  max-height: min(92vh, 880px);
+  overflow: hidden;
+}
+
+.modal-wide { width: min(860px, 100%); }
+
+.modal-head {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+
+  flex: 0 0 auto;
+}
+
+.modal-head h2 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.15;
+}
+
+.modal-body {
+  padding: 12px 14px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  overflow: auto;
+  min-height: 0;
+
+  overscroll-behavior: contain;
+}
+
+.modal-foot {
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+
+  flex-wrap: wrap;
+  flex: 0 0 auto;
+}
+
+.left-actions,
+.right-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.field label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.field input,
+.field select,
+.field textarea {
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background-color: var(--card);
+  color: var(--text);
+
+  padding: 8px 10px;
+  font-size: 13px;
+
+  transition: all 0.2s ease;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.field input::placeholder,
+.field textarea::placeholder {
+  color: rgba(148, 163, 184, 0.95);
+}
+
+textarea { min-height: 72px; resize: vertical; }
+
+.field select {
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 16px) calc(1em + 2px),
+    calc(100% - 11px) calc(1em + 2px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 28px;
+}
+
+.details summary {
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 800;
+}
+
+.swatches {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+
+  cursor: pointer;
+
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
+
+  transition: transform 0.2s ease;
+}
+
+.swatch:hover { transform: scale(1.1); }
+
+.preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+
+  padding: 6px 10px;
+  border-radius: 999px;
+
+  font-size: 12px;
+  color: #fff;
+  background: var(--accent);
+}
+
+.warning {
+  font-size: 12px;
+  color: var(--danger);
+  background: rgba(185, 28, 28, 0.08);
+  border: 1px solid rgba(185, 28, 28, 0.18);
+  border-radius: 12px;
+  padding: 8px 10px;
+}
+
+.note {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 8px 0 0;
+}
+
+.mt6 { margin-top: 6px; }
+
+/* -----------------------------
+   Tabs / palette
+------------------------------ */
+.tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tab {
+  border-radius: 999px;
+  padding: 6px 10px;
+
+  font-size: 12px;
+  border: 1px solid var(--border);
+  background: var(--card);
+
+  cursor: pointer;
+  color: var(--text);
+
+  transition: all 0.2s ease;
+}
+
+.tab:hover:not(.active) { background: rgba(148, 163, 184, 0.1); }
+
+.tab.active {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.35);
+  font-weight: 900;
+}
+
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+.hr {
+  border-top: 1px dashed var(--border);
+  margin: 6px 0;
+}
+
+.paletteGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.palette {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px;
+
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  transition: all 0.2s ease;
+}
+
+.palette:hover { filter: brightness(1.02); transform: translateY(-2px); }
+
+.palette .name {
+  font-weight: 900;
+  font-size: 13px;
+}
+
+.palette .bar {
+  display: flex;
+  gap: 6px;
+}
+
+.palette .c {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.mini { font-size: 12px; color: var(--muted); }
+
+.colorRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dots { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.dotbtn {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
+
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.dotbtn:hover { transform: scale(1.1); }
+
+.actionsRow { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* -----------------------------
+   Toasts
+------------------------------ */
+.toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  z-index: 200;
+  width: min(360px, calc(100% - 32px));
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px var(--shadowRGBA);
+
+  padding: 10px 12px;
+
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+
+.toast .icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 10px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  color: #fff;
+  font-weight: 900;
+
+  flex: 0 0 auto;
+}
+
+.toast .content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.toast .title {
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.toast .text {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.toast .actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.toast .close {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+
+  opacity: 0.6;
+  font-weight: 900;
+  color: var(--text);
+
+  transition: opacity 0.2s ease;
+}
+
+.toast .close:hover { opacity: 1; }
+
+/* Save indicator (created by JS) */
+@keyframes fadeOut {
+  0%   { opacity: 1; }
+  70%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(10px); }
+}
+
+.save-indicator {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+
+  background: var(--accent);
+  color: var(--accentText);
+
+  padding: 8px 16px;
+  border-radius: 20px;
+
+  font-size: 12px;
+  font-weight: 600;
+
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+
+  animation: fadeOut 2s forwards;
+  pointer-events: none;
+}
+
+/* -----------------------------
+   Export / Print modes
+------------------------------ */
+.export-mode * {
+  pointer-events: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+}
+
+.export-mode .event:hover,
+.export-mode .cell:hover,
+.export-mode .cell.drop-target,
+.export-mode button:hover,
+.export-mode .chip:hover {
+  background: none !important;
+  box-shadow: none !important;
+  transform: none !important;
+  opacity: 1 !important;
+  filter: none !important;
+}
+
+.export-mode .event,
+.export-mode .cell,
+.export-mode * {
+  transition: none !important;
+  animation: none !important;
+}
+
+.export-mode *:focus,
+.export-mode *:active,
+.export-mode *::selection {
+  background: transparent !important;
+  color: inherit !important;
+  outline: none !important;
+}
+
+.export-mode *::-moz-selection {
+  background: transparent !important;
+  color: inherit !important;
+}
+
+.print-mode {
+  --bg: #ffffff;
+  --card: #ffffff;
+  --text: #000000;
+  --muted: #111111;
+  --border: #000000;
+  --gridHead: #ffffff;
+  --shadowRGBA: rgba(0, 0, 0, 0);
+  --nowRowRGBA: rgba(0, 0, 0, 0.04);
+  --todayColRGBA: rgba(0, 0, 0, 0.03);
+  --eventAlpha: 0;
+}
+
+.print-mode .schedule-wrap { border-color: #000 !important; }
+
+.print-mode .event {
+  color: #000 !important;
+  box-shadow: none !important;
+  border: 1px solid #000 !important;
+  padding-left: 14px !important;
+}
+
+.print-mode .event::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+
+  width: 6px;
+  background: var(--ev-bg, #64748b);
+  opacity: 1;
+}
+
+.print-mode .event::before { opacity: 0 !important; }
+
+/* -----------------------------
+   Mobile actions
+------------------------------ */
+.mobile-actions {
+  display: none;
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 100;
+}
+
+.mobile-actions button {
+  padding: 12px 20px;
+  font-size: 16px;
+
+  border-radius: 50%;
+  width: 56px;
+  height: 56px;
+
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Dragging helpers */
+.event.dragging {
+  opacity: 0.7;
+  transform: rotate(2deg);
+  z-index: 1000 !important;
+}
+
+.cell.drag-over { background-color: rgba(59, 130, 246, 0.1) !important; }
+
+/* -----------------------------
+   Tooltips (optional)
+------------------------------ */
+.event-tooltip {
+  position: absolute;
+  background: var(--text);
+  color: var(--card);
+  padding: 8px 12px;
+  border-radius: 8px;
+
+  font-size: 12px;
+  z-index: 1000;
+
+  max-width: 300px;
+  white-space: pre-wrap;
+
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.event:hover .event-tooltip { opacity: 1; }
+
+/* -----------------------------
+   Accessibility / motion
+------------------------------ */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* -----------------------------
+   Responsive
+------------------------------ */
+@media (max-width: 900px) {
+  .stats { margin-left: 0; }
+  .schedule-wrap { overflow: auto; }
+
+  .event.double .t { font-size: calc(var(--evTitleSize2) - 1px); }
+  .event.double .m { font-size: calc(var(--evMetaSize2) - 1px); }
+}
+
+@media (max-width: 768px) {
+  .topbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .brand { min-width: auto; width: 100%; }
+
+  .toolbar {
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 8px;
+    justify-content: flex-start;
+  }
+
+  .toolbar button { flex-shrink: 0; }
+
+  .controls { overflow-x: auto; }
+  .row { flex-wrap: nowrap; min-width: max-content; }
+  .stats { width: 100%; justify-content: flex-start; }
+
+  .schedule-wrap {
+    -webkit-overflow-scrolling: touch;
+    overflow-x: auto;
+  }
+
+  .schedule { min-width: 0; }
+
+  .mobile-actions { display: flex; }
+}
+
+@media (max-width: 720px) {
+  .grid2 { grid-template-columns: 1fr; }
+  .paletteGrid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 520px) {
+  .toolbar { justify-content: flex-start; }
+  .toolbar button {
+    flex: 1;
+    min-width: 120px;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 400px) {
+  .title h1 { font-size: 16px; }
+  .title .sub { font-size: 11px; }
+  .logo { width: 48px; height: 48px; }
+  button { padding: 6px 8px; font-size: 12px; }
+}
+
+/* Dark theme tweaks */
+html[data-scheme="dark"] .event {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+html[data-scheme="dark"] .event:hover {
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+}
+
+/* Measuring only for timeline HEIGHT (not width) */
+.schedule.measuring-h .cell.droppable .slot.tl-fill,
+.schedule.measuring-h .cell.droppable .slot.tl-fill .slot-inner{
+  height: auto !important;
+  min-height: 0 !important;
+}
+
+/* Важно: чтобы scrollHeight вырос от контента (ТОЛЬКО на время measuring-h) */
+.schedule.measuring-h .cell.droppable .slot.tl-fill.two .event,
+.schedule.measuring-h .cell.droppable .slot.tl-fill:not(.two) .event{
+  flex: 0 0 auto !important;
+  height: auto !important;
+}
+
+/* В ОБЫЧНОМ режиме двойные ДОЛЖНЫ делить высоту 50/50 */
+.schedule:not(.measuring):not(.measuring-h):not(.compact-mode)
+  .cell.droppable .slot.tl-fill.two .event{
+  flex: 1 1 0 !important;
+  justify-content: flex-start !important;
+  min-height: 0 !important;
+}
+
+
+/* Карточки растут по контенту (реальная высота нужна для scrollHeight) */
+.schedule.compact-mode .slot.compact-mode .event.compact-card{
+  flex: 0 0 auto !important;
+  border-radius: 12px;        /* можно 14/16 как нравится */
+  overflow: hidden !important; 
+}
+
+.slot.compact-mode .event .t{
+  display: block;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: pre-wrap;
+}
+
+/* Compact: ячейки выравнивает JS (syncGridGeometry), CSS не должен мешать */
+/* compact: пусть слот заполняет выровненную по высоте ячейку */
+.schedule.compact-mode .cell.droppable{
+  display: flex;
+}
+
+
+/* Slot-inner должен растягиваться на всю высоту */
+.schedule.compact-mode .cell.droppable .slot.compact-mode .slot-inner {
+  height: 100%;
+  min-height: 0;
+}
+
+/* Убедитесь, что события тоже растягиваются корректно */
+.schedule.compact-mode .cell.droppable .slot.compact-mode .event.compact-card {
+  flex: auto;
+}
+
+.slot.list-mode .slot-inner:has(.event.double){
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  height: auto !important;
+  grid-template-rows: none !important;
+}

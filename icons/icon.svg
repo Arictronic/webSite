@@ -1,0 +1,80 @@
+<svg width="512" height="512" viewBox="0 0 512 512"
+     xmlns="http://www.w3.org/2000/svg" fill="none">
+
+  <!-- Фон с закруглёнными углами -->
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="512" x2="512" y2="0"
+                    gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#111827"/>
+      <stop offset="1" stop-color="#020617"/>
+    </linearGradient>
+
+    <linearGradient id="calGrad" x1="96" y1="416" x2="416" y2="96"
+                    gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22d3ee"/>
+      <stop offset="1" stop-color="#6366f1"/>
+    </linearGradient>
+
+    <linearGradient id="penGrad" x1="256" y1="448" x2="448" y2="224"
+                    gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fb923c"/>
+      <stop offset="1" stop-color="#f97316"/>
+    </linearGradient>
+
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feColorMatrix in="blur" type="matrix"
+        values="0 0 0 0 1
+                0 0 0 0 1
+                0 0 0 0 1
+                0 0 0 0.6 0"/>
+    </filter>
+  </defs>
+
+  <rect x="32" y="32" width="448" height="448" rx="96"
+        fill="url(#bgGrad)"/>
+
+  <!-- Светящийся контур календаря -->
+  <g stroke="url(#calGrad)" stroke-width="18" stroke-linecap="round"
+     stroke-linejoin="round">
+    <rect x="112" y="128" width="288" height="272" rx="40"/>
+    <line x1="112" y1="192" x2="400" y2="192"/>
+    <line x1="176" y1="88" x2="176" y2="144"/>
+    <line x1="336" y1="88" x2="336" y2="144"/>
+
+    <!-- Ячейки календаря -->
+    <line x1="160" y1="240" x2="224" y2="240"/>
+    <line x1="248" y1="240" x2="312" y2="240"/>
+    <line x1="336" y1="240" x2="368" y2="240"/>
+
+    <line x1="160" y1="288" x2="192" y2="288"/>
+    <line x1="216" y1="288" x2="248" y2="288"/>
+    <line x1="272" y1="288" x2="304" y2="288"/>
+
+    <line x1="160" y1="336" x2="192" y2="336"/>
+    <line x1="216" y1="336" x2="248" y2="336"/>
+  </g>
+
+  <!-- Тень‑свечение под календарём -->
+  <rect x="112" y="128" width="288" height="272" rx="40"
+        stroke="url(#calGrad)" stroke-width="18"
+        filter="url(#glow)" opacity="0.7"/>
+
+  <!-- Карандаш -->
+  <g stroke="url(#penGrad)" stroke-width="18" stroke-linecap="round"
+     stroke-linejoin="round">
+    <path d="M320 360 L420 260
+             C432 248 432 232 420 220
+             L404 204
+             C392 192 376 192 364 204
+             L264 304 Z" fill="none"/>
+    <path d="M264 304 L248 360 L304 344 Z" fill="none"/>
+    <line x1="332" y1="252" x2="392" y2="312"/>
+  </g>
+
+  <!-- Плюсик в правом нижнем углу -->
+  <g stroke="url(#penGrad)" stroke-width="20" stroke-linecap="round">
+    <line x1="368" y1="392" x2="432" y2="392"/>
+    <line x1="400" y1="360" x2="400" y2="424"/>
+  </g>
+</svg>
