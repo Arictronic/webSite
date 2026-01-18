@@ -527,25 +527,44 @@
 
           <!-- FONT -->
           <div class="tab-panel" id="panelFont" role="tabpanel" aria-labelledby="tabFont" hidden>
+
+            <div class="section-title">Пресеты</div>
+            <div class="grid2">
+              <div class="field">
+                <label for="fontPreset">Профиль типографики</label>
+                <select id="fontPreset" aria-describedby="fontPresetHelp">
+                  <option value="custom">Пользовательский</option>
+                  <option value="compact">Компактный</option>
+                  <option value="balanced">Сбалансированный</option>
+                  <option value="spacious">Воздушный</option>
+                  <option value="print">Печатный</option>
+                </select>
+                <div class="sr-only" id="fontPresetHelp">Быстро меняет несколько параметров шрифта.</div>
+              </div>
+
+              <div class="field">
+                <label for="fontQuickTightness">Плотность</label>
+                <select id="fontQuickTightness" aria-describedby="fontQuickTightnessHelp">
+                  <option value="tight">Плотно</option>
+                  <option value="normal">Нормально</option>
+                  <option value="loose">Свободно</option>
+                </select>
+                <div class="sr-only" id="fontQuickTightnessHelp">Меняет line-height и letter-spacing.</div>
+              </div>
+            </div>
+
+            <div class="hr"></div>
+
+            <div class="section-title">Шрифт и пример</div>
             <div class="grid2">
               <div class="field">
                 <label for="fontFamily">Шрифт</label>
-
-                <!-- Оставляем select для совместимости с текущим JS (saveSettings читает fontFamily.value) -->
                 <select id="fontFamily" style="display:none" aria-describedby="fontFamilyHelp"></select>
 
-                <!-- Кастомный список -->
                 <div class="font-picker" id="fontPicker">
-                  <button
-                    type="button"
-                    class="font-picker-btn"
-                    id="fontPickerBtn"
-                    aria-haspopup="listbox"
-                    aria-expanded="false"
-                    aria-describedby="fontFamilyHelp"
-                  >
+                  <button type="button" class="font-picker-btn" id="fontPickerBtn" aria-haspopup="listbox" aria-expanded="false" aria-describedby="fontFamilyHelp">
                     <span class="font-picker-title" id="fontPickerTitle">System UI</span>
-                    <span class="font-picker-sample" id="fontPickerSample">(расписание / РАСПИСАНИЕ)</span>
+                    <span class="font-picker-sample" id="fontPickerSample"></span>
                     <span class="font-picker-chev">▾</span>
                   </button>
 
@@ -560,84 +579,115 @@
 
               <div class="field">
                 <label for="fontSampleText">Текст примера</label>
-                <input
-                  id="fontSampleText"
-                  type="text"
-                  maxlength="120"
-                  placeholder="(расписание / РАСПИСАНИЕ)"
-                  aria-describedby="fontSampleHelp"
-                />
-                <div class="sr-only" id="fontSampleHelp">Текст, который показывается в скобках в списке шрифтов.</div>
+                <input id="fontSampleText" type="text" maxlength="120" placeholder="(расписание / РАСПИСАНИЕ)" aria-describedby="fontSampleHelp" />
+                <div class="sr-only" id="fontSampleHelp">Текст, который показывается в списке шрифтов.</div>
               </div>
             </div>
 
+            <div class="hr"></div>
+
+            <div class="section-title">Размеры</div>
             <div class="grid2">
               <div class="field">
                 <label for="fontLineHeight">Line-height (карточка)</label>
-                <input id="fontLineHeight" type="number" min="1.0" max="1.6" step="0.05" aria-describedby="lineHeightHelp" />
+                <input id="fontLineHeight" type="number" min="1.0" max="1.8" step="0.05" aria-describedby="lineHeightHelp" />
                 <div class="sr-only" id="lineHeightHelp">Межстрочный интервал в карточках</div>
               </div>
 
-              <!-- оставил вторую колонку пустой, чтобы сетка выглядела ровно (можно убрать блок целиком) -->
-              <div class="field" style="opacity:0; pointer-events:none">
-                <label>&nbsp;</label>
-                <input type="text" />
+              <div class="field">
+                <label for="fontLetterSpacing">Letter-spacing, em</label>
+                <input id="fontLetterSpacing" type="number" min="-0.05" max="0.20" step="0.01" aria-describedby="lsHelp" />
+                <div class="sr-only" id="lsHelp">Межбуквенный интервал для текста в карточках.</div>
               </div>
             </div>
 
             <div class="grid2">
               <div class="field">
                 <label for="fontTitle1">Название (1 занятие), px</label>
-                <input id="fontTitle1" type="number" min="10" max="18" step="1" aria-describedby="title1Help" />
-                <div class="sr-only" id="title1Help">Размер шрифта названия при одном занятии в ячейке</div>
+                <input id="fontTitle1" type="number" min="10" max="22" step="1" />
               </div>
-
               <div class="field">
                 <label for="fontTitle2">Название (2 занятия), px</label>
-                <input id="fontTitle2" type="number" min="9" max="16" step="1" aria-describedby="title2Help" />
-                <div class="sr-only" id="title2Help">Размер шрифта названия при двух занятиях в ячейке</div>
+                <input id="fontTitle2" type="number" min="9" max="20" step="1" />
               </div>
             </div>
 
             <div class="grid2">
               <div class="field">
                 <label for="fontMeta1">Мета (1 занятие), px</label>
-                <input id="fontMeta1" type="number" min="9" max="14" step="1" aria-describedby="meta1Help" />
-                <div class="sr-only" id="meta1Help">Размер шрифта дополнительной информации при одном занятии</div>
+                <input id="fontMeta1" type="number" min="8" max="18" step="1" />
+              </div>
+              <div class="field">
+                <label for="fontMeta2">Мета (2 занятия), px</label>
+                <input id="fontMeta2" type="number" min="7" max="16" step="1" />
+              </div>
+            </div>
+
+            <div class="hr"></div>
+
+            <div class="section-title">Веса</div>
+            <div class="grid2">
+              <div class="field">
+                <label for="fontWeightTitle">Жирность названия</label>
+                <select id="fontWeightTitle">
+                  <option value="600">600</option>
+                  <option value="700">700</option>
+                  <option value="800">800</option>
+                  <option value="900">900</option>
+                </select>
               </div>
 
               <div class="field">
-                <label for="fontMeta2">Мета (2 занятия), px</label>
-                <input id="fontMeta2" type="number" min="8" max="13" step="1" aria-describedby="meta2Help" />
-                <div class="sr-only" id="meta2Help">Размер шрифта дополнительной информации при двух занятиях</div>
+                <label for="fontWeightMeta">Жирность мета</label>
+                <select id="fontWeightMeta">
+                  <option value="400">400</option>
+                  <option value="500">500</option>
+                  <option value="600">600</option>
+                  <option value="700">700</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="hr"></div>
+
+            <div class="section-title">Расширенные</div>
+            <div class="grid2">
+              <div class="field">
+                <label for="fontTextTransform">Трансформация</label>
+                <select id="fontTextTransform" aria-describedby="ttHelp">
+                  <option value="none">Без изменений</option>
+                  <option value="uppercase">UPPERCASE</option>
+                  <option value="lowercase">lowercase</option>
+                </select>
+                <div class="sr-only" id="ttHelp">Применяется к названию занятий.</div>
+              </div>
+
+              <div class="field">
+                <label for="fontTitleClamp">Строки названия</label>
+                <select id="fontTitleClamp">
+                  <option value="2">2 строки</option>
+                  <option value="3">3 строки</option>
+                  <option value="4">4 строки</option>
+                </select>
               </div>
             </div>
 
             <div class="grid2">
               <div class="field">
-                <label for="fontWeightTitle">Жирность названия</label>
-                <select id="fontWeightTitle" aria-describedby="weightTitleHelp">
-                  <option value="700">700</option>
-                  <option value="800">800</option>
-                  <option value="900">900</option>
-                </select>
-                <div class="sr-only" id="weightTitleHelp">Насыщенность шрифта названия</div>
+                <label for="fontCardPaddingY">Паддинги карточки (Y), px</label>
+                <input id="fontCardPaddingY" type="number" min="2" max="14" step="1" />
               </div>
 
               <div class="field">
-                <label for="fontWeightMeta">Жирность мета</label>
-                <select id="fontWeightMeta" aria-describedby="weightMetaHelp">
-                  <option value="500">500</option>
-                  <option value="600">600</option>
-                  <option value="700">700</option>
-                </select>
-                <div class="sr-only" id="weightMetaHelp">Насыщенность шрифта дополнительной информации</div>
+                <label for="fontCardRadius">Скругление карточки, px</label>
+                <input id="fontCardRadius" type="number" min="0" max="18" step="1" />
               </div>
             </div>
 
-            <div class="note" role="note">Эти параметры применяются только к карточкам в сетке.</div>
+            <div class="note" role="note">
+              Эти параметры применяются к карточкам в сетке (и частично к списку/компактному виду).
+            </div>
           </div>
-
 
           <!-- THEME -->
           <div class="tab-panel" id="panelTheme" role="tabpanel" aria-labelledby="tabTheme" hidden>
@@ -864,9 +914,6 @@
           <div class="left-actions">
             <button class="ghost" id="btnExpPreview" type="button">
               Предпросмотр
-            </button>
-            <button class="ghost" id="btnExpRotate" type="button">
-              Повернуть 90°
             </button>
           </div>
           <div class="right-actions">

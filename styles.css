@@ -48,6 +48,12 @@
   --evTitleSizeMicro: 9px;
   --evMetaSizeMicro: 8px;
 
+  --evLetterSpacing: 0em;
+  --evTextTransform: none;
+  --evTitleClamp: 3;
+  --evCardPadY: 7px;
+  --evCardRadius: 12px;
+
   --evCardMinH: 68px; /* fallback; JS может заменить */
 
   --ok: #16a34a;
@@ -111,7 +117,7 @@ body {
 .logo {
   width: 56px;
   height: 56px;
-  border-radius: 14px;
+  border-radius: var(--radius);
   background: linear-gradient(135deg, var(--accent), #f59e0b);
 
   display: flex;
@@ -538,7 +544,6 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
 .event {
   position: absolute;
 
-  border-radius: 12px;
   padding: 7px 8px;
 
   cursor: pointer;
@@ -555,6 +560,10 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
 
   color: var(--ev-text, #fff);
   line-height: var(--evLineHeight);
+
+  border-radius: var(--evCardRadius);
+  padding-top: var(--evCardPadY);
+  padding-bottom: var(--evCardPadY);
 }
 
 .event::before {
@@ -586,9 +595,13 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 
-  display: block;
-  overflow: visible;
   text-overflow: clip;
+  letter-spacing: var(--evLetterSpacing);
+  text-transform: var(--evTextTransform);
+  display: -webkit-box !important;
+  -webkit-box-orient: vertical !important;
+  -webkit-line-clamp: var(--evTitleClamp) !important;
+  overflow: hidden !important;
 }
 
 
@@ -639,14 +652,15 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
 
 .event.double.side-by-side:first-child {
   left: 6px !important;
-  border-radius: 10px 0 0 10px !important;
+  border-radius: var(--evCardRadius) 0 0 var(--evCardRadius) !important;
   border-right: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .event.double.side-by-side:last-child {
   left: calc(50% + 2px) !important;
-  border-radius: 0 10px 10px 0 !important;
+  border-radius: 0 var(--evCardRadius) var(--evCardRadius) 0 !important;
 }
+
 
 /* Stacked */
 .event.double.stacked {
@@ -659,14 +673,16 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
 }
 
 .event.double.stacked:first-child:not(:last-child) {
-  border-radius: 10px 10px 3px 3px !important;
+  border-radius: var(--evCardRadius) var(--evCardRadius) 0 0 !important;
 }
 
 .event.double.stacked:last-child:not(:first-child) {
-  border-radius: 3px 3px 10px 10px !important;
+  border-radius: 0 0 var(--evCardRadius) var(--evCardRadius) !important;
 }
 
-.event.double.stacked:only-child { border-radius: 10px !important; }
+.event.double.stacked:only-child {
+  border-radius: var(--evCardRadius) !important;
+}
 
 .event.double.stacked:first-child + .event.double.stacked {
   border-top: 1px solid rgba(255, 255, 255, 0.25);
@@ -791,6 +807,15 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
   height: 100%; /* Убедиться, что занимает всю высоту .slot */
   min-height: unset; /* Сбросить возможные ограничения min-height */
 }
+/* TIMELINE: 2 события в одной ячейке — скругляем только внешние углы */
+.schedule:not(.compact-mode) .cell.droppable .slot.tl-fill.two .slot-inner > .event:first-child {
+  border-radius: var(--evCardRadius) var(--evCardRadius) 0 0 !important;
+}
+
+.schedule:not(.compact-mode) .cell.droppable .slot.tl-fill.two .slot-inner > .event:last-child {
+  border-radius: 0 0 var(--evCardRadius) var(--evCardRadius) !important;
+}
+
 
 /* slot should fill cell height */
 .schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill {
@@ -814,7 +839,7 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
   position: relative !important;
   top: auto !important;
   left: auto !important;
-  border-radius: 12px;
+  border-radius: var(--evCardRadius);
 
   width: 100% !important;
   height: auto !important;
@@ -871,6 +896,17 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
 }
 
 .schedule.compact-mode .cell.time { display: none; }
+
+/* Минимальные отступы в колонке времени (timeline/list) */
+.schedule:not(.compact-mode) .cell.time{
+  padding: 0 4px !important;   /* было по сути 6px + 10px справа */
+}
+
+/* Убираем лишний правый отступ, который задаёт .time */
+.schedule:not(.compact-mode) .time{
+  padding-right: 0 !important;
+}
+
 
 .slot.compact-mode {
   height: auto;
@@ -931,7 +967,7 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
   color: var(--text);
 
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: calc(var(--radius) + 2px);
 
   box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
 
@@ -1045,7 +1081,7 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
   z-index: 50;
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius);
   box-shadow: 0 10px 30px var(--shadowRGBA);
   padding: 8px;
 }
@@ -1257,7 +1293,7 @@ textarea { min-height: 72px; resize: vertical; }
 
 .palette {
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius);
   padding: 10px;
 
   background: rgba(255, 255, 255, 0.02);
@@ -1360,7 +1396,7 @@ textarea { min-height: 72px; resize: vertical; }
 
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius);
   box-shadow: 0 10px 30px var(--shadowRGBA);
 
   padding: 10px 12px;
@@ -1732,7 +1768,7 @@ html[data-scheme="dark"] .event:hover {
 /* Карточки растут по контенту (реальная высота нужна для scrollHeight) */
 .schedule.compact-mode .slot.compact-mode .event.compact-card{
   flex: 0 0 auto !important;
-  border-radius: 12px;        /* можно 14/16 как нравится */
+  border-radius: var(--evCardRadius) !important;
   overflow: hidden !important; 
 }
 
@@ -1767,4 +1803,12 @@ html[data-scheme="dark"] .event:hover {
   gap: 2px !important;
   height: auto !important;
   grid-template-rows: none !important;
+}
+
+.section-title{
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--text);
+  letter-spacing: .02em;
 }

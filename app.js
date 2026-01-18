@@ -9,6 +9,10 @@ if (document.readyState === 'loading') {
   console.log("DOM уже загружен");
 }
 
+const MAX_NAME_LINES = 3
+const MAX_NAME_CHARS = 150
+const MAX_NAME_LINE_LEN = 50
+
 const DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
 const COLOR_SWATCHES = [
@@ -34,6 +38,13 @@ const COLOR_SWATCHES = [
   "#a855f7",
   "#ec4899",
 ];
+
+const FONT_PRESETS = {
+  compact:   { lineHeight: 1.05, titleClamp: 2, letterSpacing: -0.01, cardPadY: 5, cardRadius: 10, weightTitle: 900, weightMeta: 600 },
+  balanced:  { lineHeight: 1.12, titleClamp: 3, letterSpacing:  0.00, cardPadY: 7, cardRadius: 12, weightTitle: 900, weightMeta: 600 },
+  spacious:  { lineHeight: 1.20, titleClamp: 3, letterSpacing:  0.02, cardPadY: 9, cardRadius: 14, weightTitle: 800, weightMeta: 600 },
+  print:     { lineHeight: 1.18, titleClamp: 3, letterSpacing:  0.01, cardPadY: 8, cardRadius: 10, weightTitle: 700, weightMeta: 500, textTransform: 'none' },
+};
 
 const THEME_PRESETS = [
   {
@@ -124,6 +135,18 @@ const expJpegWrap = document.getElementById("expJpegWrap");
 const expPreviewImg = document.getElementById("expPreviewImg");
 
 const $ = (id) => document.getElementById(id);
+
+function applyFontPreset(id){
+  const p = FONT_PRESETS[id];
+  if (!p) return;
+  Object.assign(state.settings.font, p);
+  applyFont();
+  renderAll();
+  saveState(true);
+  openSettings(); // чтобы поля обновились в модалке
+}
+
+
 
 function pad2(n) {
   return String(n).padStart(2, "0");
@@ -218,6 +241,11 @@ const DEFAULT_STATE = () => ({
       weightTitle: 900,
       weightMeta: 600,
       sampleText: '(расписание / РАСПИСАНИЕ)',
+      letterSpacing: 0,
+      textTransform: 'none',
+      titleClamp: 3,
+      cardPadY: 7,
+      cardRadius: 12,
     },
     theme: {
       mode: "auto",
@@ -502,45 +530,45 @@ function restoreTitleStyles(el, prev) {
 }
 
 function hardenState() {
-  // Гарантируем наличие всех объектов settings
-  const defaultState = DEFAULT_STATE(); // Создаём дефолтное состояние
-  
+  const defaultState = DEFAULT_STATE();
+
   if (!state.settings) state.settings = deepCopy(defaultState.settings);
-  if (!state.settings.schedule) 
+  if (!state.settings.schedule)
     state.settings.schedule = deepCopy(defaultState.settings.schedule);
-  if (!state.settings.font) 
+  if (!state.settings.font)
     state.settings.font = deepCopy(defaultState.settings.font);
   if (!state.settings.font.sampleText)
     state.settings.font.sampleText = defaultState.settings.font.sampleText;
-  if (!state.settings.display) 
+  if (!state.settings.display)
     state.settings.display = deepCopy(defaultState.settings.display);
-  if (!state.settings.theme) 
+  if (!state.settings.theme)
     state.settings.theme = deepCopy(defaultState.settings.theme);
 
   const sch = state.settings.schedule;
 
-  // ❌ ПРОБЛЕМА ЗДЕСЬ: используем DEFAULT_STATE.settings.schedule вместо defaultState.settings.schedule
   sch.slotHeight = clamp(
-    Math.round(Number(sch.slotHeight) || DEFAULT_STATE.settings.schedule.slotHeight),
+    Math.round(Number(sch.slotHeight) || defaultState.settings.schedule.slotHeight),
     48,
     240
-    );
+  );
 
   sch.slotMinutes = clamp(
-      Math.round(Number(sch.slotMinutes) || DEFAULT_STATE.settings.schedule.slotMinutes),
-      1,
-      240
-    );
+    Math.round(Number(sch.slotMinutes) || defaultState.settings.schedule.slotMinutes),
+    1,
+    240
+  );
 
   sch.maxPerCell = 2;
 
-  // Проверяем массивы
+  // Массивы
   if (!Array.isArray(state.events)) state.events = [];
+
   if (!Array.isArray(state.directions))
-    state.directions = DEFAULT_STATE().directions;
+    state.directions = deepCopy(defaultState.directions);
+
   if (!Array.isArray(state.coaches)) state.coaches = [];
 
-  // Генерируем ID для событий без них
+  // ID и createdAt для событий
   state.events.forEach((ev) => {
     if (!ev.id) ev.id = uid();
     if (!ev.createdAt) ev.createdAt = Date.now();
@@ -723,6 +751,14 @@ function applyFont() {
   r.setProperty("--evMetaSize2", `${f.metaSize2}px`);
   r.setProperty("--evTitleW", String(f.weightTitle));
   r.setProperty("--evMetaW", String(f.weightMeta));
+  r.setProperty('--evLetterSpacing', `${Number(f.letterSpacing || 0)}em`);
+  r.setProperty('--evTextTransform', String(f.textTransform || 'none'));
+  r.setProperty('--evTitleClamp', String(Number(f.titleClamp || 3)));
+  r.setProperty('--evCardPadY', `${Number(f.cardPadY || 7)}px`);
+  r.setProperty('--evCardRadius', `${Number(f.cardRadius || 12)}px`);
+
+  const uiRadius = clamp(Number(f.cardRadius ?? 12) + 2, 10, 24);
+  r.setProperty("--radius", uiRadius + "px");
 
   // ===== NEW: авто-минимумы высот от шрифта (P0) =====
   const lh = Number(f.lineHeight) || 1.12;
@@ -750,8 +786,7 @@ function applyFont() {
   }
 
   // Ширина колонки времени (чтобы HH:MM не сжималось при крупном шрифте)
-  const wantedTimeCol = Math.ceil(m1 * 3.8 + 36);
-  r.setProperty("--timeCol", `${clamp(wantedTimeCol, 58, 96)}px`);
+  r.setProperty('--timeCol', clamp(26, 44, 80) + 'px')
 }
 
 function applyTheme() {
@@ -953,39 +988,57 @@ function createEventElement(ev, style, dir, isDouble = false, layout = null) {
   const el = document.createElement("div");
   el.className = "event";
   el.dataset.eid = ev.id;
+
   if (isDouble) {
     el.classList.add("double");
     if (layout === "stacked") el.classList.add("stacked");
     if (layout === "side-by-side") el.classList.add("side-by-side");
   }
+
   if (!eventVisible(ev)) el.classList.add("dim");
+
   el.style.setProperty("--ev-bg", color);
   el.style.setProperty("--ev-text", text);
+
+  // helpers: числа для left/width обычно означают проценты (0..100)
+  const cssPercentOr = (v, fallback) => {
+    if (v === null || v === undefined || v === "") return fallback;
+    if (typeof v === "number") return `${v}%`;
+    return String(v);
+  };
+  const cssPxOr = (v, fallback) => {
+    if (v === null || v === undefined || v === "") return fallback;
+    if (typeof v === "number") return `${v}px`;
+    return String(v);
+  };
 
   el.setAttribute("draggable", "true");
   el.addEventListener("dragstart", (de) => {
     el.dataset.eid = ev.id;
-    de.dataTransfer.setData("text/event-id", ev.id);
-    de.dataTransfer.effectAllowed = "move";
+    if (de.dataTransfer) {
+      de.dataTransfer.setData("text/event-id", ev.id);
+      de.dataTransfer.effectAllowed = "move";
+    }
     el.classList.add("dragging");
   });
-  el.addEventListener("dragend", () => {
-    el.classList.remove("dragging");
-  });
+  el.addEventListener("dragend", () => el.classList.remove("dragging"));
   el.addEventListener("click", (ce) => {
     ce.stopPropagation();
     openEdit(ev.id);
   });
 
+  // top/height — пиксели
   el.style.top = `${style.top}px`;
   el.style.height = `${style.height}px`;
-  el.style.left = style.left || "0";
-  el.style.width = style.width || "100%";
+
+  // left/width — обычно проценты (0..100) для разметки двух карточек
+  el.style.left = cssPercentOr(style.left, "0%");
+  el.style.width = cssPercentOr(style.width, "100%");
 
   if (layout === "side-by-side") {
-    el.style.left = style.left;
-    el.style.width = style.width;
-    el.style.borderRadius = style.borderRadius;
+    el.style.left = cssPercentOr(style.left, "0%");
+    el.style.width = cssPercentOr(style.width, "50%");
+    if (style.borderRadius != null) el.style.borderRadius = cssPxOr(style.borderRadius, "");
   }
 
   const title = document.createElement("div");
@@ -993,36 +1046,17 @@ function createEventElement(ev, style, dir, isDouble = false, layout = null) {
   title.textContent = fixTypography(ev.name) || "Без названия";
   el.appendChild(title);
 
-  // JS-clamp: не более 3 строк в названии (жёстко, независимо от CSS line-clamp) [file:5][file:6]
+  // Clamp по фактическому лимиту (CSS webkit-line-clamp или настройка titleClamp)
   requestAnimationFrame(() => {
     const cs = getComputedStyle(title);
-    const lh = parseFloat(cs.lineHeight) || 14;
-    const maxHeight = lh * 3;
+    const fromCss = parseInt(cs.webkitLineClamp, 10);
+    const fromSettings = Number(state?.settings?.font?.titleClamp) || 3;
+    const maxLines = Number.isFinite(fromCss) && fromCss > 0 ? fromCss : fromSettings;
 
-    if (title.scrollHeight <= maxHeight + 1) return;
-
-    const full = title.textContent || "";
-    let left = 0;
-    let right = full.length;
-    let best = full;
-
-    while (left <= right) {
-      const mid = (left + right) >> 1;
-      title.textContent = full.slice(0, mid) + "…";
-
-      if (title.scrollHeight <= maxHeight + 1) {
-        best = title.textContent;
-        left = mid + 1;
-      } else {
-        right = mid - 1;
-      }
-    }
-
-    title.textContent = best;
+    clampTitleToLines(title, maxLines);
   });
 
   const metaText = isDouble ? metaCoachRoom(ev, true) : metaFullByMode(ev);
-
   if (metaText) {
     const meta = document.createElement("div");
     meta.className = "m";
@@ -1826,6 +1860,13 @@ function smartOpenCreate(dayIndex, slotStart, slotEnd = null) {
   // ИСПРАВЛЕНО: убрана проверка на выход за границы слота
   openCreate(dayIndex, defaultStart, defaultDuration);
 }
+const fontPreset = $('fontPreset');
+const fontQuickTightness = $('fontQuickTightness');
+const fontLetterSpacing = $('fontLetterSpacing');
+const fontTextTransform = $('fontTextTransform');
+const fontTitleClamp = $('fontTitleClamp');
+const fontCardPaddingY = $('fontCardPaddingY');
+const fontCardRadius = $('fontCardRadius');
 
 const eventBackdrop = $("eventBackdrop");
 const evId = $("evId");
@@ -2077,7 +2118,13 @@ function saveEventFromModal() {
   const { start, end, step } = getBounds();
   const id = evId.value || uid();
   const dayIndex = Number(evDay.value);
-  const name = clampLines(evName.value, MAX_NAME_LINES).trim();
+
+  // 1) Имя: нормализуем и сразу показываем пользователю то, что реально сохранится
+  const name = sanitizeEventName(evName.value);
+  if (evName.value !== name) {
+    evName.value = name;
+    updateCharCounter();
+  }
 
   if (!name) {
     toast("WARN", "⚠️ Ошибка", "Укажите название занятия.");
@@ -2097,11 +2144,18 @@ function saveEventFromModal() {
     return;
   }
 
+  // 2) Валидация времени/слота — единым валидатором (чтобы логика не расходилась)
+  const validation = validateTimeSlot(dayIndex, startMin, dur, evId.value || null);
+  if (!validation.valid) {
+    toast("WARN", "⚠️ Ошибка", validation.reason || "Некорректное время занятия.");
+    return;
+  }
+
+  // (оставим твои сообщения, но без дубля validateTimeSlot)
   if (startMin < start || startMin >= end) {
     toast("WARN", "⚠️ Ошибка", "Время вне рабочего диапазона.");
     return;
   }
-
   const slotStart = slotStartFor(startMin);
   const slotEnd = slotStart + step;
   if (startMin + dur > slotEnd) {
@@ -2109,6 +2163,7 @@ function saveEventFromModal() {
     return;
   }
 
+  // 3) Направление (как у тебя)
   let directionId = evDir.value;
   const ndName = newDirName.value.trim();
   if (ndName) {
@@ -2117,11 +2172,7 @@ function saveEventFromModal() {
     );
     if (existingDir) {
       directionId = existingDir.id;
-      toast(
-        "INFO",
-        "ℹ️ Направление существует",
-        "Выбрано существующее направление."
-      );
+      toast("INFO", "ℹ️ Направление существует", "Выбрано существующее направление.");
     } else {
       const ndId = generateDirectionId(ndName);
       state.directions.push({
@@ -2133,16 +2184,18 @@ function saveEventFromModal() {
     }
   }
 
+  // 4) Coach: в текущем коде селект использует value="new" (а не "__new__") [file:14]
+  const coachVal = evCoach.value;
+  const coach =
+    coachVal === "new" || coachVal === "__new__" ? "" : coachVal;
+
   const next = {
     id,
     dayIndex,
     startMin,
     durationMin: dur,
     name,
-
-    // ✅ ИЗМЕНЕНО: проверяем на __new__
-    coach: evCoach.value === "__new__" ? "" : evCoach.value,
-
+    coach,
     room: evRoom.value.trim(),
     directionId,
     notes: evNotes.value.trim(),
@@ -2153,11 +2206,8 @@ function saveEventFromModal() {
 
   const idx = state.events.findIndex((e) => e.id === id);
   pushHistory(idx < 0 ? "➕ Новое занятие" : "✏️ Редактирование");
-  if (idx >= 0) {
-    state.events[idx] = next;
-  } else {
-    state.events.push(next);
-  }
+  if (idx >= 0) state.events[idx] = next;
+  else state.events.push(next);
 
   saveState();
   renderAll();
@@ -2615,6 +2665,15 @@ function openSettings() {
   dispShowEmptyHint.value = d.showEmptyHint ? "yes" : "no";
 
   const f = state.settings.font;
+  if (fontPreset) fontPreset.value = 'custom';
+  if (fontQuickTightness) fontQuickTightness.value = 'normal';
+
+  if (fontLetterSpacing) fontLetterSpacing.value = String(f.letterSpacing ?? 0);
+  if (fontTextTransform) fontTextTransform.value = f.textTransform || 'none';
+  if (fontTitleClamp) fontTitleClamp.value = String(f.titleClamp ?? 3);
+  if (fontCardPaddingY) fontCardPaddingY.value = String(f.cardPadY ?? 7);
+  if (fontCardRadius) fontCardRadius.value = String(f.cardRadius ?? 12);
+
   fontFamily.value = f.family;
   setSelectedFont(fontFamily.value);
   fontLineHeight.value = String(f.lineHeight);
@@ -2999,9 +3058,12 @@ function saveSettings() {
   if (!defaultDuration || defaultDuration < 1)
     issues.push("Длительность по умолчанию должна быть >= 1.");
 
-  const lh = Number(fontLineHeight.value);
-  if (!lh || lh < 1.0 || lh > 1.6)
-    issues.push("Line-height должен быть 1.0..1.6.");
+  let lh = Number(fontLineHeight.value);
+  if (!Number.isFinite(lh)) {
+    lh = 1.12;
+    issues.push("Line-height: некорректное число.");
+  }
+  lh = clamp(lh, 1.0, 1.8);
   const t1 = Number(fontTitle1.value),
     t2 = Number(fontTitle2.value);
   const m1 = Number(fontMeta1.value),
@@ -3090,6 +3152,30 @@ function saveSettings() {
     const st = (fontSampleText.value || '').trim();
     state.settings.font.sampleText = st || DEFAULTSTATE.settings.font.sampleText;
   }
+  let letterSpacing = Number(fontLetterSpacing?.value);
+  if (!Number.isFinite(letterSpacing)) letterSpacing = 0;
+  letterSpacing = clamp(letterSpacing, -0.05, 0.20);
+
+  const textTransform = String(fontTextTransform?.value ?? "none");
+
+  let titleClamp = Number(fontTitleClamp?.value);
+  if (!Number.isFinite(titleClamp)) titleClamp = 3;
+  titleClamp = clamp(Math.round(titleClamp), 2, 4);
+
+  let cardPadY = Number(fontCardPaddingY?.value);
+  if (!Number.isFinite(cardPadY)) cardPadY = 7;
+  cardPadY = clamp(Math.round(cardPadY), 2, 14);
+
+  let cardRadius = Number(fontCardRadius?.value);
+  if (!Number.isFinite(cardRadius)) cardRadius = 12;
+  cardRadius = clamp(Math.round(cardRadius), 0, 18);
+
+  state.settings.font.letterSpacing = letterSpacing;
+  state.settings.font.textTransform = textTransform;
+  state.settings.font.titleClamp = titleClamp;
+  state.settings.font.cardPadY = cardPadY;
+  state.settings.font.cardRadius = cardRadius;
+
 
   saveState();
   closeSettings();
@@ -3223,16 +3309,6 @@ expQuality.addEventListener("input", () => {
   lastPreview = null;
   expPreviewImg.removeAttribute("src");
 });
-
-document.getElementById("btnExpRotate").addEventListener("click", async () => {
-  exportRotate = !exportRotate;
-  lastPreview = null;
-  expPreviewImg.removeAttribute("src");
-  syncExportModalUI();
-  await buildExportPreview();
-  toast("INFO", "Экспорт", exportRotate ? "Поворот 90°." : "Поворот выключен.");
-});
-
 
 document
   .getElementById("btnExpPreview")
@@ -3731,7 +3807,6 @@ async function captureScheduleCanvas({ compact = false, background = null } = {}
   }
 }
 
-let exportRotate = false; // 90°
 let lastPreview = null; // { fmt, imageFormat, quality, dataUrl }
 
 function makeExportClone({ compact = false } = {}) {
@@ -3785,26 +3860,6 @@ function makeExportClone({ compact = false } = {}) {
   };
 }
 
-
-
-
-function rotateCanvas90CW(sourceCanvas) {
-  const out = document.createElement("canvas");
-  out.width = sourceCanvas.height;
-  out.height = sourceCanvas.width;
-
-  const ctx = out.getContext("2d");
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
-
-  ctx.translate(out.width, 0);
-  ctx.rotate(Math.PI / 2);
-  ctx.drawImage(sourceCanvas, 0, 0);
-
-  return out;
-}
-
-
 function openExportModal() {
   // presets
   expPreset.innerHTML = "";
@@ -3821,7 +3876,6 @@ function openExportModal() {
   expBg.value = "auto";
   expQuality.value = "92";
   expQualityVal.textContent = "92";
-  exportRotate = false;
   expPreviewImg.removeAttribute("src");
   lastPreview = null;
 
@@ -3834,11 +3888,28 @@ function closeExportModal() {
 }
 
 function syncExportModalUI() {
-  const fmt = expFormat.value;
-  expPreviewImg.classList.remove("rot90");
-  expJpegWrap.style.display = fmt === "jpeg" ? "block" : "none";
-}
+  const fmt = expFormat.value
+  expJpegWrap.style.display = (fmt === 'jpeg') ? 'block' : 'none'
 
+  const optTransparent = expBg.querySelector('option[value="transparent"]')
+  if (!optTransparent) return
+
+  const isJpeg = (fmt === 'jpeg')
+
+  // убрать "прозрачность" из выбора при JPEG
+  optTransparent.hidden = isJpeg
+  optTransparent.disabled = isJpeg
+
+  if (isJpeg) {
+    // запомнить прошлый фон (для PNG/SVG) и принудить белый для JPEG
+    expBg.dataset.prevBg = expBg.value
+    expBg.value = 'white'
+  } else {
+    // вернуть прошлый фон, а если его нет — сделать прозрачный по умолчанию
+    expBg.value = expBg.dataset.prevBg || 'transparent'
+    delete expBg.dataset.prevBg
+  }
+}
 
 function getExportOptsFromUI() {
   const preset = getExportPresetById(expPreset.value);
@@ -3862,7 +3933,6 @@ function getExportOptsFromUI() {
     quality,
     background,
     compact,
-    rotate: exportRotate,
   };
 }
 
@@ -3939,8 +4009,6 @@ async function buildExportPreview() {
         quality: 1.0,
       });
 
-      if (opts.rotate) dataUrl = rotateSvgDataUrl90(dataUrl);
-
       expPreviewImg.src = dataUrl;
       lastPreview = { dataUrl, ...opts };
 
@@ -3992,8 +4060,7 @@ async function buildExportPreview() {
     };
     outCanvas = createFinalCanvas(baseCanvas, target);
   } else if (opts.rotate) {
-    // auto + rotate: крутим сам canvas
-    outCanvas = rotateCanvas90CW(baseCanvas);
+    outCanvas = baseCanvas;
   }
 
   const dataUrl = outCanvas.toDataURL(opts.imageFormat, opts.quality);
@@ -4009,7 +4076,6 @@ async function downloadFromExportModal() {
   const needsRebuild =
     !lastPreview ||
     lastPreview.fmt !== opts.fmt ||
-    lastPreview.rotate !== opts.rotate ||
     lastPreview.preset?.id !== opts.preset?.id ||
     lastPreview.imageFormat !== opts.imageFormat ||
     lastPreview.quality !== opts.quality ||
@@ -4038,11 +4104,6 @@ async function downloadFromExportModal() {
   a.click();
 
   toast("OK", "Экспорт", "Файл скачан.");
-}
-
-// SVG экспорт
-function rotateSvgDataUrl90(dataUrl) {
-  return rotateSvgDataUrl(dataUrl, 90);
 }
 
 // Универсальный угол
@@ -4280,8 +4341,8 @@ function downloadCanvas(
 // ===== СЧЕТЧИК СИМВОЛОВ И АВТОМАТИЧЕСКИЕ ПЕРЕНОСЫ =====
 
 function updateCharCounter() {
-  const maxLength = 150; // ✅ БЫЛО: 100
-  const currentLength = evName.value.length;
+  const maxLength = MAX_NAME_CHARS
+  const currentLength = evName.value.length
 
   let counter = document.getElementById("evNameCounter");
   if (!counter) {
@@ -4301,48 +4362,33 @@ function updateCharCounter() {
   }
 }
 
-function wrapTextTo50Chars(text) {
-  if (!text) return text;
+function wrapLineToLen(line, maxLen) {
+  if (!line) return ''
+  const words = line.split(/\s+/).filter(Boolean)
+  const lines = []
+  let cur = ''
 
-  const maxLineLength = 50;
-  const words = text.split(" ");
-  const lines = [];
-  let currentLine = "";
-
-  words.forEach((word) => {
-    // Если слово само по себе длиннее лимита, разбиваем его
-    if (word.length > maxLineLength) {
-      if (currentLine) {
-        lines.push(currentLine.trim());
-        currentLine = "";
-      }
-      // Разбиваем длинное слово на части по 50 символов
-      for (let i = 0; i < word.length; i += maxLineLength) {
-        lines.push(word.slice(i, i + maxLineLength));
-      }
-      return;
+  for (const word of words) {
+    // очень длинное слово режем кусками
+    if (word.length > maxLen) {
+      if (cur) { lines.push(cur); cur = '' }
+      for (let i = 0; i < word.length; i += maxLen) lines.push(word.slice(i, i + maxLen))
+      continue
     }
 
-    // Проверяем, поместится ли слово в текущую строку
-    const testLine = currentLine ? currentLine + " " + word : word;
-
-    if (testLine.length <= maxLineLength) {
-      currentLine = testLine;
-    } else {
-      // Сохраняем текущую строку и начинаем новую
-      if (currentLine) {
-        lines.push(currentLine.trim());
-      }
-      currentLine = word;
-    }
-  });
-
-  // Не забываем последнюю строку
-  if (currentLine) {
-    lines.push(currentLine.trim());
+    const test = cur ? (cur + ' ' + word) : word
+    if (test.length <= maxLen) cur = test
+    else { if (cur) lines.push(cur); cur = word }
   }
+  if (cur) lines.push(cur)
+  return lines.join('\n')
+}
 
-  return lines.join("\n");
+function wrapTextToLineLen(text, maxLen) {
+  const v = normalizeNewlines(text || '')
+  const parts = v.split('\n')
+  const out = parts.map(p => wrapLineToLen(p.trim(), maxLen)).join('\n')
+  return normalizeNewlines(out)
 }
 
 function clampTitleToLines(titleEl, maxLines) {
@@ -4376,7 +4422,31 @@ function clampTitleToLines(titleEl, maxLines) {
   titleEl.textContent = best;
 }
 
-const MAX_NAME_LINES = 3;
+function sanitizeEventName(raw) {
+  let t = normalizeNewlines(raw || '').replace(/\t/g, ' ')
+  t = t.trim()
+
+  // сначала ограничим исходные строки
+  t = clampLines(t, MAX_NAME_LINES)
+
+  // затем завернём каждую строку до 50 (может добавить переносы)
+  t = wrapTextToLineLen(t, MAX_NAME_LINE_LEN)
+
+  // после wrap снова ограничим число строк
+  t = clampLines(t, MAX_NAME_LINES)
+
+  // жёсткий лимит по символам (включая \n)
+  if (t.length > MAX_NAME_CHARS) t = t.slice(0, MAX_NAME_CHARS)
+
+  // подчистим хвосты
+  t = t.replace(/[ \t]+\n/g, '\n').trim()
+
+  // финально ещё раз на всякий случай
+  t = clampLines(t, MAX_NAME_LINES)
+
+  return t
+}
+
 
 function normalizeNewlines(s) {
   return (s ?? "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
@@ -4410,13 +4480,12 @@ evName.addEventListener("input", () => {
 });
 
 // Применяем перенос при потере фокуса
-evName.addEventListener("blur", () => {
-  const wrapped = wrapTextTo50Chars(evName.value);
-  if (wrapped !== evName.value) {
-    evName.value = wrapped;
-    updateCharCounter();
-  }
+evName.addEventListener('blur', () => {
+  const next = sanitizeEventName(evName.value)
+  if (next !== evName.value) evName.value = next
+  updateCharCounter()
 });
+
 
 // Функция для замены обычных пробелов на неразрывные после предлогов/союзов
 function fixTypography(text) {
