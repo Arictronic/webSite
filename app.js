@@ -209,7 +209,7 @@ const DEFAULT_STATE = () => ({
       cellPadPx: 6,
     },
     font: {
-      family: "system",
+      family: 'system',
       lineHeight: 1.12,
       titleSize1: 12,
       titleSize2: 10,
@@ -217,6 +217,7 @@ const DEFAULT_STATE = () => ({
       metaSize2: 9,
       weightTitle: 900,
       weightMeta: 600,
+      sampleText: '(расписание / РАСПИСАНИЕ)',
     },
     theme: {
       mode: "auto",
@@ -509,6 +510,8 @@ function hardenState() {
     state.settings.schedule = deepCopy(defaultState.settings.schedule);
   if (!state.settings.font) 
     state.settings.font = deepCopy(defaultState.settings.font);
+  if (!state.settings.font.sampleText)
+    state.settings.font.sampleText = defaultState.settings.font.sampleText;
   if (!state.settings.display) 
     state.settings.display = deepCopy(defaultState.settings.display);
   if (!state.settings.theme) 
@@ -576,12 +579,16 @@ function matchesDay(ev) {
 }
 function matchesTime(ev) {
   if (filters.time === "all") return true;
-  const h = Math.floor(ev.startMin / 60);
-  if (filters.time === "morning") return h >= 6 && h < 12;
-  if (filters.time === "day") return h >= 12 && h < 18;
-  if (filters.time === "evening") return h >= 18 && h < 23;
+
+  const m = ev.startMin; // минуты от начала дня
+
+  if (filters.time === "morning") return m >= 360 && m < 720;    // 06:00–12:00
+  if (filters.time === "day") return m >= 720 && m < 1080;       // 12:00–18:00
+  if (filters.time === "evening") return m >= 1080 && m < 1380;  // 18:00–23:00
+
   return true;
 }
+
 function matchesDir(ev) {
   if (!filters.dir.size) return true;
   return filters.dir.has(ev.directionId);
@@ -693,6 +700,17 @@ function applyFont() {
     family = "Roboto, system-ui, -apple-system, Segoe UI, Inter, sans-serif";
   if (f.family === "mono")
     family = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+
+  if (f.family === 'ptserif') family = 'PT Serif, system-ui, -apple-system, serif';
+  if (f.family === 'rubik') family = 'Rubik, system-ui, -apple-system, sans-serif';
+  if (f.family === 'firasans') family = 'Fira Sans, system-ui, -apple-system, sans-serif';
+  if (f.family === 'ubuntu') family = 'Ubuntu, system-ui, -apple-system, sans-serif';
+  if (f.family === 'notoserif') family = 'Noto Serif, system-ui, -apple-system, serif';
+  if (f.family === 'playfair') family = 'Playfair Display, system-ui, -apple-system, serif';
+  if (f.family === 'merriweather') family = 'Merriweather, system-ui, -apple-system, serif';
+  if (f.family === 'jetbrainsmono') family = 'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
+  if (f.family === 'comfortaa') family = 'Comfortaa, system-ui, -apple-system, sans-serif';
+  if (f.family === 'caveat') family = 'Caveat, system-ui, -apple-system, cursive';
 
   const r = document.documentElement.style;
 
@@ -934,6 +952,7 @@ function createEventElement(ev, style, dir, isDouble = false, layout = null) {
 
   const el = document.createElement("div");
   el.className = "event";
+  el.dataset.eid = ev.id;
   if (isDouble) {
     el.classList.add("double");
     if (layout === "stacked") el.classList.add("stacked");
@@ -1079,7 +1098,8 @@ function renderSchedule() {
     const text = bestTextOn(color);
 
     const el = document.createElement("div");
-    el.className = "event compact-card"; // важно для CSS
+    el.className = "event compact-card";
+    el.dataset.eid = ev.id; // <-- ВАЖНО: сразу проставляем
     if (!eventVisible(ev)) el.classList.add("dim");
 
     el.style.setProperty("--ev-bg", color);
@@ -1087,7 +1107,6 @@ function renderSchedule() {
 
     el.setAttribute("draggable", "true");
     el.addEventListener("dragstart", (de) => {
-      el.dataset.eid = ev.id;
       de.dataTransfer.setData("text/event-id", ev.id);
       de.dataTransfer.effectAllowed = "move";
       el.classList.add("dragging");
@@ -1177,12 +1196,10 @@ function renderSchedule() {
   } else {
     // ===== timeline / list =====
     slots.forEach((slotStart, slotIndex) => {
-      const isNow = minToHHMM(slotStart).startsWith(nowHour + ":");
-      const tCell = mkCell("cell time", minToHHMM(slotStart));
-      if (isNow) tCell.classList.add("now");
-      scheduleEl.appendChild(tCell);
-
       const slotEnd = slotStart + step;
+
+      const tCell = mkCell("cell time", minToHHMM(slotStart));
+      scheduleEl.appendChild(tCell);
 
       for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
         const cell = mkCell("cell droppable", "");
@@ -1247,7 +1264,6 @@ function renderSchedule() {
             slotInner.appendChild(hint);
           }
         } else if (view === "list") {
-          // (оставлено как у тебя — без изменений по логике)
           eventsInCell.forEach((ev) => {
             const dir = getDir(ev.directionId);
             const color = dir ? dir.color : "#64748b";
@@ -1255,13 +1271,13 @@ function renderSchedule() {
 
             const el = document.createElement("div");
             el.className = "event list" + (count === 2 ? " double" : "");
+            el.dataset.eid = ev.id; // <-- ВАЖНО
             if (!eventVisible(ev)) el.classList.add("dim");
             el.style.setProperty("--ev-bg", color);
             el.style.setProperty("--ev-text", text);
 
             el.setAttribute("draggable", "true");
             el.addEventListener("dragstart", (de) => {
-              el.dataset.eid = ev.id;
               de.dataTransfer.setData("text/event-id", ev.id);
               de.dataTransfer.effectAllowed = "move";
               el.classList.add("dragging");
@@ -1302,7 +1318,7 @@ function renderSchedule() {
             slotInner.appendChild(el);
           });
         } else {
-          // TIMELINE (оставлено как у тебя по логике)
+          // TIMELINE
           if (count === 2) {
             slot.classList.add("two");
             cell.dataset.double = "1";
@@ -1315,13 +1331,13 @@ function renderSchedule() {
 
               const el = document.createElement("div");
               el.className = "event double";
+              el.dataset.eid = ev.id; // <-- ВАЖНО
               if (!eventVisible(ev)) el.classList.add("dim");
               el.style.setProperty("--ev-bg", color);
               el.style.setProperty("--ev-text", text);
 
               el.setAttribute("draggable", "true");
               el.addEventListener("dragstart", (de) => {
-                el.dataset.eid = ev.id;
                 de.dataTransfer.setData("text/event-id", ev.id);
                 de.dataTransfer.effectAllowed = "move";
                 el.classList.add("dragging");
@@ -1372,13 +1388,13 @@ function renderSchedule() {
 
               const el = document.createElement("div");
               el.className = "event";
+              el.dataset.eid = ev.id; // <-- ВАЖНО
               if (!eventVisible(ev)) el.classList.add("dim");
               el.style.setProperty("--ev-bg", color);
               el.style.setProperty("--ev-text", text);
 
               el.setAttribute("draggable", "true");
               el.addEventListener("dragstart", (de) => {
-                el.dataset.eid = ev.id;
                 de.dataTransfer.setData("text/event-id", ev.id);
                 de.dataTransfer.effectAllowed = "move";
                 el.classList.add("dragging");
@@ -2303,7 +2319,143 @@ const dispDayWidth  = $('dispDayWidth');
 const dispCellPad   = $('dispCellPad');
 
 const fontFamily = $("fontFamily");
+
+// ---- Font picker (custom) ----
+const FONT_OPTIONS = [
+  { id: 'system', name: 'System UI', css: 'system-ui, -apple-system, Segoe UI, Roboto, Inter, sans-serif' },
+
+  { id: 'alumni', name: 'Alumni Sans', css: 'Alumni Sans, system-ui, -apple-system, sans-serif' },
+  { id: 'montserrat', name: 'Montserrat', css: 'Montserrat, system-ui, -apple-system, sans-serif' },
+  { id: 'opensans', name: 'Open Sans', css: 'Open Sans, system-ui, -apple-system, sans-serif' },
+  { id: 'ptsans', name: 'PT Sans', css: 'PT Sans, system-ui, -apple-system, sans-serif' },
+
+  // New (add more)
+  { id: 'ptserif', name: 'PT Serif', css: 'PT Serif, system-ui, -apple-system, serif' },
+  { id: 'rubik', name: 'Rubik', css: 'Rubik, system-ui, -apple-system, sans-serif' },
+  { id: 'firasans', name: 'Fira Sans', css: 'Fira Sans, system-ui, -apple-system, sans-serif' },
+  { id: 'ubuntu', name: 'Ubuntu', css: 'Ubuntu, system-ui, -apple-system, sans-serif' },
+  { id: 'notoserif', name: 'Noto Serif', css: 'Noto Serif, system-ui, -apple-system, serif' },
+  { id: 'playfair', name: 'Playfair Display', css: 'Playfair Display, system-ui, -apple-system, serif' },
+  { id: 'merriweather', name: 'Merriweather', css: 'Merriweather, system-ui, -apple-system, serif' },
+  { id: 'jetbrainsmono', name: 'JetBrains Mono', css: 'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' },
+  { id: 'comfortaa', name: 'Comfortaa', css: 'Comfortaa, system-ui, -apple-system, sans-serif' },
+  { id: 'caveat', name: 'Caveat', css: 'Caveat, system-ui, -apple-system, cursive' },
+
+  { id: 'oswald', name: 'Oswald', css: 'Oswald, system-ui, -apple-system, sans-serif' },
+  { id: 'raleway', name: 'Raleway', css: 'Raleway, system-ui, -apple-system, sans-serif' },
+  { id: 'noto', name: 'Noto Sans', css: 'Noto Sans, system-ui, -apple-system, sans-serif' },
+  { id: 'inter', name: 'Inter', css: 'Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif' },
+  { id: 'roboto', name: 'Roboto', css: 'Roboto, system-ui, -apple-system, Segoe UI, Inter, sans-serif' },
+
+  { id: 'mono', name: 'Monospace', css: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' },
+];
+
+function getFontSampleText() {
+  const raw = (state?.settings?.font?.sampleText || '').trim();
+  return raw || DEFAULTSTATE.settings.font.sampleText;
+}
+
+function getFontOptionById(id) {
+  return FONT_OPTIONS.find(x => x.id === id) || FONT_OPTIONS[0];
+}
+
+function fillFontSelectOptions() {
+  fontFamily.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  FONT_OPTIONS.forEach(f => {
+    const o = document.createElement('option');
+    o.value = f.id;
+    o.textContent = `${f.name} ${getFontSampleText()}`;
+    frag.appendChild(o);
+  });
+  fontFamily.appendChild(frag);
+}
+
+const fontPicker = document.getElementById('fontPicker');
+const fontPickerBtn = document.getElementById('fontPickerBtn');
+const fontPickerPop = document.getElementById('fontPickerPop');
+const fontPickerList = document.getElementById('fontPickerList');
+const fontPickerSearch = document.getElementById('fontPickerSearch');
+const fontPickerTitle = document.getElementById('fontPickerTitle');
+const fontPickerSample = document.getElementById('fontPickerSample');
+
+function closeFontPicker() {
+  fontPickerPop.classList.remove('show');
+  fontPickerBtn.setAttribute('aria-expanded', 'false');
+}
+
+function openFontPicker() {
+  fontPickerPop.classList.add('show');
+  fontPickerBtn.setAttribute('aria-expanded', 'true');
+  fontPickerSearch.value = '';
+  renderFontPickerList('');
+  setTimeout(() => fontPickerSearch.focus(), 0);
+}
+
+function setSelectedFont(id) {
+  fontFamily.value = id;
+  state.settings.font.family = id;
+
+  const opt = getFontOptionById(id);
+  fontPickerTitle.textContent = opt.name;
+  fontPickerSample.textContent = getFontSampleText();
+  fontPickerSample.style.fontFamily = opt.css;
+
+  applyFont();
+  renderAll();
+  saveState(true);
+
+  renderFontPickerList(fontPickerSearch.value);
+}
+
+function renderFontPickerList(filterText) {
+  const q = (filterText || '').trim().toLowerCase();
+  fontPickerList.innerHTML = '';
+
+  FONT_OPTIONS
+    .filter(f => !q || f.name.toLowerCase().includes(q))
+    .forEach(f => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'font-item' + (fontFamily.value === f.id ? ' active' : '');
+      b.dataset.value = f.id;
+
+      b.innerHTML = `
+        <div class="name">${f.name}</div>
+        <div class="sample">${getFontSampleText()}</div>
+      `;
+
+      // ВАЖНО: шрифт только для sample, а название — без стиля
+      const sampleEl = b.querySelector('.sample');
+      if (sampleEl) sampleEl.style.fontFamily = f.css;
+
+      b.addEventListener('click', () => {
+        setSelectedFont(f.id);
+        closeFontPicker();
+      });
+
+      fontPickerList.appendChild(b);
+    });
+}
+
+fillFontSelectOptions();
+setSelectedFont(state?.settings?.font?.family || 'system');
+
+fontPickerBtn.addEventListener('click', () => {
+  if (fontPickerPop.classList.contains('show')) closeFontPicker();
+  else openFontPicker();
+});
+
+fontPickerSearch.addEventListener('input', () => {
+  renderFontPickerList(fontPickerSearch.value);
+});
+
+document.addEventListener('click', (e) => {
+  if (!fontPicker.contains(e.target)) closeFontPicker();
+});
+
 const fontLineHeight = $("fontLineHeight");
+const fontSampleText = $('fontSampleText');
 const fontTitle1 = $("fontTitle1");
 const fontTitle2 = $("fontTitle2");
 const fontMeta1 = $("fontMeta1");
@@ -2334,6 +2486,21 @@ const alphaNowVal = $("alphaNowVal");
 const alphaEventVal = $("alphaEventVal");
 const alphaShadowVal = $("alphaShadowVal");
 
+if (fontSampleText) {
+  fontSampleText.addEventListener('change', () => {
+    const st = (fontSampleText.value || '').trim();
+    state.settings.font.sampleText = st || DEFAULTSTATE.settings.font.sampleText;
+
+    // Обновляем UI шрифтов сразу
+    fontPickerSample.textContent = getFontSampleText();
+    fillFontSelectOptions();
+    renderFontPickerList(fontPickerSearch.value);
+
+    // чтобы сохранялось без нажатия "Сохранить"
+    saveState(true);
+  });
+}
+
 const DOTS = {
   accent: $("dotsAccent"),
   bg: $("dotsBg"),
@@ -2358,6 +2525,76 @@ function fillDots(container, onPick) {
   });
 }
 
+function normalizeHex(v) {
+  if (!v) return "#000000";
+  let s = String(v).trim().toLowerCase();
+  if (!s.startsWith("#")) s = "#" + s;
+  if (s.length === 4) {
+    s = "#" + s[1] + s[1] + s[2] + s[2] + s[3] + s[3];
+  }
+  return s;
+}
+
+function sameHex(a, b) {
+  return normalizeHex(a) === normalizeHex(b);
+}
+
+function hslToHex(h, s, l) {
+  s /= 100;
+  l /= 100;
+  const k = (n) => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  const toHex = (x) => Math.round(255 * x).toString(16).padStart(2, "0");
+  return "#" + toHex(f(0)) + toHex(f(8)) + toHex(f(4));
+}
+
+function getColorLibrary() {
+  const extra = [];
+  for (let i = 0; i < 36; i++) extra.push(hslToHex(i * 10, 75, 55)); // 36 оттенков
+
+  const base = [...COLOR_SWATCHES, ...extra].map(normalizeHex);
+  const out = [];
+  const seen = new Set();
+  for (const c of base) {
+    if (seen.has(c)) continue;
+    seen.add(c);
+    out.push(c);
+  }
+  return out;
+}
+
+function fillDots(container, getCurrent, onPick) {
+  container.innerHTML = "";
+  const cur = () => normalizeHex(getCurrent());
+
+  getColorLibrary().forEach((c) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "dotbtn";
+    b.style.background = c;
+    b.title = c;
+    b.setAttribute("aria-label", c);
+
+    if (sameHex(c, cur())) b.classList.add("active");
+
+    b.addEventListener("click", () => onPick(c));
+    container.appendChild(b);
+  });
+}
+
+function refreshThemeDots() {
+  // Перерисовываем активные состояния после любого изменения инпутов
+  fillDots(DOTS.accent, () => tAccent.value, (c) => { tAccent.value = c; onThemeInput(); refreshThemeDots(); });
+  fillDots(DOTS.bg,     () => tBg.value,     (c) => { tBg.value = c; onThemeInput(); refreshThemeDots(); });
+  fillDots(DOTS.card,   () => tCard.value,   (c) => { tCard.value = c; onThemeInput(); refreshThemeDots(); });
+  fillDots(DOTS.text,   () => tText.value,   (c) => { tText.value = c; onThemeInput(); refreshThemeDots(); });
+  fillDots(DOTS.border, () => tBorder.value, (c) => { tBorder.value = c; onThemeInput(); refreshThemeDots(); });
+  fillDots(DOTS.gridHead, () => tGridHead.value, (c) => { tGridHead.value = c; onThemeInput(); refreshThemeDots(); });
+  fillDots(DOTS.now,    () => tNowRow.value, (c) => { tNowRow.value = c; onThemeInput(); refreshThemeDots(); });
+  fillDots(DOTS.today,  () => tTodayCol.value,(c)=> { tTodayCol.value = c; onThemeInput(); refreshThemeDots(); });
+}
+
 function openSettings() {
   setActiveTab("schedule");
   settingsWarn.style.display = "none";
@@ -2379,6 +2616,7 @@ function openSettings() {
 
   const f = state.settings.font;
   fontFamily.value = f.family;
+  setSelectedFont(fontFamily.value);
   fontLineHeight.value = String(f.lineHeight);
   fontTitle1.value = String(f.titleSize1);
   fontTitle2.value = String(f.titleSize2);
@@ -2390,6 +2628,8 @@ function openSettings() {
   const th = state.settings.theme;
   themeMode.value = th.mode;
 
+  if (fontSampleText) fontSampleText.value = f.sampleText || '';
+
   renderThemePresetUI();
   fillThemeInputsFromState();
 
@@ -2400,19 +2640,131 @@ function closeSettings() {
 }
 
 function renderThemePresetUI() {
+  // ---- helpers (локальные, чтобы не раздувать глобальную область) ----
+  const normalizeHex = (v) => {
+    if (!v) return "#000000";
+    let s = String(v).trim().toLowerCase();
+    if (!s.startsWith("#")) s = "#" + s;
+    if (s.length === 4) s = "#" + s[1] + s[1] + s[2] + s[2] + s[3] + s[3];
+    return s;
+  };
+
+  const hslToHex = (h, s, l) => {
+    s /= 100;
+    l /= 100;
+    const k = (n) => (n + h / 30) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    const toHex = (x) => Math.round(255 * x).toString(16).padStart(2, "0");
+    return "#" + toHex(f(0)) + toHex(f(8)) + toHex(f(4));
+  };
+
+  const buildColorLibrary = () => {
+    // 36 оттенков + 3 “полосы” по светлоте для вариативности
+    const extra = [];
+    for (let i = 0; i < 36; i++) extra.push(hslToHex(i * 10, 78, 56));
+    for (let i = 0; i < 36; i++) extra.push(hslToHex(i * 10, 78, 44));
+    for (let i = 0; i < 36; i++) extra.push(hslToHex(i * 10, 78, 66));
+
+    const base = [...COLOR_SWATCHES, ...extra].map(normalizeHex);
+    const out = [];
+    const seen = new Set();
+    for (const c of base) {
+      if (seen.has(c)) continue;
+      seen.add(c);
+      out.push(c);
+    }
+    return out;
+  };
+
+  const setActivePresetCard = (presetId) => {
+    paletteGrid.querySelectorAll(".palette").forEach((el) => {
+      el.classList.toggle("active", el.dataset.preset === presetId);
+    });
+  };
+
+  const renderDotRow = (container, inputEl, colorLib) => {
+    container.innerHTML = "";
+    const cur = normalizeHex(inputEl.value);
+
+    colorLib.forEach((c) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "dotbtn";
+      b.dataset.color = c;
+      b.style.background = c;
+      b.title = c;
+      b.setAttribute("aria-label", c);
+      if (normalizeHex(c) === cur) b.classList.add("active");
+
+      b.addEventListener("click", () => {
+        inputEl.value = c;
+        onThemeInput();
+        syncDotsActive(); // чтобы active обновился сразу
+      });
+
+      // Быстро копировать hex (правый клик)
+      b.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        if (navigator.clipboard?.writeText) navigator.clipboard.writeText(c);
+      });
+
+      container.appendChild(b);
+    });
+  };
+
+  const syncDotsActive = () => {
+    const map = [
+      [DOTS.accent, tAccent],
+      [DOTS.bg, tBg],
+      [DOTS.card, tCard],
+      [DOTS.text, tText],
+      [DOTS.border, tBorder],
+      [DOTS.gridHead, tGridHead],
+      [DOTS.now, tNowRow],
+      [DOTS.today, tTodayCol],
+    ];
+
+    map.forEach(([wrap, inputEl]) => {
+      const cur = normalizeHex(inputEl.value);
+      wrap.querySelectorAll(".dotbtn").forEach((btn) => {
+        btn.classList.toggle("active", normalizeHex(btn.dataset.color) === cur);
+      });
+    });
+  };
+
+  // ---- 1) Select: не сбрасывать выбор пользователя ----
+  const prev = themePreset.value;
   themePreset.innerHTML = "";
+
+  const optFrag = document.createDocumentFragment();
   THEME_PRESETS.forEach((p) => {
     const o = document.createElement("option");
     o.value = p.id;
     o.textContent = p.name;
-    themePreset.appendChild(o);
+    optFrag.appendChild(o);
   });
-  themePreset.value = THEME_PRESETS[0].id;
+  themePreset.appendChild(optFrag);
 
+  const defaultId = THEME_PRESETS[0]?.id || "";
+  const initialId = THEME_PRESETS.some((p) => p.id === prev) ? prev : defaultId;
+  themePreset.value = initialId;
+
+  // ---- 2) Grid: сделать карточки кнопками + активное состояние ----
   paletteGrid.innerHTML = "";
+  const gridFrag = document.createDocumentFragment();
+
   THEME_PRESETS.forEach((p) => {
-    const el = document.createElement("div");
+    const el = document.createElement("button");
+    el.type = "button";
     el.className = "palette";
+    el.dataset.preset = p.id;
+    el.setAttribute("aria-label", `Тема: ${p.name}`);
+
+    const crTextCard = contrastRatio(p.tokens.text, p.tokens.card);
+    const crTextBg = contrastRatio(p.tokens.text, p.tokens.bg);
+    const warn = crTextCard < 4.5 || crTextBg < 4.5;
+
     el.innerHTML = `
       <div class="name">${p.name}</div>
       <div class="bar">
@@ -2422,43 +2774,56 @@ function renderThemePresetUI() {
         <span class="c" style="background:${p.tokens.gridHead}"></span>
         <span class="c" style="background:${p.tokens.today}"></span>
       </div>
-      <div class="mini">Акцент: ${p.tokens.accent}</div>
+      <div class="mini">
+        Акцент: ${p.tokens.accent}
+        · Контраст: card ${crTextCard.toFixed(2)}, bg ${crTextBg.toFixed(2)}
+        ${warn ? "· Проверь читаемость" : ""}
+      </div>
     `;
-    el.addEventListener("click", () => applyPresetToCustom(p.id));
-    paletteGrid.appendChild(el);
+
+    el.addEventListener("click", () => {
+      themePreset.value = p.id;        // синхронизируем select
+      setActivePresetCard(p.id);       // подсветка
+      applyPresetToCustom(p.id);       // применяем
+    });
+
+    gridFrag.appendChild(el);
   });
 
-  fillDots(DOTS.accent, (c) => {
-    tAccent.value = c;
-    onThemeInput();
+  paletteGrid.appendChild(gridFrag);
+  setActivePresetCard(themePreset.value);
+
+  // ---- 3) Селект меняет подсветку (без повторного applyPresetToCustom) ----
+  if (!themePreset.dataset.activeHooked) {
+    themePreset.addEventListener("change", () => setActivePresetCard(themePreset.value));
+    themePreset.dataset.activeHooked = "1";
+  }
+
+  // ---- 4) Свотчи: больше вариативности + active ----
+  const lib = buildColorLibrary();
+  renderDotRow(DOTS.accent, tAccent, lib);
+  renderDotRow(DOTS.bg, tBg, lib);
+  renderDotRow(DOTS.card, tCard, lib);
+  renderDotRow(DOTS.text, tText, lib);
+  renderDotRow(DOTS.border, tBorder, lib);
+  renderDotRow(DOTS.gridHead, tGridHead, lib);
+  renderDotRow(DOTS.now, tNowRow, lib);
+  renderDotRow(DOTS.today, tTodayCol, lib);
+
+  // У тебя openSettings() вызывает fillThemeInputsFromState() ПОСЛЕ renderThemePresetUI() [file:32],
+  // поэтому активные свотчи надо “досинхронизировать” после того, как инпуты заполнятся программно.
+  const qm = window.queueMicrotask || ((fn) => Promise.resolve().then(fn));
+  qm(() => {
+    setActivePresetCard(themePreset.value);
+    syncDotsActive();
   });
-  fillDots(DOTS.bg, (c) => {
-    tBg.value = c;
-    onThemeInput();
-  });
-  fillDots(DOTS.card, (c) => {
-    tCard.value = c;
-    onThemeInput();
-  });
-  fillDots(DOTS.text, (c) => {
-    tText.value = c;
-    onThemeInput();
-  });
-  fillDots(DOTS.border, (c) => {
-    tBorder.value = c;
-    onThemeInput();
-  });
-  fillDots(DOTS.gridHead, (c) => {
-    tGridHead.value = c;
-    onThemeInput();
-  });
-  fillDots(DOTS.now, (c) => {
-    tNowRow.value = c;
-    onThemeInput();
-  });
-  fillDots(DOTS.today, (c) => {
-    tTodayCol.value = c;
-    onThemeInput();
+
+  // Если пользователь меняет input[type=color] — обновлять active на точках
+  const inputs = [tAccent, tBg, tCard, tText, tBorder, tGridHead, tNowRow, tTodayCol];
+  inputs.forEach((inp) => {
+    if (inp.dataset.dotsHooked) return;
+    inp.addEventListener("input", syncDotsActive);
+    inp.dataset.dotsHooked = "1";
   });
 }
 
@@ -2560,6 +2925,7 @@ function collectThemeInputs() {
     today: tTodayCol.value,
   };
 }
+
 function applyPresetToCustom(presetId) {
   const p = THEME_PRESETS.find((x) => x.id === presetId);
   if (!p) return;
@@ -2568,6 +2934,7 @@ function applyPresetToCustom(presetId) {
   previewThemeWarnings();
   applyTheme();
 }
+
 function previewThemeWarnings() {
   const tokens = collectThemeInputs();
   const issues = [];
@@ -2589,6 +2956,7 @@ function previewThemeWarnings() {
     themeWarn.textContent = "";
   }
 }
+
 function onThemeInput() {
   state.settings.theme.customTokens = collectThemeInputs();
   state.settings.theme.alpha = {
@@ -2718,6 +3086,11 @@ function saveSettings() {
   state.settings.font.weightTitle = Number(fontWeightTitle.value);
   state.settings.font.weightMeta = Number(fontWeightMeta.value);
 
+  if (fontSampleText) {
+    const st = (fontSampleText.value || '').trim();
+    state.settings.font.sampleText = st || DEFAULTSTATE.settings.font.sampleText;
+  }
+
   saveState();
   closeSettings();
   renderAll();
@@ -2810,13 +3183,6 @@ function toast(kind, title, text) {
   }, 4500);
 }
 
-$("btnAdd").addEventListener("click", () => {
-  const slots = buildSlots();
-  smartOpenCreate(
-    0,
-    slots[0] ?? parseHHMM(state.settings.schedule.start) ?? 480
-  );
-});
 
 $("btnSettings").addEventListener("click", openSettings);
 $("btnUndo").addEventListener("click", undo);
@@ -3165,7 +3531,6 @@ function bootstrap() {
   toast("OK", "Готово", "Данные загружены. Автосохранение включено.");
   
   // Проверяем наличие основных кнопок
-  console.log("Кнопка добавления:", $("btnAdd"));
   console.log("Кнопка настроек:", $("btnSettings"));
   console.log("Элемент расписания:", $("schedule"));
 }
@@ -3204,6 +3569,10 @@ window.addEventListener('error', function(e) {
 // Запуск приложения с обработкой ошибок
 try {
   bootstrap();
+  const allowedViews = new Set(["timeline", "list", "compact"]);
+  if (!allowedViews.has(state.settings.display.cellView)) {
+    state.settings.display.cellView = "timeline";
+  }
 } catch (error) {
   console.error('Ошибка при запуске:', error);
   
@@ -3297,7 +3666,7 @@ async function captureScheduleCanvas({ compact = false, background = null } = {}
   let changed = [];
   try {
     // скрывать пустые time-строки надо для timeline/list; в compact эта функция сама вернёт []
-    changed = hideEmptyTimeRows(clone);
+    changed = hideEmptyTimeRows(clone, true, false);
 
     // отключаем sticky у шапки
     headEls.forEach((el) => {

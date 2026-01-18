@@ -1000,6 +1000,107 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
   gap: 10px;
 }
 
+.font-picker { position: relative; }
+
+.font-picker-btn{
+  width: 100%;
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.font-picker-btn:focus{
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.font-picker-title{
+  font-weight: 900;
+}
+
+.font-picker-sample{
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.font-picker-chev{
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.font-picker-pop{
+  display: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 50;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px var(--shadowRGBA);
+  padding: 8px;
+}
+
+.font-picker-pop.show{ display:block; }
+
+.font-picker-search{
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.font-picker-list{
+  max-height: 280px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.font-item{
+  width: 100%;
+  text-align: left;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.font-item:hover{
+  background: rgba(148, 163, 184, 0.10);
+}
+
+.font-item.active{
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.font-item .name{
+  font-weight: 900;
+  font-size: 13px;
+}
+
+.font-item .sample{
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .field {
   display: flex;
   flex-direction: column;
@@ -1165,6 +1266,7 @@ textarea { min-height: 72px; resize: vertical; }
   display: flex;
   flex-direction: column;
   gap: 8px;
+  text-align: left; 
 
   transition: all 0.2s ease;
 }
@@ -1193,22 +1295,43 @@ textarea { min-height: 72px; resize: vertical; }
 .colorRow {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
-.dots { display: flex; gap: 6px; flex-wrap: wrap; }
+.dots {
+  flex-wrap: nowrap;        /* было wrap */
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 2px 0 4px;
+  max-width: 100%;
+}
 
 .dotbtn {
-  width: 18px;
-  height: 18px;
+  width: 26px;
+  height: 26px;
   border-radius: 999px;
-
-  border: 2px solid rgba(255, 255, 255, 0.7);
+  border: 2px solid rgba(255, 255, 255, 0.85);
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
+}
 
-  cursor: pointer;
-  transition: transform 0.2s ease;
+.dotbtn.active {
+  transform: scale(1.06);
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 0 0 5px rgba(59, 130, 246, 0.18);
+}
+
+.dotbtn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+/* Пресеты: состояние выбранности */
+.palette.active {
+  border-color: rgba(239, 68, 68, 0.55); /* около accent */
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.14);
 }
 
 .dotbtn:hover { transform: scale(1.1); }
@@ -1337,6 +1460,10 @@ textarea { min-height: 72px; resize: vertical; }
 /* -----------------------------
    Export / Print modes
 ------------------------------ */
+.schedule-wrap.export-mode {
+  border-radius: 0 !important;
+}
+
 .export-mode * {
   pointer-events: none !important;
   user-select: none !important;
@@ -1520,7 +1647,23 @@ textarea { min-height: 72px; resize: vertical; }
 
   .toolbar button { flex-shrink: 0; }
 
-  .controls { overflow-x: auto; }
+  .controls { overflow-x: visible; }
+
+  .controls .row {
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  /* Второй ряд (где dirGroup + search) — складываем в колонку */
+  .controls .row.mt10 {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .controls .search {
+    width: 100%;
+    min-width: 0;
+  }
   .row { flex-wrap: nowrap; min-width: max-content; }
   .stats { width: 100%; justify-content: flex-start; }
 
