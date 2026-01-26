@@ -1812,3 +1812,45 @@ html[data-scheme="dark"] .event:hover {
   color: var(--text);
   letter-spacing: .02em;
 }
+
+.font-more-hover{
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px dashed var(--border);
+  color: var(--muted);
+  font-size: 12px;
+  user-select: none;
+  background: rgba(148, 163, 184, 0.06);
+}
+
+.font-picker-list:has(.font-more-hover) .font-more-hover{
+  margin-top: 2px;
+}
+
+.font-picker-pop{
+  max-width: 100%;
+}
+
+.font-picker-list{
+  max-height: min(46vh, 320px);
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+@media (max-width: 520px){
+  .font-picker-list{
+    max-height: min(54vh, 360px);
+  }
+  .font-item{
+    padding: 10px 12px;
+  }
+  .font-item .sample{
+    font-size: 13px;
+  }
+}

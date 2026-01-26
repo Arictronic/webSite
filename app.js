@@ -1,3 +1,5 @@
+import { FONT_OPTIONS, FONT_FAMILY_BY_ID, FONT_ID_ALIASES } from "./fonts.generated.js";
+
 console.log("app.js загружен");
 
 // Проверяем, что DOM загружен
@@ -136,18 +138,6 @@ const expPreviewImg = document.getElementById("expPreviewImg");
 
 const $ = (id) => document.getElementById(id);
 
-function applyFontPreset(id){
-  const p = FONT_PRESETS[id];
-  if (!p) return;
-  Object.assign(state.settings.font, p);
-  applyFont();
-  renderAll();
-  saveState(true);
-  openSettings(); // чтобы поля обновились в модалке
-}
-
-
-
 function pad2(n) {
   return String(n).padStart(2, "0");
 }
@@ -164,6 +154,30 @@ function minToHHMM(min) {
 function clamp(v, a, b) {
   return Math.max(a, Math.min(b, v));
 }
+
+const GENERIC_FAMILIES = new Set([
+  "serif","sans-serif","monospace","cursive","fantasy",
+  "system-ui","ui-serif","ui-sans-serif","ui-monospace",
+  "-apple-system"
+]);
+
+function quoteCssString(s) {
+  return `"${String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function sanitizeFontFamilyStack(stack) {
+  const parts = String(stack).split(",").map(x => x.trim()).filter(Boolean);
+  if (!parts.length) return stack;
+
+  const first = parts[0];
+  const needsQuotes =
+    !GENERIC_FAMILIES.has(first) &&
+    /[^a-zA-Z0-9 _-]/.test(first); // скобки, точки и т.п.
+
+  parts[0] = needsQuotes ? quoteCssString(first) : first;
+  return parts.join(", ");
+}
+
 function deepCopy(o) {
   return JSON.parse(JSON.stringify(o));
 }
@@ -521,14 +535,6 @@ function loadState() {
   }
 }
 
-function restoreTitleStyles(el, prev) {
-  el.style.display = prev.display;
-  el.style.webkitBoxOrient = prev.webkitBoxOrient;
-  el.style.webkitLineClamp = prev.webkitLineClamp;
-  el.style.overflow = prev.overflow;
-  el.style.whiteSpace = prev.whiteSpace;
-}
-
 function hardenState() {
   const defaultState = DEFAULT_STATE();
 
@@ -657,9 +663,7 @@ function validateTimeSlot(dayIndex, startMin, durationMin, ignoreId = null) {
   if (startMin < start || startMin >= end)
     return {
       valid: false,
-      reason: `Начало должно быть в пределах ${minToHHMM(start)}-${minToHHMM(
-        end
-      )}.`,
+      reason: `Начало должно быть в пределах ${minToHHMM(start)}-${minToHHMM(end)}.`,
     };
 
   if (startMin + durationMin > end)
@@ -668,11 +672,11 @@ function validateTimeSlot(dayIndex, startMin, durationMin, ignoreId = null) {
       reason: `Занятие выходит за пределы рабочего времени.`,
     };
 
-  const slotStart = slotStartFor(startMin);
-  const slotEnd = slotStart + step;
-
-  if (startMin + durationMin > slotEnd)
-    return { valid: false, reason: `Занятие выходит за пределы слота.` };
+  // УБРАНО: проверка "занятие должно помещаться в один слот"
+  // const slotStart = slotStartFor(startMin);
+  // const slotEnd = slotStart + step;
+  // if (startMin + durationMin > slotEnd)
+  //   return { valid: false, reason: `Занятие выходит за пределы слота.` };
 
   return { valid: true };
 }
@@ -707,43 +711,12 @@ function ensureThemeContrast(tokens) {
 function applyFont() {
   const f = state.settings.font;
 
-  let family = "system-ui, -apple-system, Segoe UI, Roboto, Inter, sans-serif";
-  if (f.family === "alumni")
-    family = "Alumni Sans, system-ui, -apple-system, sans-serif";
-  if (f.family === "montserrat")
-    family = "Montserrat, system-ui, -apple-system, sans-serif";
-  if (f.family === "opensans")
-    family = "Open Sans, system-ui, -apple-system, sans-serif";
-  if (f.family === "ptsans")
-    family = "PT Sans, system-ui, -apple-system, sans-serif";
-  if (f.family === "oswald")
-    family = "Oswald, system-ui, -apple-system, sans-serif";
-  if (f.family === "raleway")
-    family = "Raleway, system-ui, -apple-system, sans-serif";
-  if (f.family === "noto")
-    family = "Noto Sans, system-ui, -apple-system, sans-serif";
-  if (f.family === "inter")
-    family = "Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
-  if (f.family === "roboto")
-    family = "Roboto, system-ui, -apple-system, Segoe UI, Inter, sans-serif";
-  if (f.family === "mono")
-    family = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
-
-  if (f.family === 'ptserif') family = 'PT Serif, system-ui, -apple-system, serif';
-  if (f.family === 'rubik') family = 'Rubik, system-ui, -apple-system, sans-serif';
-  if (f.family === 'firasans') family = 'Fira Sans, system-ui, -apple-system, sans-serif';
-  if (f.family === 'ubuntu') family = 'Ubuntu, system-ui, -apple-system, sans-serif';
-  if (f.family === 'notoserif') family = 'Noto Serif, system-ui, -apple-system, serif';
-  if (f.family === 'playfair') family = 'Playfair Display, system-ui, -apple-system, serif';
-  if (f.family === 'merriweather') family = 'Merriweather, system-ui, -apple-system, serif';
-  if (f.family === 'jetbrainsmono') family = 'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
-  if (f.family === 'comfortaa') family = 'Comfortaa, system-ui, -apple-system, sans-serif';
-  if (f.family === 'caveat') family = 'Caveat, system-ui, -apple-system, cursive';
+  const id = (FONT_ID_ALIASES[f.family] || f.family || "system");
+  const family = FONT_FAMILY_BY_ID[id] || FONT_FAMILY_BY_ID.system;
 
   const r = document.documentElement.style;
-
   // базовые font vars (как было)
-  r.setProperty("--tableFont", family);
+  r.setProperty("--tableFont", sanitizeFontFamilyStack(family));
   r.setProperty("--evLineHeight", String(f.lineHeight));
   r.setProperty("--evTitleSize1", `${f.titleSize1}px`);
   r.setProperty("--evTitleSize2", `${f.titleSize2}px`);
@@ -953,11 +926,8 @@ function renderStats() {
 function metaCoachRoom(ev, includeTime = false) {
   const parts = [];
 
-  // Если нужно время, добавляем его первым
   if (includeTime) {
-    const range = `${minToHHMM(ev.startMin)}–${minToHHMM(
-      ev.startMin + ev.durationMin
-    )}`;
+    const range = `${minToHHMM(ev.startMin)}–${minToHHMM(ev.startMin + ev.durationMin)}`;
     parts.push(range);
   }
 
@@ -966,120 +936,16 @@ function metaCoachRoom(ev, includeTime = false) {
   return parts.join(" · ");
 }
 
+
 function metaFullByMode(ev) {
   const mode = state.settings.display.cardMode;
-  const range = `${minToHHMM(ev.startMin)}–${minToHHMM(
-    ev.startMin + ev.durationMin
-  )}`;
 
   if (mode === "name") return "";
-  if (mode === "name_coach_room") return metaCoachRoom(ev);
+  if (mode === "namecoachroom") return metaCoachRoom(ev, false);
+  if (mode === "nametimecoachroom") return metaCoachRoom(ev, true);
 
-  const parts = [range];
-  if (ev.coach) parts.push(fixTypography(ev.coach));
-  if (ev.room) parts.push(fixTypography(ev.room));
-  return parts.join(" · ");
-}
-
-function createEventElement(ev, style, dir, isDouble = false, layout = null) {
-  const color = dir ? dir.color : "#64748b";
-  const text = bestTextOn(color);
-
-  const el = document.createElement("div");
-  el.className = "event";
-  el.dataset.eid = ev.id;
-
-  if (isDouble) {
-    el.classList.add("double");
-    if (layout === "stacked") el.classList.add("stacked");
-    if (layout === "side-by-side") el.classList.add("side-by-side");
-  }
-
-  if (!eventVisible(ev)) el.classList.add("dim");
-
-  el.style.setProperty("--ev-bg", color);
-  el.style.setProperty("--ev-text", text);
-
-  // helpers: числа для left/width обычно означают проценты (0..100)
-  const cssPercentOr = (v, fallback) => {
-    if (v === null || v === undefined || v === "") return fallback;
-    if (typeof v === "number") return `${v}%`;
-    return String(v);
-  };
-  const cssPxOr = (v, fallback) => {
-    if (v === null || v === undefined || v === "") return fallback;
-    if (typeof v === "number") return `${v}px`;
-    return String(v);
-  };
-
-  el.setAttribute("draggable", "true");
-  el.addEventListener("dragstart", (de) => {
-    el.dataset.eid = ev.id;
-    if (de.dataTransfer) {
-      de.dataTransfer.setData("text/event-id", ev.id);
-      de.dataTransfer.effectAllowed = "move";
-    }
-    el.classList.add("dragging");
-  });
-  el.addEventListener("dragend", () => el.classList.remove("dragging"));
-  el.addEventListener("click", (ce) => {
-    ce.stopPropagation();
-    openEdit(ev.id);
-  });
-
-  // top/height — пиксели
-  el.style.top = `${style.top}px`;
-  el.style.height = `${style.height}px`;
-
-  // left/width — обычно проценты (0..100) для разметки двух карточек
-  el.style.left = cssPercentOr(style.left, "0%");
-  el.style.width = cssPercentOr(style.width, "100%");
-
-  if (layout === "side-by-side") {
-    el.style.left = cssPercentOr(style.left, "0%");
-    el.style.width = cssPercentOr(style.width, "50%");
-    if (style.borderRadius != null) el.style.borderRadius = cssPxOr(style.borderRadius, "");
-  }
-
-  const title = document.createElement("div");
-  title.className = "t";
-  title.textContent = fixTypography(ev.name) || "Без названия";
-  el.appendChild(title);
-
-  // Clamp по фактическому лимиту (CSS webkit-line-clamp или настройка titleClamp)
-  requestAnimationFrame(() => {
-    const cs = getComputedStyle(title);
-    const fromCss = parseInt(cs.webkitLineClamp, 10);
-    const fromSettings = Number(state?.settings?.font?.titleClamp) || 3;
-    const maxLines = Number.isFinite(fromCss) && fromCss > 0 ? fromCss : fromSettings;
-
-    clampTitleToLines(title, maxLines);
-  });
-
-  const metaText = isDouble ? metaCoachRoom(ev, true) : metaFullByMode(ev);
-  if (metaText) {
-    const meta = document.createElement("div");
-    meta.className = "m";
-    meta.textContent = metaText;
-    el.appendChild(meta);
-  }
-
-  const grab = document.createElement("div");
-  grab.className = "grab";
-  grab.textContent = "↕";
-  el.appendChild(grab);
-
-  if (state.settings.display.showNotes) {
-    const tt = [];
-    tt.push(`${minToHHMM(ev.startMin)}–${minToHHMM(ev.startMin + ev.durationMin)}`);
-    if (ev.coach) tt.push(ev.coach);
-    if (ev.room) tt.push(ev.room);
-    if (dir) tt.push(fixTypography(dir.name));
-    if (ev.notes) tt.push(fixTypography(ev.notes));
-    el.title = tt.join("\n");
-  }
-
-  return el;
+  // fallback на случай старых сохранений
+  return metaCoachRoom(ev, true);
 }
 
 function mkCell(cls, text) {
@@ -1133,7 +999,7 @@ function renderSchedule() {
 
     const el = document.createElement("div");
     el.className = "event compact-card";
-    el.dataset.eid = ev.id; // <-- ВАЖНО: сразу проставляем
+    el.dataset.eid = ev.id;
     if (!eventVisible(ev)) el.classList.add("dim");
 
     el.style.setProperty("--ev-bg", color);
@@ -1157,7 +1023,8 @@ function renderSchedule() {
     title.textContent = fixTypography(ev.name) || "Без названия";
     el.appendChild(title);
 
-    const metaText = metaCoachRoom(ev, true);
+    // FIX: учитывать "Содержание карточки" и в compact тоже
+    const metaText = metaFullByMode(ev);
     if (metaText) {
       const meta = document.createElement("div");
       meta.className = "m";
@@ -1305,7 +1172,7 @@ function renderSchedule() {
 
             const el = document.createElement("div");
             el.className = "event list" + (count === 2 ? " double" : "");
-            el.dataset.eid = ev.id; // <-- ВАЖНО
+            el.dataset.eid = ev.id;
             if (!eventVisible(ev)) el.classList.add("dim");
             el.style.setProperty("--ev-bg", color);
             el.style.setProperty("--ev-text", text);
@@ -1326,7 +1193,8 @@ function renderSchedule() {
             title.className = "t";
             title.textContent = fixTypography(ev.name) || "Без названия";
 
-            const metaText = count >= 2 ? metaCoachRoom(ev, true) : metaFullByMode(ev);
+            // FIX: в list тоже всегда учитывать "Содержание карточки"
+            const metaText = metaFullByMode(ev);
             const meta = document.createElement("div");
             meta.className = "m";
             meta.textContent = metaText;
@@ -1357,6 +1225,8 @@ function renderSchedule() {
             slot.classList.add("two");
             cell.dataset.double = "1";
 
+            const doubleLayout = "stacked"; // или "side-by-side"
+
             const sortedEvents = [...eventsInCell].sort((a, b) => a.startMin - b.startMin);
             sortedEvents.forEach((ev) => {
               const dir = getDir(ev.directionId);
@@ -1365,7 +1235,8 @@ function renderSchedule() {
 
               const el = document.createElement("div");
               el.className = "event double";
-              el.dataset.eid = ev.id; // <-- ВАЖНО
+              el.classList.add(doubleLayout);
+              el.dataset.eid = ev.id;
               if (!eventVisible(ev)) el.classList.add("dim");
               el.style.setProperty("--ev-bg", color);
               el.style.setProperty("--ev-text", text);
@@ -1387,7 +1258,8 @@ function renderSchedule() {
               title.textContent = fixTypography(ev.name);
               el.appendChild(title);
 
-              const metaText = metaCoachRoom(ev, true);
+              // FIX: учитывать "Содержание карточки" и в double тоже
+              const metaText = metaFullByMode(ev);
               if (metaText) {
                 const meta = document.createElement("div");
                 el.classList.add("title-3");
@@ -1422,7 +1294,7 @@ function renderSchedule() {
 
               const el = document.createElement("div");
               el.className = "event";
-              el.dataset.eid = ev.id; // <-- ВАЖНО
+              el.dataset.eid = ev.id;
               if (!eventVisible(ev)) el.classList.add("dim");
               el.style.setProperty("--ev-bg", color);
               el.style.setProperty("--ev-text", text);
@@ -2078,31 +1950,28 @@ function closeEventModal() {
 }
 
 function updateConflictsLive() {
-  const { start, end, step } = getBounds();
+  const { start, end } = getBounds();
   const dayIndex = Number(evDay.value);
   const startMin = parseHHMM(evStart.value);
   const dur = Number(evDur.value);
 
   const issues = [];
+
   if (startMin == null) issues.push("Некорректное время начала.");
   if (!dur || dur < 1) issues.push("Длительность должна быть >= 1 минуты.");
   if (startMin != null && (startMin < start || startMin >= end))
     issues.push("Время начала вне диапазона дня (Настройки → Расписание).");
 
+  // FIX: убрано правило "занятие должно помещаться в один слот"
+  // Вместо этого — единая проверка через validateTimeSlot
   if (startMin != null && dur > 0) {
-    const slotStart = slotStartFor(startMin);
-    const slotEnd = slotStart + step;
-    if (startMin + dur > slotEnd) {
-      issues.push("Занятие должно полностью помещаться в одну клетку (слот).");
-    } else {
-      const validation = validateTimeSlot(
-        dayIndex,
-        startMin,
-        dur,
-        evId.value || null
-      );
-      if (!validation.valid) issues.push(validation.reason);
-    }
+    const validation = validateTimeSlot(
+      dayIndex,
+      startMin,
+      dur,
+      evId.value || null
+    );
+    if (!validation.valid) issues.push(validation.reason);
   }
 
   if (issues.length) {
@@ -2115,7 +1984,7 @@ function updateConflictsLive() {
 }
 
 function saveEventFromModal() {
-  const { start, end, step } = getBounds();
+  const { start, end } = getBounds();
   const id = evId.value || uid();
   const dayIndex = Number(evDay.value);
 
@@ -2144,24 +2013,19 @@ function saveEventFromModal() {
     return;
   }
 
-  // 2) Валидация времени/слота — единым валидатором (чтобы логика не расходилась)
+  // 2) Валидация времени — только через один валидатор
   const validation = validateTimeSlot(dayIndex, startMin, dur, evId.value || null);
   if (!validation.valid) {
     toast("WARN", "⚠️ Ошибка", validation.reason || "Некорректное время занятия.");
     return;
   }
 
-  // (оставим твои сообщения, но без дубля validateTimeSlot)
-  if (startMin < start || startMin >= end) {
-    toast("WARN", "⚠️ Ошибка", "Время вне рабочего диапазона.");
-    return;
-  }
-  const slotStart = slotStartFor(startMin);
-  const slotEnd = slotStart + step;
-  if (startMin + dur > slotEnd) {
-    toast("WARN", "⚠️ Ошибка", "Занятие выходит за слот. Укажите короче.");
-    return;
-  }
+  // УБРАНО: дублирующая проверка "влезать в слот"
+  // (и вообще этот блок больше не нужен, потому что validateTimeSlot уже проверил start/end)
+  // if (startMin < start || startMin >= end) { ... }
+  // const slotStart = slotStartFor(startMin);
+  // const slotEnd = slotStart + step;
+  // if (startMin + dur > slotEnd) { ... }
 
   // 3) Направление (как у тебя)
   let directionId = evDir.value;
@@ -2184,10 +2048,9 @@ function saveEventFromModal() {
     }
   }
 
-  // 4) Coach: в текущем коде селект использует value="new" (а не "__new__") [file:14]
+  // 4) Coach
   const coachVal = evCoach.value;
-  const coach =
-    coachVal === "new" || coachVal === "__new__" ? "" : coachVal;
+  const coach = coachVal === "new" || coachVal === "__new__" ? "" : coachVal;
 
   const next = {
     id,
@@ -2370,35 +2233,6 @@ const dispCellPad   = $('dispCellPad');
 
 const fontFamily = $("fontFamily");
 
-// ---- Font picker (custom) ----
-const FONT_OPTIONS = [
-  { id: 'system', name: 'System UI', css: 'system-ui, -apple-system, Segoe UI, Roboto, Inter, sans-serif' },
-
-  { id: 'alumni', name: 'Alumni Sans', css: 'Alumni Sans, system-ui, -apple-system, sans-serif' },
-  { id: 'montserrat', name: 'Montserrat', css: 'Montserrat, system-ui, -apple-system, sans-serif' },
-  { id: 'opensans', name: 'Open Sans', css: 'Open Sans, system-ui, -apple-system, sans-serif' },
-  { id: 'ptsans', name: 'PT Sans', css: 'PT Sans, system-ui, -apple-system, sans-serif' },
-
-  // New (add more)
-  { id: 'ptserif', name: 'PT Serif', css: 'PT Serif, system-ui, -apple-system, serif' },
-  { id: 'rubik', name: 'Rubik', css: 'Rubik, system-ui, -apple-system, sans-serif' },
-  { id: 'firasans', name: 'Fira Sans', css: 'Fira Sans, system-ui, -apple-system, sans-serif' },
-  { id: 'ubuntu', name: 'Ubuntu', css: 'Ubuntu, system-ui, -apple-system, sans-serif' },
-  { id: 'notoserif', name: 'Noto Serif', css: 'Noto Serif, system-ui, -apple-system, serif' },
-  { id: 'playfair', name: 'Playfair Display', css: 'Playfair Display, system-ui, -apple-system, serif' },
-  { id: 'merriweather', name: 'Merriweather', css: 'Merriweather, system-ui, -apple-system, serif' },
-  { id: 'jetbrainsmono', name: 'JetBrains Mono', css: 'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' },
-  { id: 'comfortaa', name: 'Comfortaa', css: 'Comfortaa, system-ui, -apple-system, sans-serif' },
-  { id: 'caveat', name: 'Caveat', css: 'Caveat, system-ui, -apple-system, cursive' },
-
-  { id: 'oswald', name: 'Oswald', css: 'Oswald, system-ui, -apple-system, sans-serif' },
-  { id: 'raleway', name: 'Raleway', css: 'Raleway, system-ui, -apple-system, sans-serif' },
-  { id: 'noto', name: 'Noto Sans', css: 'Noto Sans, system-ui, -apple-system, sans-serif' },
-  { id: 'inter', name: 'Inter', css: 'Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif' },
-  { id: 'roboto', name: 'Roboto', css: 'Roboto, system-ui, -apple-system, Segoe UI, Inter, sans-serif' },
-
-  { id: 'mono', name: 'Monospace', css: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' },
-];
 
 function getFontSampleText() {
   const raw = (state?.settings?.font?.sampleText || '').trim();
@@ -2449,7 +2283,7 @@ function setSelectedFont(id) {
   const opt = getFontOptionById(id);
   fontPickerTitle.textContent = opt.name;
   fontPickerSample.textContent = getFontSampleText();
-  fontPickerSample.style.fontFamily = opt.css;
+  fontPickerSample.style.fontFamily = sanitizeFontFamilyStack(opt.css);
 
   applyFont();
   renderAll();
@@ -2458,35 +2292,96 @@ function setSelectedFont(id) {
   renderFontPickerList(fontPickerSearch.value);
 }
 
-function renderFontPickerList(filterText) {
+const FONT_PAGE_SIZE = 20;
+let fontPickerLimit = FONT_PAGE_SIZE;
+let lastFontPickerQuery = '';
+let lastMoreTriggerAt = 0;
+
+let fontMoreObserver = null;
+
+function ensureFontMoreObserver() {
+  if (fontMoreObserver) return;
+  fontMoreObserver = new IntersectionObserver((entries) => {
+    if (!entries.some(e => e.isIntersecting)) return;
+
+    const now = Date.now();
+    if (now - lastMoreTriggerAt < 250) return;
+    lastMoreTriggerAt = now;
+
+    fontPickerLimit += FONT_PAGE_SIZE;
+
+    const prev = fontPickerList.scrollTop;
+    renderFontPickerList(lastFontPickerQuery, true);
+    requestAnimationFrame(() => { fontPickerList.scrollTop = prev; });
+  }, {
+    root: fontPickerList,
+    rootMargin: '200px',
+    threshold: 0.01
+  });
+}
+
+
+function renderFontPickerList(filterText, keepScroll = false) {
   const q = (filterText || '').trim().toLowerCase();
+
+  if (q !== lastFontPickerQuery) {
+    lastFontPickerQuery = q;
+    fontPickerLimit = FONT_PAGE_SIZE;
+  }
+
+  // чтобы при догрузке не прыгало вверх
+  const prevScroll = keepScroll ? fontPickerList.scrollTop : 0;
+
   fontPickerList.innerHTML = '';
 
-  FONT_OPTIONS
-    .filter(f => !q || f.name.toLowerCase().includes(q))
-    .forEach(f => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'font-item' + (fontFamily.value === f.id ? ' active' : '');
-      b.dataset.value = f.id;
+  const filtered = FONT_OPTIONS.filter(f => !q || f.name.toLowerCase().includes(q));
+  const visible = filtered.slice(0, fontPickerLimit);
 
-      b.innerHTML = `
-        <div class="name">${f.name}</div>
-        <div class="sample">${getFontSampleText()}</div>
-      `;
+  for (const f of visible) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'font-item' + (fontFamily.value === f.id ? ' active' : '');
+    b.dataset.value = f.id;
 
-      // ВАЖНО: шрифт только для sample, а название — без стиля
-      const sampleEl = b.querySelector('.sample');
-      if (sampleEl) sampleEl.style.fontFamily = f.css;
+    b.innerHTML = `
+      <div class="name">${f.name}</div>
+      <div class="sample">${getFontSampleText()}</div>
+    `;
 
-      b.addEventListener('click', () => {
-        setSelectedFont(f.id);
-        closeFontPicker();
-      });
+    // СРАЗУ применяем правильный font-family (без hover)
+    const sampleEl = b.querySelector('.sample');
+    if (sampleEl) {
+      sampleEl.style.fontFamily = sanitizeFontFamilyStack(f.css);
+    }
 
-      fontPickerList.appendChild(b);
+    b.addEventListener('click', () => {
+      setSelectedFont(f.id);
+      closeFontPicker();
     });
+
+    fontPickerList.appendChild(b);
+  }
+
+  // Сентинел внизу для infinite scroll
+  if (filtered.length > visible.length) {
+    const more = document.createElement('div');
+    more.className = 'font-more-hover';
+    more.textContent = `Показать ещё: ${Math.min(FONT_PAGE_SIZE, filtered.length - visible.length)}`;
+
+    fontPickerList.appendChild(more);
+
+    ensureFontMoreObserver();
+    fontMoreObserver.disconnect();
+    fontMoreObserver.observe(more);
+  } else {
+    if (fontMoreObserver) fontMoreObserver.disconnect();
+  }
+
+  if (keepScroll) {
+    requestAnimationFrame(() => { fontPickerList.scrollTop = prevScroll; });
+  }
 }
+
 
 fillFontSelectOptions();
 setSelectedFont(state?.settings?.font?.family || 'system');
@@ -2561,19 +2456,6 @@ const DOTS = {
   now: $("dotsNowRow"),
   today: $("dotsTodayCol"),
 };
-
-function fillDots(container, onPick) {
-  container.innerHTML = "";
-  COLOR_SWATCHES.forEach((c) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "dotbtn";
-    b.style.background = c;
-    b.title = c;
-    b.addEventListener("click", () => onPick(c));
-    container.appendChild(b);
-  });
-}
 
 function normalizeHex(v) {
   if (!v) return "#000000";
@@ -3681,24 +3563,187 @@ function getExportPresetById(id) {
   return EXPORT_PRESETS.find((p) => p.id === id) || EXPORT_PRESETS[0];
 }
 
-async function ensureFontsLoaded(timeoutMs = 2500) {
+async function ensureFontsLoaded(timeoutMs = 2500, variantsSet = null) {
   try {
-    if (document.fonts && document.fonts.ready) {
-      await Promise.race([
-        document.fonts.ready,
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("fonts timeout")), timeoutMs)
-        ),
-      ]);
+    if (document.fonts) {
+      // Если передали варианты — просим браузер явно их загрузить
+      if (variantsSet && variantsSet.size && document.fonts.load) {
+        const loads = [];
+        for (const key of variantsSet) {
+          const [fam, weight, style] = key.split("||");
+          // формат строки: "italic 700 16px 'Font Name'"
+          loads.push(document.fonts.load(`${style} ${weight} 16px "${fam}"`));
+        }
+        await Promise.allSettled(loads);
+      }
+
+      if (document.fonts.ready) {
+        await Promise.race([
+          document.fonts.ready,
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("fonts timeout")), timeoutMs)
+          ),
+        ]);
+      }
     }
   } catch (_) {
     /* soft-fail */
   }
 
-  // 2 кадра, чтобы браузер применил метрики шрифта
-  await new Promise((r) =>
-    requestAnimationFrame(() => requestAnimationFrame(r))
-  );
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+}
+
+function pickBestFontUrlFromSrc(src) {
+  // Берём все url(...) и выбираем по расширению: woff2 > woff > ttf > otf
+  const urls = [];
+  const re = /url\(([^)]+)\)/g;
+  let m;
+  while ((m = re.exec(src || ""))) {
+    const raw = m[1].trim().replace(/^["']|["']$/g, "");
+    if (!raw || raw.startsWith("data:")) continue;
+    urls.push(raw);
+  }
+  const score = (u) => {
+    const p = u.split("?")[0].toLowerCase();
+    if (p.endsWith(".woff2")) return 4;
+    if (p.endsWith(".woff")) return 3;
+    if (p.endsWith(".ttf")) return 2;
+    if (p.endsWith(".otf")) return 1;
+    return 0;
+  };
+  urls.sort((a, b) => score(b) - score(a));
+  return urls[0] || null;
+}
+
+function guessMimeByUrl(u) {
+  const p = (u || "").split("?")[0].toLowerCase();
+  if (p.endsWith(".woff2")) return "font/woff2";
+  if (p.endsWith(".woff")) return "font/woff";
+  if (p.endsWith(".ttf")) return "font/ttf";
+  if (p.endsWith(".otf")) return "font/otf";
+  return "application/octet-stream";
+}
+
+function guessFormatByUrl(u) {
+  const p = (u || "").split("?")[0].toLowerCase();
+  if (p.endsWith(".woff2")) return "woff2";
+  if (p.endsWith(".woff")) return "woff";
+  if (p.endsWith(".ttf")) return "truetype";
+  if (p.endsWith(".otf")) return "opentype";
+  return "woff2";
+}
+
+async function fetchAsDataUrl(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Font fetch failed: ${res.status}`);
+  const buf = await res.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+
+  // безопасная base64 конвертация чанками
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+
+  const mime = guessMimeByUrl(url);
+  return `data:${mime};base64,${btoa(bin)}`;
+}
+
+function matchWeight(ruleWeight, wantedWeight) {
+  const s = String(ruleWeight || "").trim();
+  // иногда бывает диапазон "100 900"
+  const parts = s.split(/\s+/).map(x => parseInt(x, 10)).filter(Number.isFinite);
+  if (!parts.length) return wantedWeight === 400;
+  if (parts.length === 1) return parts[0] === wantedWeight;
+  const [a, b] = parts;
+  return wantedWeight >= Math.min(a, b) && wantedWeight <= Math.max(a, b);
+}
+
+// Добавь этот хелпер (если ещё нет)
+function absolutizeCssUrls(cssText, baseHref) {
+  return String(cssText || "").replace(/url\(([^)]+)\)/g, (m, p1) => {
+    const raw = String(p1).trim().replace(/^["']|["']$/g, "");
+    if (!raw) return m;
+    if (/^(data:|blob:|https?:)/i.test(raw)) return m;
+    const abs = new URL(raw, baseHref).href;
+    return `url("${abs}")`;
+  });
+}
+
+async function buildFontFaceCssForVariants(variantsSet, { embedData = true } = {}) {
+  let css = "";
+  if (!variantsSet || !variantsSet.size) return css;
+
+  // группируем для удобства матчингом
+  const wanted = Array.from(variantsSet).map((k) => {
+    const [fam, weight, style] = k.split("||");
+    return {
+      fam,
+      weight: parseInt(weight, 10) || 400,
+      style: (style || "normal").toLowerCase(),
+    };
+  });
+
+  for (const sheet of Array.from(document.styleSheets)) {
+    const baseHref = sheet.href || document.baseURI;
+
+    let rules;
+    try {
+      rules = sheet.cssRules; // может бросить из-за CORS/ограничений
+    } catch (_) {
+      continue;
+    }
+
+    for (const rule of Array.from(rules)) {
+      if (rule.type !== CSSRule.FONT_FACE_RULE) continue;
+
+      const fam = _firstFontFamily(rule.style.getPropertyValue("font-family"));
+      const style = (rule.style.getPropertyValue("font-style") || "normal").toLowerCase();
+      const ruleWeight = rule.style.getPropertyValue("font-weight") || "400";
+
+      for (const w of wanted) {
+        if (w.fam !== fam) continue;
+        if (w.style !== style) continue;
+        if (!matchWeight(ruleWeight, w.weight)) continue;
+
+        // Если НЕ встраиваем data: — всё равно надо "прибить" url(...) к sheet.href,
+        // иначе "./__local__-..." станет грузиться из корня страницы.
+        if (!embedData) {
+          css += absolutizeCssUrls(rule.cssText, baseHref) + "\n";
+          continue;
+        }
+
+        try {
+          const src = rule.style.getPropertyValue("src") || "";
+          const bestUrl = pickBestFontUrlFromSrc(src);
+          if (!bestUrl) {
+            css += absolutizeCssUrls(rule.cssText, baseHref) + "\n";
+            continue;
+          }
+
+          // КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: базируем относительно CSS-файла (fonts/fonts.css),
+          // а не относительно страницы.
+          const absUrl = new URL(bestUrl, baseHref).href;
+
+          const dataUrl = await fetchAsDataUrl(absUrl);
+          const fmt = guessFormatByUrl(bestUrl);
+
+          const display = rule.style.getPropertyValue("font-display") || "swap";
+          const unicodeRange = rule.style.getPropertyValue("unicode-range");
+
+          css += `@font-face{font-family:"${fam}";font-style:${style};font-weight:${w.weight};font-display:${display};src:url("${dataUrl}") format("${fmt}");`;
+          if (unicodeRange) css += `unicode-range:${unicodeRange};`;
+          css += `}\n`;
+        } catch (_) {
+          // если data: не получилось — оставим как есть, но поправим относительные url(...)
+          css += absolutizeCssUrls(rule.cssText, baseHref) + "\n";
+        }
+      }
+    }
+  }
+
+  return css;
 }
 
 function getThemeBgCssColor() {
@@ -3936,6 +3981,65 @@ function getExportOptsFromUI() {
   };
 }
 
+function _firstFontFamily(fontFamily) {
+  const first = (fontFamily || "").split(",")[0].trim();
+  return first.replace(/^["']|["']$/g, "");
+}
+
+function isGenericFamily(fam) {
+  const f = (fam || "").trim().toLowerCase();
+  return (
+    !f ||
+    f === "serif" || f === "sans-serif" || f === "monospace" ||
+    f === "system-ui" || f === "ui-sans-serif" || f === "ui-serif" || f === "ui-monospace" ||
+    f === "emoji" || f === "math" || f === "fangsong"
+  );
+}
+
+function normalizeFontWeight(w) {
+  const s = String(w || "").trim().toLowerCase();
+  if (!s) return 400;
+  if (s === "normal") return 400;
+  if (s === "bold") return 700;
+  const n = parseInt(s, 10);
+  return Number.isFinite(n) ? n : 400;
+}
+
+function collectUsedFontVariantsFromDom(rootEl) {
+  const set = new Set();
+  if (!rootEl) return set;
+
+  const walker = document.createTreeWalker(
+    rootEl,
+    NodeFilter.SHOW_TEXT,
+    {
+      acceptNode(node) {
+        return node.nodeValue && node.nodeValue.trim()
+          ? NodeFilter.FILTER_ACCEPT
+          : NodeFilter.FILTER_REJECT;
+      }
+    }
+  );
+
+  let node;
+  while ((node = walker.nextNode())) {
+    const el = node.parentElement;
+    if (!el) continue;
+
+    const cs = getComputedStyle(el);
+    const fam = _firstFontFamily(cs.fontFamily);
+    if (!fam || isGenericFamily(fam)) continue;
+
+    const weight = normalizeFontWeight(cs.fontWeight);
+    const style = (cs.fontStyle || "normal").toLowerCase();
+
+    set.add(`${fam}||${weight}||${style}`);
+  }
+
+  return set;
+}
+
+
 async function buildExportPreview() {
   const opts = getExportOptsFromUI();
 
@@ -3955,8 +4059,16 @@ async function buildExportPreview() {
     }
 
     const uiEls = Array.from(clone.querySelectorAll(".grab, .day-actions, button, .empty-slot"));
-    const uiPrev = uiEls.map(el => el.style.display);
-    uiEls.forEach(el => (el.style.display = "none"));
+
+    // ВАЖНО: отдельно сохраняем display и visibility (у тебя раньше visibility восстанавливался из display)
+    const uiPrevDisplay = uiEls.map((el) => el.style.display);
+    const uiPrevVis = uiEls.map((el) => el.style.visibility);
+
+    // Прячем UI (и по display, и по visibility)
+    uiEls.forEach((el) => {
+      el.style.display = "none";
+      el.style.visibility = "hidden";
+    });
 
     // sticky-хедер часто ломает svg — на экспорт делаем static
     const headEls = Array.from(clone.querySelectorAll(".cell.head"));
@@ -3967,8 +4079,6 @@ async function buildExportPreview() {
     let changed = [];
 
     try {
-      uiEls.forEach((el) => (el.style.visibility = "hidden"));
-
       // скрываем пустые time-строки (в compact вернёт [])
       changed = hideEmptyTimeRows(clone);
 
@@ -3979,34 +4089,41 @@ async function buildExportPreview() {
         el.style.zIndex = "auto";
       });
 
-      await ensureFontsLoaded();
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-
       // В SVG-ветке фон берём из темы (svg не использует opts.background)
       const bgColor = getThemeBgCssColor() || "#ffffff";
 
+      // работаем строго по реальному контенту расписания
+      const scheduleEl = clone.querySelector(".schedule") || clone;
+
+      // === МАКС: собираем реально используемые шрифты по текстовым нодам + weight/style ===
+      // (функции collectUsedFontVariantsFromDom / buildFontFaceCssForVariants должны быть добавлены отдельно)
+      const usedVariants = collectUsedFontVariantsFromDom(scheduleEl);
+
+      // Догружаем именно эти варианты (ensureFontsLoaded расширен: 2й аргумент variantsSet)
+      await ensureFontsLoaded(2500, usedVariants);
+
+      // 2 кадра, чтобы браузер применил метрики
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
       // размеры берём у .schedule (реальный контент таблицы)
-      const scheduleEl = clone.querySelector(".schedule");
-      const w = Math.max(
-        1,
-        Math.ceil(scheduleEl?.scrollWidth || scheduleEl?.offsetWidth || clone.scrollWidth || clone.offsetWidth || 1)
-      );
-      const h = Math.max(
-        1,
-        Math.ceil(scheduleEl?.scrollHeight || scheduleEl?.offsetHeight || clone.scrollHeight || clone.offsetHeight || 1)
-      );
+      const w = Math.max(1, Math.ceil(scheduleEl.scrollWidth || scheduleEl.offsetWidth || 1));
+      const h = Math.max(1, Math.ceil(scheduleEl.scrollHeight || scheduleEl.offsetHeight || 1));
 
       // подгоняем контейнер под контент, чтобы не было “один фон”
       clone.style.width = `${w}px`;
       clone.style.height = `${h}px`;
 
-      let dataUrl = await htmlToImage.toSvg(clone, {
+      // fontEmbedCSS: если передан — html-to-image использует ТОЛЬКО его (не авто-встраивает шрифты) [web:36]
+      const fontEmbedCSS = await buildFontFaceCssForVariants(usedVariants, { embedData: true });
+
+      const dataUrl = await htmlToImage.toSvg(clone, {
         backgroundColor: bgColor,
         width: w,
         height: h,
-        pixelRatio: 2,
+        pixelRatio: 1,
         cacheBust: true,
         quality: 1.0,
+        fontEmbedCSS,
       });
 
       expPreviewImg.src = dataUrl;
@@ -4017,7 +4134,12 @@ async function buildExportPreview() {
       console.error("SVG preview error:", e);
       toast("ERR", "SVG", e?.message || "Ошибка предпросмотра SVG");
     } finally {
-      uiEls.forEach((el, i) => (el.style.display = uiPrev[i] || ""));
+      // вернуть display/visibility
+      uiEls.forEach((el, i) => {
+        el.style.display = uiPrevDisplay[i] || "";
+        el.style.visibility = uiPrevVis[i] || "";
+      });
+
       // вернуть sticky как было
       headEls.forEach((el, i) => {
         el.style.position = headPrevPos[i] || "";
@@ -4025,8 +4147,7 @@ async function buildExportPreview() {
         el.style.zIndex = headPrevZ[i] || "";
       });
 
-      uiEls.forEach((el, i) => (el.style.visibility = uiPrev[i] || ""));
-
+      // вернуть скрытые строки времени
       for (let i = changed.length - 1; i >= 0; i--) {
         const { el, prevDisplay } = changed[i];
         el.style.display = prevDisplay;
@@ -4104,104 +4225,6 @@ async function downloadFromExportModal() {
   a.click();
 
   toast("OK", "Экспорт", "Файл скачан.");
-}
-
-// Универсальный угол
-function rotateSvgDataUrl(dataUrl, deg) {
-  deg = ((Number(deg) || 0) % 360 + 360) % 360;
-  if (deg === 0) return dataUrl;
-
-  const comma = dataUrl.indexOf(",");
-  if (comma < 0) return dataUrl;
-
-  const header = dataUrl.slice(0, comma + 1);
-  const payload = dataUrl.slice(comma + 1);
-
-  const isBase64 = /;base64/i.test(header);
-
-  let svgText;
-  try {
-    svgText = isBase64 ? atob(payload) : decodeURIComponent(payload);
-  } catch {
-    return dataUrl;
-  }
-
-  // достаём <svg ...> и inner
-  const svgMatch = svgText.match(/<svg([^>]*)>([\s\S]*?)<\/svg>/i);
-  if (!svgMatch) return dataUrl;
-
-  const attrs = svgMatch[1] || "";
-  const inner = svgMatch[2] || "";
-
-  // width/height: допускаем "123", "123px", "123.4"
-  const wMatch = attrs.match(/\bwidth\s*=\s*"([\d.]+)(?:px)?"/i);
-  const hMatch = attrs.match(/\bheight\s*=\s*"([\d.]+)(?:px)?"/i);
-
-  let w = wMatch ? parseFloat(wMatch[1]) : NaN;
-  let h = hMatch ? parseFloat(hMatch[1]) : NaN;
-
-  // если width/height нет — попробуем viewBox
-  const vbMatch = attrs.match(/\bviewBox\s*=\s*"([\d.\-]+)\s+([\d.\-]+)\s+([\d.]+)\s+([\d.]+)"/i);
-  if ((!Number.isFinite(w) || !Number.isFinite(h)) && vbMatch) {
-    w = parseFloat(vbMatch[3]);
-    h = parseFloat(vbMatch[4]);
-  }
-
-  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return dataUrl;
-
-  // гарантируем viewBox (если его нет)
-  let nextAttrs = attrs;
-  if (!/\bviewBox\s*=/i.test(nextAttrs)) {
-    nextAttrs = `${nextAttrs} viewBox="0 0 ${w} ${h}"`;
-  }
-
-  // подготовим transform для 0/90/180/270
-  let newW = w;
-  let newH = h;
-  let transform = "";
-
-  if (deg === 90) {
-    newW = h; newH = w;
-    transform = `translate(${h} 0) rotate(90)`;
-  } else if (deg === 180) {
-    newW = w; newH = h;
-    transform = `translate(${w} ${h}) rotate(180)`;
-  } else if (deg === 270) {
-    newW = h; newH = w;
-    transform = `translate(0 ${w}) rotate(270)`;
-  } else {
-    // на случай "нестандартных" — не делаем
-    return dataUrl;
-  }
-
-  // меняем/добавляем width/height в attrs (только числовые, без px)
-  const upsertAttr = (attrs, name, value) => {
-    const re = new RegExp(
-      `\\b${name}\\s*=\\s*(?:"[^"]*"|'[^']*'|[^\\s>]+)`,
-      "i"
-    );
-
-    if (re.test(attrs)) {
-      return attrs.replace(re, `${name}="${value}"`);
-    }
-
-    // аккуратно добавляем (с пробелом)
-    return `${attrs}${attrs.trim() ? " " : ""}${name}="${value}"`;
-  };
-
-  nextAttrs = upsertAttr(nextAttrs, "width", newW);
-  nextAttrs = upsertAttr(nextAttrs, "height", newH);
-
-
-  const rotatedSvg =
-    `<svg${nextAttrs}>` +
-      `<g transform="${transform}">` +
-        inner +
-      `</g>` +
-    `</svg>`;
-
-  const outPayload = isBase64 ? btoa(rotatedSvg) : encodeURIComponent(rotatedSvg);
-  return header + outPayload;
 }
 
 function hideEmptyTimeRows(rootEl, { respectFilters = true, keepNowRow = true } = {}) {
@@ -4319,23 +4342,6 @@ function createFinalCanvas(sourceCanvas, fmt) {
 
   ctx.restore();
   return final;
-}
-
-
-function downloadCanvas(
-  canvas,
-  name,
-  imageFormat = "image/png",
-  quality = 1.0
-) {
-  const a = document.createElement("a");
-  const stamp = new Date().toISOString().slice(0, 10);
-  // ИЗМЕНЕНО: определяем расширение по формату
-  const ext = imageFormat === "image/jpeg" ? "jpg" : "png";
-  a.download = `schedule-${name}-${stamp}.${ext}`;
-  // ИЗМЕНЕНО: используем переданные параметры
-  a.href = canvas.toDataURL(imageFormat, quality);
-  a.click();
 }
 
 // ===== СЧЕТЧИК СИМВОЛОВ И АВТОМАТИЧЕСКИЕ ПЕРЕНОСЫ =====
