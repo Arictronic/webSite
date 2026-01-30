@@ -43,6 +43,9 @@
   --evMetaSize1: 11px;
   --evMetaSize2: 9px;
 
+  --evTitleFont: var(--tableFont);
+  --evMetaFont: var(--tableFont);
+
   --evTitleSizeTiny: 10px;
   --evMetaSizeTiny: 9px;
   --evTitleSizeMicro: 9px;
@@ -59,6 +62,13 @@
   --ok: #16a34a;
   --warn: #f59e0b;
   --danger: #b91c1c;
+
+  --logo-tile-size: 140px;
+  --logo-offset-x: 0px;
+  --logo-offset-y: 0px;
+  --logo-opacity: 0.12;
+  --logo-color: #0ea5e9;
+  --logo-rotation: 0deg;
 }
 
 html[data-scheme="light"] { color-scheme: light; }
@@ -82,7 +92,9 @@ body {
   font-family: var(--tableFont);
 
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
+  flex-direction: column;
+  align-items: center;
 
   overflow-x: hidden;
   transition: padding 0.3s ease;
@@ -92,6 +104,10 @@ body {
   max-width: 1280px;
   width: 100%;
   padding-bottom: 20px;
+}
+
+.site-footer{
+  width: 100%;
 }
 
 /* -----------------------------
@@ -590,6 +606,7 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
 .event .t{
   font-weight: var(--evTitleW);
   font-size: var(--evTitleSize1);
+  font-family: var(--evTitleFont);
   line-height: 1.3;
   word-break: break-word;
   overflow-wrap: anywhere;
@@ -608,6 +625,7 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
 .event .m {
   font-weight: var(--evMetaW);
   font-size: var(--evMetaSize1);
+  font-family: var(--evMetaFont);
   opacity: 0.95;
 
   white-space: pre-wrap;
@@ -1778,13 +1796,11 @@ html[data-scheme="dark"] .event:hover {
   text-overflow: clip;
   white-space: pre-wrap;
 }
-
 /* Compact: ячейки выравнивает JS (syncGridGeometry), CSS не должен мешать */
-/* compact: пусть слот заполняет выровненную по высоте ячейку */
-.schedule.compact-mode .cell.droppable{
+/* compact: пусть слот заполняет выровненную по высоту ячейку */
+.schedule.compact-mode .cell.droppable {
   display: flex;
 }
-
 
 /* Slot-inner должен растягиваться на всю высоту */
 .schedule.compact-mode .cell.droppable .slot.compact-mode .slot-inner {
@@ -1797,7 +1813,7 @@ html[data-scheme="dark"] .event:hover {
   flex: auto;
 }
 
-.slot.list-mode .slot-inner:has(.event.double){
+.slot.list-mode .slot-inner:has(.event.double) {
   display: flex !important;
   flex-direction: column !important;
   gap: 2px !important;
@@ -1805,7 +1821,7 @@ html[data-scheme="dark"] .event:hover {
   grid-template-rows: none !important;
 }
 
-.section-title{
+.section-title {
   margin-top: 2px;
   font-size: 12px;
   font-weight: 900;
@@ -1813,7 +1829,7 @@ html[data-scheme="dark"] .event:hover {
   letter-spacing: .02em;
 }
 
-.font-more-hover{
+.font-more-hover {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1827,15 +1843,15 @@ html[data-scheme="dark"] .event:hover {
   background: rgba(148, 163, 184, 0.06);
 }
 
-.font-picker-list:has(.font-more-hover) .font-more-hover{
+.font-picker-list:has(.font-more-hover) .font-more-hover {
   margin-top: 2px;
 }
 
-.font-picker-pop{
+.font-picker-pop {
   max-width: 100%;
 }
 
-.font-picker-list{
+.font-picker-list {
   max-height: min(46vh, 320px);
   overflow: auto;
   -webkit-overflow-scrolling: touch;
@@ -1843,14 +1859,315 @@ html[data-scheme="dark"] .event:hover {
   scrollbar-gutter: stable;
 }
 
-@media (max-width: 520px){
-  .font-picker-list{
+@media (max-width: 520px) {
+  .font-picker-list {
     max-height: min(54vh, 360px);
   }
-  .font-item{
+  .font-item {
     padding: 10px 12px;
   }
-  .font-item .sample{
+  .font-item .sample {
     font-size: 13px;
   }
 }
+
+.site-footer {
+  margin: 12px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.site-footer a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.site-footer a:hover {
+  text-decoration: underline;
+}
+
+/* чтобы не мешало режиму экспорта (если он включается на body) */
+.export-mode .site-footer {
+  display: none !important;
+}
+
+/* --- Watermark (logo) behind schedule --- */
+/* Контейнер расписания */
+.schedule-wrap {
+  position: relative !important;
+  overflow: hidden !important;
+  min-height: 400px;
+  width: 100%;
+}
+
+/* Слой логотипа */
+#logoLayer {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: none !important;
+  z-index: 0 !important; /* Под контентом */
+  display: none;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+}
+
+/* Сам логотип */
+#logoMark {
+  position: absolute !important;
+  pointer-events: none !important;
+  box-sizing: border-box !important;
+  opacity: var(--logo-opacity, 0.12);
+  z-index: 0 !important; /* Под контентом */
+  background-color: transparent;
+  background-repeat: no-repeat;
+  background-position: 0 0;
+  background-size: contain;
+  -webkit-mask-image: none;
+  mask-image: none;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: 0 0;
+  mask-position: 0 0;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+/* Центрированный режим */
+#logoLayer[data-wm="center"] #logoMark {
+  width: var(--logo-tile-size, 140px) !important;
+  height: var(--logo-tile-size, 140px) !important;
+  left: 50% !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%) rotate(var(--logo-rotation, 0deg)) !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+  background-size: contain !important;
+  -webkit-mask-repeat: no-repeat !important;
+  mask-repeat: no-repeat !important;
+  -webkit-mask-position: center !important;
+  mask-position: center !important;
+  -webkit-mask-size: contain !important;
+  mask-size: contain !important;
+  max-width: 80% !important;
+  max-height: 80% !important;
+}
+
+/* Штамп (в правом нижнем углу) */
+#logoLayer[data-wm="stamp"] #logoMark {
+  width: var(--logo-tile-size, 140px) !important;
+  height: var(--logo-tile-size, 140px) !important;
+  left: auto !important;
+  right: 20px !important;
+  top: auto !important;
+  bottom: 20px !important;
+  transform: rotate(var(--logo-rotation, 0deg)) !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+  background-size: contain !important;
+  -webkit-mask-repeat: no-repeat !important;
+  mask-repeat: no-repeat !important;
+  -webkit-mask-position: center !important;
+  mask-position: center !important;
+  -webkit-mask-size: contain !important;
+  mask-size: contain !important;
+}
+
+/* Плиточный режим - ограничиваем областью контента */
+#logoLayer[data-wm="tile"] #logoMark {
+  width: calc(100% - var(--time-col-width, 76px)) !important;
+  height: calc(100% - var(--day-head-height, 42px)) !important;
+  left: var(--time-col-width, 76px) !important;
+  top: var(--day-head-height, 42px) !important;
+  transform: rotate(var(--logo-rotation, 0deg)) !important;
+  background-repeat: repeat !important;
+  background-position: var(--logo-offset-x, 0) var(--logo-offset-y, 0) !important;
+  background-size: var(--logo-tile-size, 140px) var(--logo-tile-size, 140px) !important;
+  -webkit-mask-repeat: repeat !important;
+  mask-repeat: repeat !important;
+  -webkit-mask-position: var(--logo-offset-x, 0) var(--logo-offset-y, 0) !important;
+  mask-position: var(--logo-offset-x, 0) var(--logo-offset-y, 0) !important;
+  -webkit-mask-size: var(--logo-tile-size, 140px) var(--logo-tile-size, 140px) !important;
+  mask-size: var(--logo-tile-size, 140px) var(--logo-tile-size, 140px) !important;
+}
+
+/* Диагональный режим - ограничиваем областью контента */
+#logoLayer[data-wm="diagonal"] #logoMark {
+  width: calc(100% - var(--time-col-width, 76px)) !important;
+  height: calc(100% - var(--day-head-height, 42px)) !important;
+  left: var(--time-col-width, 76px) !important;
+  top: var(--day-head-height, 42px) !important;
+  transform: rotate(var(--logo-rotation, 0deg)) !important;
+  background-repeat: repeat !important;
+  background-position: var(--logo-offset-x, 0) var(--logo-offset-y, 0) !important;
+  background-size: 
+    calc(var(--logo-tile-size, 140px) * 2) 
+    calc(var(--logo-tile-size, 140px) * 2) !important;
+  background-image: 
+    repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent calc(var(--logo-tile-size, 140px) - 1px),
+      currentColor calc(var(--logo-tile-size, 140px) - 1px),
+      currentColor var(--logo-tile-size, 140px)
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent calc(var(--logo-tile-size, 140px) - 1px),
+      currentColor calc(var(--logo-tile-size, 140px) - 1px),
+      currentColor var(--logo-tile-size, 140px)
+    ) !important;
+  -webkit-mask-repeat: repeat !important;
+  mask-repeat: repeat !important;
+  -webkit-mask-position: var(--logo-offset-x, 0) var(--logo-offset-y, 0) !important;
+  mask-position: var(--logo-offset-x, 0) var(--logo-offset-y, 0) !important;
+  -webkit-mask-size: var(--logo-tile-size, 140px) var(--logo-tile-size, 140px) !important;
+  mask-size: var(--logo-tile-size, 140px) var(--logo-tile-size, 140px) !important;
+}
+
+/* Режим перекрашивания */
+#logoMark.recolor {
+  background-color: var(--logo-color, #0ea5e9) !important;
+  background-image: none !important;
+}
+
+/* Для центрированного режима с перекрашиванием */
+#logoLayer[data-wm="center"] #logoMark.recolor,
+#logoLayer[data-wm="stamp"] #logoMark.recolor {
+  background-color: var(--logo-color, #0ea5e9) !important;
+  background-image: none !important;
+  -webkit-mask-repeat: no-repeat !important;
+  mask-repeat: no-repeat !important;
+  -webkit-mask-position: center !important;
+  mask-position: center !important;
+  -webkit-mask-size: contain !important;
+  mask-size: contain !important;
+}
+
+/* Для плиточных режимов с перекрашиванием */
+#logoLayer[data-wm="tile"] #logoMark.recolor,
+#logoLayer[data-wm="diagonal"] #logoMark.recolor {
+  background-color: var(--logo-color, #0ea5e9) !important;
+  background-image: none !important;
+  -webkit-mask-repeat: repeat !important;
+  mask-repeat: repeat !important;
+  -webkit-mask-position: var(--logo-offset-x, 0) var(--logo-offset-y, 0) !important;
+  mask-position: var(--logo-offset-x, 0) var(--logo-offset-y, 0) !important;
+  -webkit-mask-size: var(--logo-tile-size, 140px) var(--logo-tile-size, 140px) !important;
+  mask-size: var(--logo-tile-size, 140px) var(--logo-tile-size, 140px) !important;
+}
+
+/* Режим экспорта */
+.export-mode #logoLayer {
+  display: block !important;
+  z-index: 0 !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: none !important;
+}
+
+.export-mode #logoMark {
+  width: 100% !important;
+  height: 100% !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  pointer-events: none !important;
+  opacity: var(--logo-opacity, 0.12) !important;
+}
+
+/* Контейнер для предпросмотра логотипа */
+.logo-preview-container {
+  width: 100%;
+  height: 200px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+  margin: 15px 0;
+}
+
+.logo-preview {
+  position: absolute;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  transition: all 0.2s ease;
+  pointer-events: none;
+}
+
+/* Адаптивность для мобильных устройств */
+@media (max-width: 768px) {
+  #logoLayer[data-wm="center"] #logoMark,
+  #logoLayer[data-wm="stamp"] #logoMark {
+    --logo-tile-size: 100px !important;
+    max-width: 60% !important;
+    max-height: 60% !important;
+  }
+  
+  .logo-preview-container {
+    height: 150px;
+  }
+}
+
+/* Анимация для плавного изменения свойств */
+#logoLayer,
+#logoMark {
+  transition: 
+    opacity 0.3s ease,
+    background-color 0.3s ease,
+    transform 0.3s ease;
+}
+
+/* Убираем все инлайновые стили при отключенном логотипе */
+#logoLayer:not([style*="display: block"]) #logoMark {
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+
+/* Гарантируем, что логотип всегда позади контента расписания */
+.schedule {
+  position: relative;
+  z-index: 2;
+}
+
+.schedule > .cell {
+  position: relative;
+  z-index: inherit;
+}
+
+.schedule > .cell.head {
+  z-index: 5;
+}
+
+/* Заголовки таблицы должны быть ВЫШЕ */
+.cell.head, .cell.time {
+  z-index: 10 !important;
+  position: relative !important;
+}
+
+/* События должны быть ВЫШЕ логотипа */
+.event {
+  z-index: 5 !important;
+  position: relative !important;
+}
+
+/* CSS переменные для логотипа */
+:root {
+  --time-col-width: 76px;  /* Ширина колонки времени */
+  --day-head-height: 42px; /* Высота заголовков дней */
+}
+
