@@ -6,35 +6,26 @@
    CSS variables + scheme
 ------------------------------ */
 :root {
-  color-scheme: light dark;
-
   --bg: #f6f7fb;
   --card: #ffffff;
   --text: #0f172a;
   --muted: #64748b;
   --border: #e2e8f0;
   --gridHead: #f8fafc;
-
   --accent: #ef4444;
   --accentText: #ffffff;
-
   --nowRowRGBA: rgba(255, 247, 194, 1);
   --todayColRGBA: rgba(255, 245, 245, 1);
   --shadowRGBA: rgba(15, 23, 42, 0.1);
-
   --eventAlpha: 1;
-
   --radius: 14px;
-
   --timeCol: 76px;
-  --dayMinW: 150px; /* fallback; JS может заменить */
-  --dayW: 150px;    /* fallback; JS может заменить */
-  --slotH: 72px;    /* fallback; JS может заменить */
+  --dayMinW: 150px;
+  --dayW: 150px;
+  --slotH: 72px;
   --cellPad: 6px;
-
   --focus: 0 0 0 3px rgba(59, 130, 246, 0.35);
   --tableFont: system-ui, -apple-system, Segoe UI, Roboto, Inter, sans-serif;
-
   --evLineHeight: 1.12;
   --evTitleW: 900;
   --evMetaW: 600;
@@ -42,39 +33,43 @@
   --evTitleSize2: 10px;
   --evMetaSize1: 11px;
   --evMetaSize2: 9px;
-
   --evTitleFont: var(--tableFont);
   --evMetaFont: var(--tableFont);
-
   --evTitleSizeTiny: 10px;
   --evMetaSizeTiny: 9px;
   --evTitleSizeMicro: 9px;
   --evMetaSizeMicro: 8px;
-
   --evLetterSpacing: 0em;
   --evTextTransform: none;
   --evTitleClamp: 3;
   --evCardPadY: 7px;
   --evCardRadius: 12px;
-
-  --evCardMinH: 68px; /* fallback; JS может заменить */
-
+  --evCardMinH: 68px;
   --ok: #16a34a;
   --warn: #f59e0b;
   --danger: #b91c1c;
-
   --logo-tile-size: 140px;
   --logo-offset-x: 0px;
   --logo-offset-y: 0px;
   --logo-opacity: 0.12;
   --logo-color: #0ea5e9;
   --logo-rotation: 0deg;
+  --time-col-width: 76px;
+  --day-head-height: 42px;
+  color-scheme: light dark;
 }
 
-html[data-scheme="light"] { color-scheme: light; }
-html[data-scheme="dark"]  { color-scheme: dark; }
+html[data-scheme="light"] {
+  color-scheme: light;
+}
 
-* { box-sizing: border-box; }
+html[data-scheme="dark"] {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
 
 html {
   height: 100%;
@@ -86,28 +81,21 @@ body {
   padding: 16px;
   padding-bottom: 40px;
   min-height: 100vh;
-
   background: var(--bg);
   color: var(--text);
   font-family: var(--tableFont);
-
   display: flex;
-  justify-content: flex-start;
   flex-direction: column;
   align-items: center;
-
+  justify-content: flex-start;
   overflow-x: hidden;
   transition: padding 0.3s ease;
 }
 
 .app {
+  width: 100%;
   max-width: 1280px;
-  width: 100%;
   padding-bottom: 20px;
-}
-
-.site-footer{
-  width: 100%;
 }
 
 /* -----------------------------
@@ -115,12 +103,11 @@ body {
 ------------------------------ */
 .topbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-
   margin-bottom: 10px;
-  flex-wrap: wrap;
 }
 
 .brand {
@@ -133,17 +120,15 @@ body {
 .logo {
   width: 56px;
   height: 56px;
+  flex-shrink: 0;
   border-radius: var(--radius);
   background: linear-gradient(135deg, var(--accent), #f59e0b);
-
+  color: #fff;
+  font-weight: 900;
+  letter-spacing: 0.5px;
   display: flex;
   align-items: center;
   justify-content: center;
-
-  font-weight: 900;
-  color: #fff;
-  letter-spacing: 0.5px;
-  flex-shrink: 0;
 }
 
 .title {
@@ -166,9 +151,9 @@ body {
 .toolbar {
   display: flex;
   flex-wrap: wrap;
+  flex: 1;
   gap: 8px;
   justify-content: flex-end;
-  flex: 1;
 }
 
 /* -----------------------------
@@ -176,24 +161,20 @@ body {
 ------------------------------ */
 button {
   appearance: none;
-  border: 1px solid var(--border);
-  background: var(--card);
-  color: var(--text);
-
-  border-radius: 10px;
-  padding: 7px 10px;
-
-  font-size: 13px;
-  line-height: 1;
-
-  cursor: pointer;
-  user-select: none;
-  white-space: nowrap;
-
   display: inline-flex;
   align-items: center;
   gap: 6px;
-
+  margin: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
   transition: all 0.2s ease;
 }
 
@@ -203,7 +184,9 @@ button.primary {
   color: var(--accentText);
 }
 
-button.ghost { background: transparent; }
+button.ghost {
+  background: transparent;
+}
 
 button.danger {
   background: transparent;
@@ -211,39 +194,52 @@ button.danger {
   color: var(--danger);
 }
 
-button:focus { outline: none; box-shadow: var(--focus); }
-button:active { transform: translateY(1px); }
-button[disabled] { opacity: 0.45; cursor: not-allowed; }
+button:focus {
+  outline: none;
+  box-shadow: var(--focus);
+}
 
-button:hover:not([disabled]) { filter: brightness(0.97); }
+button:active {
+  transform: translateY(1px);
+}
+
+button:hover:not([disabled]) {
+  filter: brightness(0.97);
+}
+
+button[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 
 /* -----------------------------
    Controls / Filters
 ------------------------------ */
 .controls {
-  background: var(--card);
+  margin-bottom: 10px;
+  padding: 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  background: var(--card);
   box-shadow: 0 10px 30px var(--shadowRGBA);
-
-  padding: 10px;
-  margin-bottom: 10px;
 }
 
 .row {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
   align-items: center;
+  gap: 10px;
 }
 
-.mt10 { margin-top: 10px; }
+.mt10 {
+  margin-top: 10px;
+}
 
 .group {
   display: flex;
-  gap: 6px;
-  align-items: center;
   flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
 }
 
 .label {
@@ -253,23 +249,23 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
 
 .chip {
   position: relative;
-  border-radius: 999px;
-  padding: 5px 10px;
-
-  font-size: 12px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  color: var(--text);
-
-  cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-
+  margin: 0;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
   transition: all 0.2s ease;
 }
 
-.chip:hover:not(.active) { background: rgba(148, 163, 184, 0.1); }
+.chip:hover:not(.active) {
+  background: rgba(148, 163, 184, 0.1);
+}
 
 .chip.active {
   background: rgba(239, 68, 68, 0.08);
@@ -284,41 +280,41 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
   right: -2px;
   width: 8px;
   height: 8px;
-  background: var(--accent);
-  border-radius: 50%;
   border: 2px solid var(--card);
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 .chip .dot {
+  display: inline-block;
   width: 10px;
   height: 10px;
   border-radius: 999px;
-  display: inline-block;
 }
 
 .chip .count {
-  font-size: 11px;
-  color: var(--muted);
   padding: 2px 6px;
-  border-radius: 999px;
   border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .search {
   display: flex;
+  flex: 1;
   align-items: center;
   gap: 8px;
-  flex: 1;
   min-width: 220px;
 }
 
 .search input {
   width: 100%;
-  border-radius: 10px;
+  padding: 8px 10px;
   border: 1px solid var(--border);
+  border-radius: 10px;
   background: var(--card);
   color: var(--text);
-  padding: 8px 10px;
   font-size: 13px;
   transition: all 0.2s ease;
 }
@@ -329,30 +325,24 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
 }
 
 .stats {
-  margin-left: auto;
-  font-size: 12px;
-  color: var(--muted);
-
   display: flex;
-  gap: 12px;
   flex-wrap: wrap;
+  gap: 12px;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
 }
 
-/* Textarea in modal */
 #evName {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
   font-family: var(--tableFont);
   font-size: 14px;
   line-height: 1.4;
-
-  padding: 10px 12px;
-
-  border: 1px solid var(--border);
-  border-radius: 8px;
-
-  background: var(--card);
-  color: var(--text);
-
-  width: 100%;
   transition: border-color 0.2s;
 }
 
@@ -368,128 +358,156 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
 }
 
 .char-counter {
-  font-size: 11px;
-  color: var(--muted);
-  text-align: right;
   margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: right;
 }
 
-.char-counter.warning { color: var(--warn); }
-.char-counter.danger  { color: var(--accent); }
+.char-counter.warning {
+  color: var(--warn);
+}
+
+.char-counter.danger {
+  color: var(--accent);
+}
 
 /* -----------------------------
    Schedule grid
 ------------------------------ */
 .schedule-wrap {
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior-x: contain;
-
-  background: var(--card);
+  width: 100%;
+  max-width: 100%;
+  margin-bottom: 40px;
+  padding: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  background: var(--card);
   box-shadow: 0 10px 30px var(--shadowRGBA);
-
   overflow-x: auto;
   overflow-y: hidden;
-
-  max-width: 100%;
-  width: 100%;
-
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
   transition: all 0.3s ease;
-  margin-bottom: 40px;
+  position: relative;
+  overflow: hidden;
+  min-height: 400px;
 }
 
 .schedule {
   display: grid;
   width: max-content;
   min-width: 100%;
-
-  grid-template-columns: var(--timeCol) repeat(7, minmax(var(--dayMinW), var(--dayW)));
   border-left: 1px solid var(--border);
   border-top: 1px solid var(--border);
+  grid-template-columns: var(--timeCol) repeat(7, minmax(var(--dayMinW), var(--dayW)));
+  position: relative;
+  z-index: 2;
 }
 
-/* Measuring mode — снять clamp + дать max-content ширину */
 .schedule.measuring {
   grid-template-columns: var(--timeCol) repeat(7, max-content);
 }
 
-.schedule.measuring .slot { height: auto !important; }
+.schedule.measuring .slot {
+  height: auto !important;
+}
 
-.schedule.measuring .slot.tl-fill .slot-inner { height: auto !important; }
+.schedule.measuring .slot.tl-fill .slot-inner {
+  height: auto !important;
+}
 
 .schedule.measuring .slot.tl-fill .event {
   flex: 0 0 auto !important;
-  width: max-content !important;
   max-width: none !important;
+  width: max-content !important;
 }
 
-.schedule.measuring .event { overflow: visible !important; }
+.schedule.measuring .event {
+  overflow: visible !important;
+}
 
 .schedule.measuring .event .t,
 .schedule.measuring .event.double .t {
   display: block !important;
   -webkit-box-orient: initial !important;
-  overflow: visible !important;
   white-space: normal !important;
+  overflow: visible !important;
   text-overflow: clip !important;
 }
 
 .schedule.measuring .event .m,
 .schedule.measuring .event.double .m {
-  overflow: visible !important;
   white-space: normal !important;
+  overflow: visible !important;
   text-overflow: clip !important;
 }
 
 .cell {
+  padding: var(--cellPad);
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
-
-  padding: var(--cellPad);
-  position: relative;
-
   overflow: hidden;
+  position: relative;
   transition: background-color 0.2s ease;
 }
 
+.schedule > .cell {
+  position: relative;
+  z-index: inherit;
+}
+
+.cell.head,
+.cell.time {
+  position: relative !important;
+  z-index: 10 !important;
+}
+
 .head {
-  min-height: 42px;
-  background: var(--gridHead);
-
-  position: sticky;
-  top: 0;
-  z-index: 5;
-
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-
+  min-height: 42px;
+  padding: var(--cellPad);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--gridHead);
+  color: var(--text);
   font-size: 12px;
   font-weight: 900;
+  position: sticky;
+  top: 0;
+  z-index: 5;
 }
 
 .head .day-actions {
   opacity: 0.6;
-  cursor: pointer;
   font-weight: 900;
+  cursor: pointer;
 }
 
-.head .day-actions:hover { opacity: 1; }
+.head .day-actions:hover {
+  opacity: 1;
+}
 
 .time {
-  background: var(--gridHead);
-  text-align: right;
-  padding-right: 10px;
-
-  font-size: 12px;
-  color: var(--muted);
-  font-weight: 900;
-
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  padding: var(--cellPad);
+  padding-right: 0 !important;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--gridHead);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-align: right;
+}
+
+.schedule:not(.compact-mode) .cell.time {
+  padding: 0 4px !important;
 }
 
 .time.now {
@@ -497,7 +515,9 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
   color: var(--text);
 }
 
-.col-today { background: var(--todayColRGBA); }
+.col-today {
+  background: var(--todayColRGBA);
+}
 
 .droppable.drop-target {
   outline: 2px solid rgba(59, 130, 246, 0.55);
@@ -507,30 +527,37 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
 }
 
 @keyframes pulse-drop {
-  0%   { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
-  70%  { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(59, 130, 246, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
 }
 
 .slot {
-  position: relative;
   width: 100%;
   height: var(--slotH);
+  position: relative;
   font-family: var(--tableFont);
 }
 
 .slot-inner {
   position: relative;
+  width: 100%;
   height: 100%;
   min-height: 0;
 }
 
-/* Center one event (requires :has support; graceful degrade otherwise) */
 .slot-inner:has(.event:only-child:not(.double)) {
   display: flex;
   align-items: center;
   justify-content: center;
 }
+
 .slot-inner:has(.event:only-child:not(.double)) .event {
   position: relative !important;
   top: auto !important;
@@ -538,13 +565,12 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
   width: calc(100% - (var(--cellPad) * 2)) !important;
 }
 
-/* Empty hint */
 .empty-slot {
   margin-top: 12px;
-  font-size: 11px;
   color: var(--muted);
-  opacity: 0.75;
+  font-size: 11px;
   text-align: center;
+  opacity: 0.75;
   user-select: none;
 }
 
@@ -559,27 +585,23 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
 ------------------------------ */
 .event {
   position: absolute;
-
-  padding: 7px 8px;
-
-  cursor: pointer;
-  user-select: none;
-
-  overflow: hidden;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
-
-  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.2s ease;
-
+  z-index: 5 !important;
   display: flex;
   flex-direction: column;
   gap: 3px;
-
-  color: var(--ev-text, #fff);
-  line-height: var(--evLineHeight);
-
-  border-radius: var(--evCardRadius);
+  padding: 7px 8px;
   padding-top: var(--evCardPadY);
   padding-bottom: var(--evCardPadY);
+  border-radius: var(--evCardRadius);
+  background: transparent;
+  color: var(--ev-text, #fff);
+  line-height: var(--evLineHeight);
+  cursor: pointer;
+  user-select: none;
+  overflow: hidden;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.2s ease;
+  position: relative !important;
 }
 
 .event::before {
@@ -601,33 +623,42 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
 }
 
-.event.dim { opacity: 0.25; }
+.event.dim {
+  opacity: 0.25;
+}
 
-.event .t{
-  font-weight: var(--evTitleW);
-  font-size: var(--evTitleSize1);
-  font-family: var(--evTitleFont);
-  line-height: 1.3;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-
-  text-overflow: clip;
-  letter-spacing: var(--evLetterSpacing);
-  text-transform: var(--evTextTransform);
+.event .t {
   display: -webkit-box !important;
   -webkit-box-orient: vertical !important;
   -webkit-line-clamp: var(--evTitleClamp) !important;
   overflow: hidden !important;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font-family: var(--evTitleFont);
+  font-size: var(--evTitleSize1);
+  font-weight: var(--evTitleW);
+  line-height: 1.3;
+  letter-spacing: var(--evLetterSpacing);
+  text-transform: var(--evTextTransform);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  text-overflow: ellipsis;
 }
 
-
 .event .m {
-  font-weight: var(--evMetaW);
-  font-size: var(--evMetaSize1);
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
   font-family: var(--evMetaFont);
+  font-size: var(--evMetaSize1);
+  font-weight: var(--evMetaW);
   opacity: 0.95;
-
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: anywhere;
@@ -635,24 +666,24 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
 
 .event .grab {
   position: absolute;
-  right: 8px;
   top: 8px;
-
+  right: 8px;
   opacity: 0;
-  transition: opacity 0.12s ease;
-
+  color: inherit;
   font-size: 12px;
   pointer-events: none;
+  transition: opacity 0.12s ease;
 }
 
-.event:hover .grab { opacity: 0.9; }
+.event:hover .grab {
+  opacity: 0.9;
+}
 
-/* Double events */
 .event.double {
+  z-index: 10;
   padding: 6px 7px;
   gap: 2px;
   line-height: 1.08;
-  z-index: 10;
 }
 
 .event.double .t {
@@ -665,13 +696,14 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
   font-size: var(--evMetaSize2);
 }
 
-/* Side-by-side */
-.event.double.side-by-side { width: calc(50% - 4px) !important; }
+.event.double.side-by-side {
+  width: calc(50% - 4px) !important;
+}
 
 .event.double.side-by-side:first-child {
   left: 6px !important;
-  border-radius: var(--evCardRadius) 0 0 var(--evCardRadius) !important;
   border-right: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: var(--evCardRadius) 0 0 var(--evCardRadius) !important;
 }
 
 .event.double.side-by-side:last-child {
@@ -679,15 +711,13 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
   border-radius: 0 var(--evCardRadius) var(--evCardRadius) 0 !important;
 }
 
-
-/* Stacked */
 .event.double.stacked {
   left: 6px !important;
   width: calc(100% - 12px) !important;
 }
 
 .event.double.stacked .t {
-  -webkit-line-clamp: 3; /* держим 3 для стабильной геометрии */
+  -webkit-line-clamp: 3;
 }
 
 .event.double.stacked:first-child:not(:last-child) {
@@ -706,205 +736,234 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
   border-top: 1px solid rgba(255, 255, 255, 0.25);
 }
 
-/* Tiny/Micro */
+.event.double .grab {
+  top: 6px;
+  right: 6px;
+  font-size: 11px;
+}
+
 .event.tiny {
   padding: 5px 6px;
   gap: 1px;
   line-height: 1.08;
 }
+
 .event.tiny .t {
   font-size: var(--evTitleSizeTiny);
-  -webkit-line-clamp: 3;
   line-height: 1.2;
+  -webkit-line-clamp: 3;
 }
-.event.tiny .m { font-size: var(--evMetaSizeTiny); }
+
+.event.tiny .m {
+  font-size: var(--evMetaSizeTiny);
+}
 
 .event.micro {
   padding: 4px 5px;
   gap: 1px;
   line-height: 1.06;
 }
+
 .event.micro .t {
   font-size: var(--evTitleSizeMicro);
-  -webkit-line-clamp: 3;
   line-height: 1.2;
+  -webkit-line-clamp: 3;
 }
-.event.micro .m { font-size: var(--evMetaSizeMicro); }
-.event.micro .grab { font-size: 10px; right: 4px; top: 4px; }
 
-/* Segments */
-.event.seg-mid { border-radius: 0; }
-.event.seg-start { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
-.event.seg-end { border-top-left-radius: 0; border-top-right-radius: 0; }
+.event.micro .m {
+  font-size: var(--evMetaSizeMicro);
+}
+
+.event.micro .grab {
+  top: 4px;
+  right: 4px;
+  font-size: 10px;
+}
+
+.event.seg-mid {
+  border-radius: 0;
+}
+
+.event.seg-start {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.event.seg-end {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.event.dragging {
+  opacity: 0.7;
+  z-index: 1000 !important;
+  transform: rotate(2deg);
+}
+
+.cell.drag-over {
+  background-color: rgba(59, 130, 246, 0.1) !important;
+}
 
 /* -----------------------------
-   List mode
+   Timeline mode
 ------------------------------ */
-
-/* В list-режиме сам слот не обязан быть flex — карточки лежат в .slot-inner */
-.slot.list-mode{
-  height: auto;
-  min-height: var(--slotH);
-  padding: 6px 0;
-  display: block;
-}
-
-/* Реальный контейнер карточек: тут и делаем отступ */
-.slot.list-mode .slot-inner{
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-
-  /* важно: в базе .slot-inner = height:100% */
-  height: auto !important;
-  min-height: 0;
-}
-
-/* Карточка в list-режиме */
-.slot.list-mode .event.list{
-  position: relative !important;
-  left: auto !important;
-  top: auto !important;
-
-  width: 100% !important;
-  height: auto !important;
-  min-height: 34px;
-
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-
-  /* не даём карточкам растягиваться и ломать gap */
-  flex: 0 0 auto;
-  margin: 0;
-}
-
-/* Убираем старую логику через margin-bottom (gap теперь главный) */
-.slot.list-mode .event.list.double,
-.slot.list-mode .event.list.double:last-child{
-  margin-bottom: 0;
-}
-
-/* На всякий случай: в list-режиме double НЕ должен быть flex:1 */
-.slot.list-mode .event.double{
-  flex: 0 0 auto;
-  min-height: 0;
-}
-
-/* TIMELINE: 2 занятия в одном слоте */
-.schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill.two .slot-inner{
-  gap: 8px;
-}
-
-/* оставляем как было */
-.event.double .grab { right: 6px; top: 6px; font-size: 11px; }
-
-/* Применяется к каждому из 2 событий внутри такого .slot-inner */
-.schedule:not(.compact-mode):not(.list-mode) .slot-inner:has(> .event.double) .event {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;; /* Центрирование контента по вертикали */
-  align-items: flex-start; /* Выравнивание контента по левому краю */
-  width: 100%;
-  height: 100%;
-  box-sizing: border-box;
-  margin: 0; /* Сбросить внешние отступы */
-  flex: none; /* Отключить flex-grow/shrink, так как grid управляет размерами */
-  min-height: unset; /* Сбросить min-height */
-  max-height: none; /* Сбросить max-height */
-}
-
-/* Применяется к .slot-inner, когда в нем 2 события в режиме timeline */
-.schedule:not(.compact-mode):not(.list-mode) .slot-inner:has(> .event.double) {
-  display: grid;
-  grid-template-rows: 1fr 1fr; /* Две равные части по высоте */
-  gap: 0px; /* Небольшой зазор между 'растянутыми' элементами, опционально */
-  align-items: stretch;
-  justify-items: stretch;
-  height: 100%; /* Убедиться, что занимает всю высоту .slot */
-  min-height: unset; /* Сбросить возможные ограничения min-height */
-}
-/* TIMELINE: 2 события в одной ячейке — скругляем только внешние углы */
-.schedule:not(.compact-mode) .cell.droppable .slot.tl-fill.two .slot-inner > .event:first-child {
-  border-radius: var(--evCardRadius) var(--evCardRadius) 0 0 !important;
-}
-
-.schedule:not(.compact-mode) .cell.droppable .slot.tl-fill.two .slot-inner > .event:last-child {
-  border-radius: 0 0 var(--evCardRadius) var(--evCardRadius) !important;
-}
-
-
-/* slot should fill cell height */
 .schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill {
+  width: 100%;
   height: 100%;
   min-height: 0;
 }
 
 .schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill .slot-inner {
-  height: 100%;
-  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 0;
-}
-
-.schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill.two .slot-inner {
-  gap: 1px; /* divider */
+  width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 .schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill .event {
   position: relative !important;
   top: auto !important;
   left: auto !important;
-  border-radius: var(--evCardRadius);
-
   width: 100% !important;
   height: auto !important;
   min-height: 0 !important;
-
   margin: 0 !important;
+  padding: 7px 8px;
+  border-radius: var(--evCardRadius);
   box-sizing: border-box;
-
   overflow: visible !important;
+  flex: 1 1 auto;
 }
 
-.schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill .event::before{
-  border-radius: inherit; /* чтобы фон (before) не давал квадратные углы */
+.schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill .event::before {
+  border-radius: inherit;
 }
 
 .schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill:not(.two) .event {
   flex: 1 1 auto;
 }
 
-/* ===== TIMELINE ===== */
 .schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill .event .t {
   display: -webkit-box !important;
   -webkit-box-orient: vertical !important;
   -webkit-line-clamp: 3 !important;
-
+  margin: 0;
+  padding: 0;
   overflow: hidden !important;
-  text-overflow: ellipsis !important;
-
   white-space: pre-wrap !important;
   overflow-wrap: anywhere !important;
-  gap: 0 !important;
+  text-overflow: ellipsis !important;
 }
 
 .schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill .event .m {
-  margin-top: 2px !important;   /* ВОТ ОН — отступ меты */
-
+  margin-top: 2px !important;
+  margin-bottom: 0;
+  padding: 0;
   white-space: pre-wrap !important;
   overflow: visible !important;
-  text-overflow: clip !important;
   overflow-wrap: anywhere !important;
-  gap: 0 !important;
+  text-overflow: clip !important;
 }
 
 .schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill .event.title-3 {
   padding-bottom: 7px;
 }
 
+.schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill.two .slot-inner {
+  gap: 1px;
+}
+
+.schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill.two .slot-inner > .event:first-child {
+  border-radius: var(--evCardRadius) var(--evCardRadius) 0 0 !important;
+}
+
+.schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill.two .slot-inner > .event:last-child {
+  border-radius: 0 0 var(--evCardRadius) var(--evCardRadius) !important;
+}
+
+.schedule:not(.measuring):not(.compact-mode):not(.list-mode) .slot-inner:has(> .event.double) {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 0px;
+  align-items: stretch;
+  justify-items: stretch;
+  height: 100%;
+  min-height: unset;
+}
+
+.schedule:not(.measuring):not(.compact-mode):not(.list-mode) .slot-inner:has(> .event.double) .event {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-start;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  flex: none;
+  min-height: unset;
+  max-height: none;
+  box-sizing: border-box;
+}
+
+.schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill.two .slot-inner {
+  gap: 8px;
+}
+
+/* -----------------------------
+   List mode
+------------------------------ */
+.slot.list-mode {
+  height: auto;
+  min-height: var(--slotH);
+  padding: 6px 0;
+  display: block;
+}
+
+.slot.list-mode .slot-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  height: auto !important;
+  min-height: 0;
+}
+
+.slot.list-mode .event.list {
+  position: relative !important;
+  top: auto !important;
+  left: auto !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 34px;
+  margin: 0;
+  padding: 0;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.slot.list-mode .event.list.double,
+.slot.list-mode .event.list.double:last-child {
+  margin-bottom: 0;
+}
+
+.slot.list-mode .event.double {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.slot.list-mode .slot-inner:has(.event.double) {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  height: auto !important;
+  grid-template-rows: none !important;
+}
 
 /* -----------------------------
    Compact mode
@@ -913,43 +972,42 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
   grid-template-columns: repeat(7, minmax(var(--dayMinW), var(--dayW)));
 }
 
-.schedule.compact-mode .cell.time { display: none; }
-
-/* Минимальные отступы в колонке времени (timeline/list) */
-.schedule:not(.compact-mode) .cell.time{
-  padding: 0 4px !important;   /* было по сути 6px + 10px справа */
+.schedule.compact-mode .cell.time {
+  display: none;
 }
-
-/* Убираем лишний правый отступ, который задаёт .time */
-.schedule:not(.compact-mode) .time{
-  padding-right: 0 !important;
-}
-
 
 .slot.compact-mode {
+  width: 100%;
   height: auto;
   min-height: 0;
 }
 
-.slot.compact-mode .slot-inner{
+.slot.compact-mode .slot-inner {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: var(--cellPad);
+  width: 100%;
   height: auto;
-  min-height: 0; 
+  min-height: 0;
+  padding: var(--cellPad);
 }
 
-.slot.compact-mode .event{
+.slot.compact-mode .event {
   position: relative !important;
   top: auto !important;
   left: 0 !important;
   width: 100% !important;
-
-  overflow: visible !important; /* чтобы текст не резало коробкой */
+  overflow: visible !important;
 }
 
-.slot.compact-mode .event .m{
+.slot.compact-mode .event .t {
+  display: block;
+  white-space: pre-wrap;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.slot.compact-mode .event .m {
   white-space: pre-wrap;
   overflow: visible;
   text-overflow: clip;
@@ -960,53 +1018,68 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
   padding: 20px 0;
 }
 
+.schedule.compact-mode .cell.droppable {
+  display: flex;
+}
+
+.schedule.compact-mode .cell.droppable .slot.compact-mode .slot-inner {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.schedule.compact-mode .slot.compact-mode .event.compact-card {
+  flex: 0 0 auto !important;
+  border-radius: var(--evCardRadius) !important;
+  overflow: hidden !important;
+}
+
+.schedule.compact-mode .cell.droppable .slot.compact-mode .event.compact-card {
+  flex: auto;
+}
+
 /* -----------------------------
    Modal / Backdrop
 ------------------------------ */
 .backdrop {
+  display: none;
   position: fixed;
   inset: 0;
-
+  z-index: 100;
+  padding: 14px;
   background: rgba(2, 6, 23, 0.55);
-  display: none;
-
   align-items: center;
   justify-content: center;
-
-  padding: 14px;
-  z-index: 100;
 }
 
-.backdrop.show { display: flex; }
+.backdrop.show {
+  display: flex;
+}
 
 .modal {
   width: min(640px, 100%);
-  background: var(--card);
-  color: var(--text);
-
+  max-height: min(92vh, 880px);
   border: 1px solid var(--border);
   border-radius: calc(var(--radius) + 2px);
-
+  background: var(--card);
+  color: var(--text);
   box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
-
   display: flex;
   flex-direction: column;
-
-  max-height: min(92vh, 880px);
   overflow: hidden;
 }
 
-.modal-wide { width: min(860px, 100%); }
+.modal-wide {
+  width: min(860px, 100%);
+}
 
 .modal-head {
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border);
-
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
   flex: 0 0 auto;
 }
 
@@ -1017,26 +1090,21 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
 }
 
 .modal-body {
-  padding: 12px 14px;
-
   display: flex;
   flex-direction: column;
   gap: 10px;
-
+  padding: 12px 14px;
   overflow: auto;
   min-height: 0;
-
   overscroll-behavior: contain;
 }
 
 .modal-foot {
-  padding: 12px 14px;
-  border-top: 1px solid var(--border);
-
   display: flex;
   justify-content: space-between;
   gap: 10px;
-
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
   flex-wrap: wrap;
   flex: 0 0 auto;
 }
@@ -1044,8 +1112,8 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
 .left-actions,
 .right-actions {
   display: flex;
-  gap: 8px;
   flex-wrap: wrap;
+  gap: 8px;
 }
 
 .grid2 {
@@ -1054,105 +1122,132 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
   gap: 10px;
 }
 
-.font-picker { position: relative; }
+.font-picker {
+  position: relative;
+}
 
-.font-picker-btn{
-  width: 100%;
-  display:flex;
-  align-items:center;
+.font-picker-btn {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
+  width: 100%;
   padding: 8px 10px;
-  border-radius: 10px;
   border: 1px solid var(--border);
+  border-radius: 10px;
   background: var(--card);
   color: var(--text);
   cursor: pointer;
 }
 
-.font-picker-btn:focus{
+.font-picker-btn:focus {
   outline: none;
   box-shadow: var(--focus);
 }
 
-.font-picker-title{
+.font-picker-title {
   font-weight: 900;
 }
 
-.font-picker-sample{
+.font-picker-sample {
   margin-left: auto;
   color: var(--muted);
   font-size: 12px;
 }
 
-.font-picker-chev{
+.font-picker-chev {
   color: var(--muted);
   font-weight: 900;
 }
 
-.font-picker-pop{
+.font-picker-pop {
   display: none;
   position: absolute;
+  top: calc(100% + 6px);
   left: 0;
   right: 0;
-  top: calc(100% + 6px);
   z-index: 50;
-  background: var(--card);
+  padding: 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  background: var(--card);
   box-shadow: 0 10px 30px var(--shadowRGBA);
-  padding: 8px;
+  max-width: 100%;
 }
 
-.font-picker-pop.show{ display:block; }
+.font-picker-pop.show {
+  display: block;
+}
 
-.font-picker-search{
+.font-picker-search {
   width: 100%;
-  border-radius: 10px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
   border: 1px solid var(--border);
+  border-radius: 10px;
   background: var(--card);
   color: var(--text);
-  padding: 8px 10px;
   font-size: 13px;
-  margin-bottom: 8px;
 }
 
-.font-picker-list{
-  max-height: 280px;
-  overflow: auto;
+.font-picker-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  max-height: min(46vh, 320px);
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
-.font-item{
+.font-item {
   width: 100%;
-  text-align: left;
-  border-radius: 12px;
-  border: 1px solid transparent;
-  background: transparent;
   padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
   cursor: pointer;
 }
 
-.font-item:hover{
+.font-item:hover {
   background: rgba(148, 163, 184, 0.10);
 }
 
-.font-item.active{
+.font-item.active {
   border-color: rgba(239, 68, 68, 0.35);
   background: rgba(239, 68, 68, 0.08);
 }
 
-.font-item .name{
-  font-weight: 900;
+.font-item .name {
   font-size: 13px;
+  font-weight: 900;
 }
 
-.font-item .sample{
+.font-item .sample {
   margin-top: 2px;
-  font-size: 12px;
   color: var(--muted);
+  font-size: 12px;
+}
+
+.font-more-hover {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: rgba(148, 163, 184, 0.06);
+  color: var(--muted);
+  font-size: 12px;
+  user-select: none;
+}
+
+.font-picker-list:has(.font-more-hover) .font-more-hover {
+  margin-top: 2px;
 }
 
 .field {
@@ -1162,21 +1257,20 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
 }
 
 .field label {
-  font-size: 12px;
   color: var(--muted);
+  font-size: 12px;
 }
 
 .field input,
 .field select,
 .field textarea {
-  border-radius: 10px;
+  width: 100%;
+  padding: 8px 10px;
   border: 1px solid var(--border);
+  border-radius: 10px;
   background-color: var(--card);
   color: var(--text);
-
-  padding: 8px 10px;
   font-size: 13px;
-
   transition: all 0.2s ease;
 }
 
@@ -1192,10 +1286,14 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
   color: rgba(148, 163, 184, 0.95);
 }
 
-textarea { min-height: 72px; resize: vertical; }
+textarea {
+  min-height: 72px;
+  resize: vertical;
+}
 
 .field select {
   appearance: none;
+  padding-right: 28px;
   background-image:
     linear-gradient(45deg, transparent 50%, var(--muted) 50%),
     linear-gradient(135deg, var(--muted) 50%, transparent 50%);
@@ -1204,90 +1302,87 @@ textarea { min-height: 72px; resize: vertical; }
     calc(100% - 11px) calc(1em + 2px);
   background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
-  padding-right: 28px;
 }
 
 .details summary {
-  cursor: pointer;
   color: var(--text);
   font-weight: 800;
+  cursor: pointer;
 }
 
 .swatches {
   display: flex;
-  gap: 6px;
   flex-wrap: wrap;
+  gap: 6px;
 }
 
 .swatch {
   width: 20px;
   height: 20px;
-  border-radius: 999px;
-
-  cursor: pointer;
-
   border: 2px solid rgba(255, 255, 255, 0.7);
+  border-radius: 999px;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
-
+  cursor: pointer;
   transition: transform 0.2s ease;
 }
 
-.swatch:hover { transform: scale(1.1); }
+.swatch:hover {
+  transform: scale(1.1);
+}
 
 .preview {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-
   padding: 6px 10px;
   border-radius: 999px;
-
-  font-size: 12px;
-  color: #fff;
   background: var(--accent);
+  color: #fff;
+  font-size: 12px;
 }
 
 .warning {
-  font-size: 12px;
-  color: var(--danger);
-  background: rgba(185, 28, 28, 0.08);
+  padding: 8px 10px;
   border: 1px solid rgba(185, 28, 28, 0.18);
   border-radius: 12px;
-  padding: 8px 10px;
+  background: rgba(185, 28, 28, 0.08);
+  color: var(--danger);
+  font-size: 12px;
 }
 
 .note {
-  font-size: 12px;
-  color: var(--muted);
   padding: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
 }
 
-.mt6 { margin-top: 6px; }
+.mt6 {
+  margin-top: 6px;
+}
 
 /* -----------------------------
    Tabs / palette
 ------------------------------ */
 .tabs {
   display: flex;
-  gap: 8px;
   flex-wrap: wrap;
+  gap: 8px;
 }
 
 .tab {
-  border-radius: 999px;
   padding: 6px 10px;
-
-  font-size: 12px;
   border: 1px solid var(--border);
+  border-radius: 999px;
   background: var(--card);
-
-  cursor: pointer;
   color: var(--text);
-
+  font-size: 12px;
+  cursor: pointer;
   transition: all 0.2s ease;
 }
 
-.tab:hover:not(.active) { background: rgba(148, 163, 184, 0.1); }
+.tab:hover:not(.active) {
+  background: rgba(148, 163, 184, 0.1);
+}
 
 .tab.active {
   background: rgba(239, 68, 68, 0.1);
@@ -1295,12 +1390,17 @@ textarea { min-height: 72px; resize: vertical; }
   font-weight: 900;
 }
 
-.tab-panel { display: none; }
-.tab-panel.active { display: block; }
+.tab-panel {
+  display: none;
+}
+
+.tab-panel.active {
+  display: block;
+}
 
 .hr {
-  border-top: 1px dashed var(--border);
   margin: 6px 0;
+  border-top: 1px dashed var(--border);
 }
 
 .paletteGrid {
@@ -1310,26 +1410,31 @@ textarea { min-height: 72px; resize: vertical; }
 }
 
 .palette {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 10px;
-
-  background: rgba(255, 255, 255, 0.02);
-  cursor: pointer;
-
   display: flex;
   flex-direction: column;
   gap: 8px;
-  text-align: left; 
-
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.02);
+  text-align: left;
+  cursor: pointer;
   transition: all 0.2s ease;
 }
 
-.palette:hover { filter: brightness(1.02); transform: translateY(-2px); }
+.palette:hover {
+  filter: brightness(1.02);
+  transform: translateY(-2px);
+}
+
+.palette.active {
+  border-color: rgba(239, 68, 68, 0.55);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.14);
+}
 
 .palette .name {
-  font-weight: 900;
   font-size: 13px;
+  font-weight: 900;
 }
 
 .palette .bar {
@@ -1340,34 +1445,45 @@ textarea { min-height: 72px; resize: vertical; }
 .palette .c {
   width: 18px;
   height: 18px;
-  border-radius: 999px;
   border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 999px;
 }
 
-.mini { font-size: 12px; color: var(--muted); }
+.mini {
+  color: var(--muted);
+  font-size: 12px;
+}
 
 .colorRow {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
-  flex-wrap: wrap;
 }
 
 .dots {
-  flex-wrap: nowrap;        /* было wrap */
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  -webkit-overflow-scrolling: touch;
-  padding: 2px 0 4px;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
   max-width: 100%;
+  padding: 2px 0 4px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
 }
 
 .dotbtn {
   width: 26px;
   height: 26px;
-  border-radius: 999px;
   border: 2px solid rgba(255, 255, 255, 0.85);
+  border-radius: 999px;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.dotbtn:hover {
+  transform: scale(1.1);
 }
 
 .dotbtn.active {
@@ -1382,15 +1498,19 @@ textarea { min-height: 72px; resize: vertical; }
   box-shadow: var(--focus);
 }
 
-/* Пресеты: состояние выбранности */
-.palette.active {
-  border-color: rgba(239, 68, 68, 0.55); /* около accent */
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.14);
+.actionsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.dotbtn:hover { transform: scale(1.1); }
-
-.actionsRow { display: flex; gap: 8px; flex-wrap: wrap; }
+.section-title {
+  margin-top: 2px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .02em;
+}
 
 /* -----------------------------
    Toasts
@@ -1399,51 +1519,48 @@ textarea { min-height: 72px; resize: vertical; }
   position: fixed;
   right: 16px;
   bottom: 16px;
-
+  z-index: 200;
   display: flex;
   flex-direction: column;
   gap: 10px;
-
-  z-index: 200;
   width: min(360px, calc(100% - 32px));
   pointer-events: none;
 }
 
 .toast {
-  pointer-events: auto;
-
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: 0 10px 30px var(--shadowRGBA);
-
-  padding: 10px 12px;
-
   display: flex;
   gap: 10px;
   align-items: flex-start;
-
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: 0 10px 30px var(--shadowRGBA);
+  pointer-events: auto;
   animation: slideIn 0.3s ease;
 }
 
 @keyframes slideIn {
-  from { transform: translateX(100%); opacity: 0; }
-  to   { transform: translateX(0); opacity: 1; }
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 
 .toast .icon {
+  flex: 0 0 auto;
   width: 26px;
   height: 26px;
   border-radius: 10px;
-
+  color: #fff;
+  font-weight: 900;
   display: flex;
   align-items: center;
   justify-content: center;
-
-  color: #fff;
-  font-weight: 900;
-
-  flex: 0 0 auto;
 }
 
 .toast .content {
@@ -1458,57 +1575,58 @@ textarea { min-height: 72px; resize: vertical; }
 }
 
 .toast .text {
-  font-size: 12px;
   color: var(--muted);
+  font-size: 12px;
 }
 
 .toast .actions {
-  margin-left: auto;
   display: flex;
-  gap: 8px;
   align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
 
 .toast .close {
   border: none;
   background: transparent;
-  cursor: pointer;
-
-  opacity: 0.6;
-  font-weight: 900;
   color: var(--text);
-
+  font-weight: 900;
+  opacity: 0.6;
+  cursor: pointer;
   transition: opacity 0.2s ease;
 }
 
-.toast .close:hover { opacity: 1; }
+.toast .close:hover {
+  opacity: 1;
+}
 
-/* Save indicator (created by JS) */
 @keyframes fadeOut {
-  0%   { opacity: 1; }
-  70%  { opacity: 1; }
-  100% { opacity: 0; transform: translateY(10px); }
+  0% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
 }
 
 .save-indicator {
   position: fixed;
   bottom: 20px;
   right: 20px;
-
-  background: var(--accent);
-  color: var(--accentText);
-
+  z-index: 1000;
   padding: 8px 16px;
   border-radius: 20px;
-
+  background: var(--accent);
+  color: var(--accentText);
   font-size: 12px;
   font-weight: 600;
-
-  z-index: 1000;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-
-  animation: fadeOut 2s forwards;
   pointer-events: none;
+  animation: fadeOut 2s forwards;
 }
 
 /* -----------------------------
@@ -1520,10 +1638,10 @@ textarea { min-height: 72px; resize: vertical; }
 
 .export-mode * {
   pointer-events: none !important;
-  user-select: none !important;
   -webkit-user-select: none !important;
   -moz-user-select: none !important;
   -ms-user-select: none !important;
+  user-select: none !important;
 }
 
 .export-mode .event:hover,
@@ -1558,6 +1676,33 @@ textarea { min-height: 72px; resize: vertical; }
   color: inherit !important;
 }
 
+.export-mode .site-footer {
+  display: none !important;
+}
+
+.export-mode #logoLayer {
+  display: block !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 0 !important;
+  pointer-events: none !important;
+}
+
+.export-mode #logoMark {
+  opacity: var(--logo-opacity, 0.12) !important;
+}
+
+.export-mode #logoLayer[data-wm="tile"] #logoMark,
+.export-mode #logoLayer[data-wm="diagonal"] #logoMark {
+  width: calc(100% - var(--time-col-width, 76px)) !important;
+  height: calc(100% - var(--day-head-height, 42px)) !important;
+  left: var(--time-col-width, 76px) !important;
+  top: var(--day-head-height, 42px) !important;
+}
+
 .print-mode {
   --bg: #ffffff;
   --card: #ffffff;
@@ -1571,69 +1716,58 @@ textarea { min-height: 72px; resize: vertical; }
   --eventAlpha: 0;
 }
 
-.print-mode .schedule-wrap { border-color: #000 !important; }
+.print-mode .schedule-wrap {
+  border-color: #000 !important;
+}
 
 .print-mode .event {
+  padding-left: 14px !important;
+  border: 1px solid #000 !important;
+  border-radius: var(--evCardRadius) !important;
   color: #000 !important;
   box-shadow: none !important;
-  border: 1px solid #000 !important;
-  padding-left: 14px !important;
+}
+
+.print-mode .event::before {
+  opacity: 0 !important;
 }
 
 .print-mode .event::after {
   content: "";
   position: absolute;
-  left: 0;
   top: 0;
+  left: 0;
   bottom: 0;
-
   width: 6px;
   background: var(--ev-bg, #64748b);
   opacity: 1;
 }
 
-.print-mode .event::before { opacity: 0 !important; }
-
 /* -----------------------------
-   Mobile actions
------------------------------- */
-
-/* Dragging helpers */
-.event.dragging {
-  opacity: 0.7;
-  transform: rotate(2deg);
-  z-index: 1000 !important;
-}
-
-.cell.drag-over { background-color: rgba(59, 130, 246, 0.1) !important; }
-
-/* -----------------------------
-   Tooltips (optional)
+   Tooltips
 ------------------------------ */
 .event-tooltip {
   position: absolute;
-  background: var(--text);
-  color: var(--card);
+  z-index: 1000;
+  max-width: 300px;
   padding: 8px 12px;
   border-radius: 8px;
-
+  background: var(--text);
+  color: var(--card);
   font-size: 12px;
-  z-index: 1000;
-
-  max-width: 300px;
-  white-space: pre-wrap;
-
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-
+  white-space: pre-wrap;
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.2s ease;
 }
 
-.event:hover .event-tooltip { opacity: 1; }
+.event:hover .event-tooltip {
+  opacity: 1;
+}
 
 /* -----------------------------
-   Accessibility / motion
+   Accessibility
 ------------------------------ */
 :focus-visible {
   outline: 2px solid var(--accent);
@@ -1651,255 +1785,27 @@ textarea { min-height: 72px; resize: vertical; }
 }
 
 /* -----------------------------
-   Responsive
+   Watermark / Logo
 ------------------------------ */
-@media (max-width: 900px) {
-  .stats { margin-left: 0; }
-  .schedule-wrap { overflow: auto; }
-
-  .event.double .t { font-size: calc(var(--evTitleSize2) - 1px); }
-  .event.double .m { font-size: calc(var(--evMetaSize2) - 1px); }
-}
-
-@media (max-width: 768px) {
-  .topbar {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 16px;
-  }
-
-  .brand { min-width: auto; width: 100%; }
-
-  .toolbar {
-    width: 100%;
-    overflow-x: auto;
-    padding-bottom: 8px;
-    justify-content: flex-start;
-  }
-
-  .toolbar button { flex-shrink: 0; }
-
-  .controls { overflow-x: visible; }
-
-  .controls .row {
-    flex-wrap: wrap;
-    min-width: 0;
-  }
-
-  /* Второй ряд (где dirGroup + search) — складываем в колонку */
-  .controls .row.mt10 {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .controls .search {
-    width: 100%;
-    min-width: 0;
-  }
-  .row { flex-wrap: nowrap; min-width: max-content; }
-  .stats { width: 100%; justify-content: flex-start; }
-
-  .schedule-wrap {
-    -webkit-overflow-scrolling: touch;
-    overflow-x: auto;
-  }
-
-  .schedule { min-width: 0; }
-}
-
-@media (max-width: 720px) {
-  .grid2 { grid-template-columns: 1fr; }
-  .paletteGrid { grid-template-columns: 1fr; }
-}
-
-@media (max-width: 520px) {
-  .toolbar { justify-content: flex-start; }
-  .toolbar button {
-    flex: 1;
-    min-width: 120px;
-    justify-content: center;
-  }
-}
-
-@media (max-width: 400px) {
-  .title h1 { font-size: 16px; }
-  .title .sub { font-size: 11px; }
-  .logo { width: 48px; height: 48px; }
-  button { padding: 6px 8px; font-size: 12px; }
-}
-
-/* Dark theme tweaks */
-html[data-scheme="dark"] .event {
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
-}
-html[data-scheme="dark"] .event:hover {
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
-}
-
-/* Measuring only for timeline HEIGHT (not width) */
-.schedule.measuring-h .cell.droppable .slot.tl-fill,
-.schedule.measuring-h .cell.droppable .slot.tl-fill .slot-inner{
-  height: auto !important;
-  min-height: 0 !important;
-}
-
-/* Важно: чтобы scrollHeight вырос от контента (ТОЛЬКО на время measuring-h) */
-.schedule.measuring-h .cell.droppable .slot.tl-fill.two .event,
-.schedule.measuring-h .cell.droppable .slot.tl-fill:not(.two) .event{
-  flex: 0 0 auto !important;
-  height: auto !important;
-}
-
-/* В ОБЫЧНОМ режиме двойные ДОЛЖНЫ делить высоту 50/50 */
-.schedule:not(.measuring):not(.measuring-h):not(.compact-mode)
-  .cell.droppable .slot.tl-fill.two .event{
-  flex: 1 1 0 !important;
-  justify-content: flex-start !important;
-  min-height: 0 !important;
-}
-
-
-/* Карточки растут по контенту (реальная высота нужна для scrollHeight) */
-.schedule.compact-mode .slot.compact-mode .event.compact-card{
-  flex: 0 0 auto !important;
-  border-radius: var(--evCardRadius) !important;
-  overflow: hidden !important; 
-}
-
-.slot.compact-mode .event .t{
-  display: block;
-  overflow: visible;
-  text-overflow: clip;
-  white-space: pre-wrap;
-}
-/* Compact: ячейки выравнивает JS (syncGridGeometry), CSS не должен мешать */
-/* compact: пусть слот заполняет выровненную по высоту ячейку */
-.schedule.compact-mode .cell.droppable {
-  display: flex;
-}
-
-/* Slot-inner должен растягиваться на всю высоту */
-.schedule.compact-mode .cell.droppable .slot.compact-mode .slot-inner {
-  height: 100%;
-  min-height: 0;
-}
-
-/* Убедитесь, что события тоже растягиваются корректно */
-.schedule.compact-mode .cell.droppable .slot.compact-mode .event.compact-card {
-  flex: auto;
-}
-
-.slot.list-mode .slot-inner:has(.event.double) {
-  display: flex !important;
-  flex-direction: column !important;
-  gap: 2px !important;
-  height: auto !important;
-  grid-template-rows: none !important;
-}
-
-.section-title {
-  margin-top: 2px;
-  font-size: 12px;
-  font-weight: 900;
-  color: var(--text);
-  letter-spacing: .02em;
-}
-
-.font-more-hover {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 40px;
-  padding: 8px 10px;
-  border-radius: 12px;
-  border: 1px dashed var(--border);
-  color: var(--muted);
-  font-size: 12px;
-  user-select: none;
-  background: rgba(148, 163, 184, 0.06);
-}
-
-.font-picker-list:has(.font-more-hover) .font-more-hover {
-  margin-top: 2px;
-}
-
-.font-picker-pop {
-  max-width: 100%;
-}
-
-.font-picker-list {
-  max-height: min(46vh, 320px);
-  overflow: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-}
-
-@media (max-width: 520px) {
-  .font-picker-list {
-    max-height: min(54vh, 360px);
-  }
-  .font-item {
-    padding: 10px 12px;
-  }
-  .font-item .sample {
-    font-size: 13px;
-  }
-}
-
-.site-footer {
-  margin: 12px 0 0;
-  padding: 10px 0 0;
-  border-top: 1px solid var(--border);
-  color: var(--muted);
-  font-size: 12px;
-  text-align: center;
-}
-
-.site-footer a {
-  color: inherit;
-  text-decoration: none;
-}
-
-.site-footer a:hover {
-  text-decoration: underline;
-}
-
-/* чтобы не мешало режиму экспорта (если он включается на body) */
-.export-mode .site-footer {
-  display: none !important;
-}
-
-/* --- Watermark (logo) behind schedule --- */
-/* Контейнер расписания */
-.schedule-wrap {
-  position: relative !important;
-  overflow: hidden !important;
-  min-height: 400px;
-  width: 100%;
-}
-
-/* Слой логотипа */
 #logoLayer {
+  display: none;
   position: absolute !important;
   top: 0 !important;
   left: 0 !important;
   width: 100% !important;
   height: 100% !important;
+  z-index: 0 !important;
   pointer-events: none !important;
-  z-index: 0 !important; /* Под контентом */
-  display: none;
   box-sizing: border-box !important;
   overflow: hidden !important;
 }
 
-/* Сам логотип */
 #logoMark {
   position: absolute !important;
   pointer-events: none !important;
   box-sizing: border-box !important;
   opacity: var(--logo-opacity, 0.12);
-  z-index: 0 !important; /* Под контентом */
+  z-index: 0 !important;
   background-color: transparent;
   background-repeat: no-repeat;
   background-position: 0 0;
@@ -1912,15 +1818,21 @@ html[data-scheme="dark"] .event:hover {
   mask-position: 0 0;
   -webkit-mask-size: contain;
   mask-size: contain;
+  transition: opacity 0.3s ease, background-color 0.3s ease, transform 0.3s ease;
 }
 
-/* Центрированный режим */
+#logoLayer:not([style*="display: block"]) #logoMark {
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+
 #logoLayer[data-wm="center"] #logoMark {
   width: var(--logo-tile-size, 140px) !important;
   height: var(--logo-tile-size, 140px) !important;
   left: 50% !important;
   top: 50% !important;
-  transform: translate(-50%, -50%) rotate(var(--logo-rotation, 0deg)) !important;
+  max-width: 80% !important;
+  max-height: 80% !important;
   background-repeat: no-repeat !important;
   background-position: center !important;
   background-size: contain !important;
@@ -1930,11 +1842,9 @@ html[data-scheme="dark"] .event:hover {
   mask-position: center !important;
   -webkit-mask-size: contain !important;
   mask-size: contain !important;
-  max-width: 80% !important;
-  max-height: 80% !important;
+  transform: translate(-50%, -50%) rotate(var(--logo-rotation, 0deg)) !important;
 }
 
-/* Штамп (в правом нижнем углу) */
 #logoLayer[data-wm="stamp"] #logoMark {
   width: var(--logo-tile-size, 140px) !important;
   height: var(--logo-tile-size, 140px) !important;
@@ -1942,7 +1852,6 @@ html[data-scheme="dark"] .event:hover {
   right: 20px !important;
   top: auto !important;
   bottom: 20px !important;
-  transform: rotate(var(--logo-rotation, 0deg)) !important;
   background-repeat: no-repeat !important;
   background-position: center !important;
   background-size: contain !important;
@@ -1952,15 +1861,14 @@ html[data-scheme="dark"] .event:hover {
   mask-position: center !important;
   -webkit-mask-size: contain !important;
   mask-size: contain !important;
+  transform: rotate(var(--logo-rotation, 0deg)) !important;
 }
 
-/* Плиточный режим - ограничиваем областью контента */
 #logoLayer[data-wm="tile"] #logoMark {
   width: calc(100% - var(--time-col-width, 76px)) !important;
   height: calc(100% - var(--day-head-height, 42px)) !important;
   left: var(--time-col-width, 76px) !important;
   top: var(--day-head-height, 42px) !important;
-  transform: rotate(var(--logo-rotation, 0deg)) !important;
   background-repeat: repeat !important;
   background-position: var(--logo-offset-x, 0) var(--logo-offset-y, 0) !important;
   background-size: var(--logo-tile-size, 140px) var(--logo-tile-size, 140px) !important;
@@ -1970,21 +1878,18 @@ html[data-scheme="dark"] .event:hover {
   mask-position: var(--logo-offset-x, 0) var(--logo-offset-y, 0) !important;
   -webkit-mask-size: var(--logo-tile-size, 140px) var(--logo-tile-size, 140px) !important;
   mask-size: var(--logo-tile-size, 140px) var(--logo-tile-size, 140px) !important;
+  transform: rotate(var(--logo-rotation, 0deg)) !important;
 }
 
-/* Диагональный режим - ограничиваем областью контента */
 #logoLayer[data-wm="diagonal"] #logoMark {
   width: calc(100% - var(--time-col-width, 76px)) !important;
   height: calc(100% - var(--day-head-height, 42px)) !important;
   left: var(--time-col-width, 76px) !important;
   top: var(--day-head-height, 42px) !important;
-  transform: rotate(var(--logo-rotation, 0deg)) !important;
   background-repeat: repeat !important;
   background-position: var(--logo-offset-x, 0) var(--logo-offset-y, 0) !important;
-  background-size: 
-    calc(var(--logo-tile-size, 140px) * 2) 
-    calc(var(--logo-tile-size, 140px) * 2) !important;
-  background-image: 
+  background-size: calc(var(--logo-tile-size, 140px) * 2) calc(var(--logo-tile-size, 140px) * 2) !important;
+  background-image:
     repeating-linear-gradient(
       45deg,
       transparent,
@@ -2005,15 +1910,14 @@ html[data-scheme="dark"] .event:hover {
   mask-position: var(--logo-offset-x, 0) var(--logo-offset-y, 0) !important;
   -webkit-mask-size: var(--logo-tile-size, 140px) var(--logo-tile-size, 140px) !important;
   mask-size: var(--logo-tile-size, 140px) var(--logo-tile-size, 140px) !important;
+  transform: rotate(var(--logo-rotation, 0deg)) !important;
 }
 
-/* Режим перекрашивания */
 #logoMark.recolor {
   background-color: var(--logo-color, #0ea5e9) !important;
   background-image: none !important;
 }
 
-/* Для центрированного режима с перекрашиванием */
 #logoLayer[data-wm="center"] #logoMark.recolor,
 #logoLayer[data-wm="stamp"] #logoMark.recolor {
   background-color: var(--logo-color, #0ea5e9) !important;
@@ -2026,7 +1930,6 @@ html[data-scheme="dark"] .event:hover {
   mask-size: contain !important;
 }
 
-/* Для плиточных режимов с перекрашиванием */
 #logoLayer[data-wm="tile"] #logoMark.recolor,
 #logoLayer[data-wm="diagonal"] #logoMark.recolor {
   background-color: var(--logo-color, #0ea5e9) !important;
@@ -2039,32 +1942,11 @@ html[data-scheme="dark"] .event:hover {
   mask-size: var(--logo-tile-size, 140px) var(--logo-tile-size, 140px) !important;
 }
 
-/* Режим экспорта */
-.export-mode #logoLayer {
-  display: block !important;
-  z-index: 0 !important;
-  position: absolute !important;
-  top: 0 !important;
-  left: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
-  pointer-events: none !important;
-}
-
-.export-mode #logoMark {
-  width: 100% !important;
-  height: 100% !important;
-  position: absolute !important;
-  top: 0 !important;
-  left: 0 !important;
-  pointer-events: none !important;
-  opacity: var(--logo-opacity, 0.12) !important;
-}
-
-/* Контейнер для предпросмотра логотипа */
 .logo-preview-container {
   width: 100%;
   height: 200px;
+  margin: 15px 0;
+  padding: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--card);
@@ -2073,7 +1955,6 @@ html[data-scheme="dark"] .event:hover {
   justify-content: center;
   overflow: hidden;
   position: relative;
-  margin: 15px 0;
 }
 
 .logo-preview {
@@ -2081,93 +1962,208 @@ html[data-scheme="dark"] .event:hover {
   background-repeat: no-repeat;
   background-position: center;
   background-size: contain;
-  transition: all 0.2s ease;
   pointer-events: none;
+  transition: all 0.2s ease;
 }
 
-/* Адаптивность для мобильных устройств */
+/* -----------------------------
+   Footer
+------------------------------ */
+.site-footer {
+  width: 100%;
+  margin: 12px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.site-footer a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.site-footer a:hover {
+  text-decoration: underline;
+}
+
+/* -----------------------------
+   Responsive
+------------------------------ */
+@media (max-width: 900px) {
+  .stats {
+    margin-left: 0;
+  }
+
+  .schedule-wrap {
+    overflow: auto;
+  }
+
+  .event.double .t {
+    font-size: calc(var(--evTitleSize2) - 1px);
+  }
+
+  .event.double .m {
+    font-size: calc(var(--evMetaSize2) - 1px);
+  }
+}
+
 @media (max-width: 768px) {
+  .topbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .brand {
+    width: 100%;
+    min-width: auto;
+  }
+
+  .toolbar {
+    width: 100%;
+    justify-content: flex-start;
+    padding-bottom: 8px;
+    overflow-x: auto;
+  }
+
+  .toolbar button {
+    flex-shrink: 0;
+  }
+
+  .controls {
+    overflow-x: visible;
+  }
+
+  .controls .row {
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .controls .row.mt10 {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .controls .search {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .row {
+    flex-wrap: nowrap;
+    min-width: max-content;
+  }
+
+  .stats {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .schedule-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .schedule {
+    min-width: 0;
+  }
+
   #logoLayer[data-wm="center"] #logoMark,
   #logoLayer[data-wm="stamp"] #logoMark {
     --logo-tile-size: 100px !important;
     max-width: 60% !important;
     max-height: 60% !important;
   }
-  
+
   .logo-preview-container {
     height: 150px;
   }
 }
 
-/* Анимация для плавного изменения свойств */
-#logoLayer,
-#logoMark {
-  transition: 
-    opacity 0.3s ease,
-    background-color 0.3s ease,
-    transform 0.3s ease;
+@media (max-width: 720px) {
+  .grid2 {
+    grid-template-columns: 1fr;
+  }
+
+  .paletteGrid {
+    grid-template-columns: 1fr;
+  }
 }
 
-/* Убираем все инлайновые стили при отключенном логотипе */
-#logoLayer:not([style*="display: block"]) #logoMark {
-  opacity: 0 !important;
-  visibility: hidden !important;
+@media (max-width: 520px) {
+  .toolbar {
+    justify-content: flex-start;
+  }
+
+  .toolbar button {
+    flex: 1;
+    min-width: 120px;
+    justify-content: center;
+  }
+
+  .font-picker-list {
+    max-height: min(54vh, 360px);
+  }
+
+  .font-item {
+    padding: 10px 12px;
+  }
+
+  .font-item .sample {
+    font-size: 13px;
+  }
 }
 
-/* Гарантируем, что логотип всегда позади контента расписания */
-.schedule {
-  position: relative;
-  z-index: 2;
+@media (max-width: 400px) {
+  .title h1 {
+    font-size: 16px;
+  }
+
+  .title .sub {
+    font-size: 11px;
+  }
+
+  .logo {
+    width: 48px;
+    height: 48px;
+  }
+
+  button {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
 }
 
-.schedule > .cell {
-  position: relative;
-  z-index: inherit;
+/* -----------------------------
+   Dark theme
+------------------------------ */
+html[data-scheme="dark"] .event {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
 }
 
-.schedule > .cell.head {
-  z-index: 5;
+html[data-scheme="dark"] .event:hover {
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
 }
 
-/* Заголовки таблицы должны быть ВЫШЕ */
-.cell.head, .cell.time {
-  z-index: 10 !important;
-  position: relative !important;
+/* -----------------------------
+   Measuring height
+------------------------------ */
+.schedule.measuring-h .cell.droppable .slot.tl-fill,
+.schedule.measuring-h .cell.droppable .slot.tl-fill .slot-inner {
+  height: auto !important;
+  min-height: 0 !important;
 }
 
-/* События должны быть ВЫШЕ логотипа */
-.event {
-  z-index: 5 !important;
-  position: relative !important;
+.schedule.measuring-h .cell.droppable .slot.tl-fill.two .event,
+.schedule.measuring-h .cell.droppable .slot.tl-fill:not(.two) .event {
+  flex: 0 0 auto !important;
+  height: auto !important;
 }
 
-/* CSS переменные для логотипа */
-:root {
-  --time-col-width: 76px;  /* Ширина колонки времени */
-  --day-head-height: 42px; /* Высота заголовков дней */
+.schedule:not(.measuring):not(.measuring-h):not(.compact-mode) .cell.droppable .slot.tl-fill.two .event {
+  flex: 1 1 0 !important;
+  justify-content: flex-start !important;
+  min-height: 0 !important;
 }
-
-.export-mode #logoLayer {
-  display: block !important;
-  z-index: 0 !important;
-  position: absolute !important;
-  top: 0 !important;
-  left: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
-  pointer-events: none !important;
-}
-
-.export-mode #logoMark {
-  opacity: var(--logo-opacity, 0.12) !important;
-}
-
-/* Убедитесь, что для каждого режима в export-mode сохраняются их специфичные стили */
-.export-mode #logoLayer[data-wm="tile"] #logoMark,
-.export-mode #logoLayer[data-wm="diagonal"] #logoMark {
-  width: calc(100% - var(--time-col-width, 76px)) !important;
-  height: calc(100% - var(--day-head-height, 42px)) !important;
-  left: var(--time-col-width, 76px) !important;
-  top: var(--day-head-height, 42px) !important;
-}
-

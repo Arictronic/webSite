@@ -428,7 +428,7 @@ const DEFAULT_STATE = () => ({
       recolor: false,
       color: "#0ea5e9",
       layout: "center",
-      tileSize: 140,
+      tileSize: 30,
       horizontalGap: 180,
       verticalGap: 180,
       rotation: 0,
@@ -974,7 +974,9 @@ function hardenState() {
   lg.recolor = !!lg.recolor;
   lg.color = typeof lg.color === "string" ? lg.color.trim() : "#0ea5e9";
   lg.layout = (typeof lg.layout === "string" && lg.layout.trim()) || "center";
-  lg.tileSize = clamp(Math.round(Number(lg.tileSize ?? 140)), 20, 400);
+  
+  // ИЗМЕНЕНИЕ: Теперь tileSize - это процент (0-100) вместо пикселей
+  lg.tileSize = clamp(Math.round(Number(lg.tileSize ?? 30)), 0, 100);
 
   if (
     typeof lg.horizontalGap === "undefined" &&
@@ -1374,14 +1376,39 @@ function ensureLogoLayer() {
 function getScheduleMetrics(context = document) {
   const schedule = context.querySelector('.schedule');
   if (!schedule) {
-    // Возвращаем дефолтные значения, если schedule не найден
+    // Пытаемся получить реальные значения из CSS переменных или вычисленных стилей
+    const computedStyle = getComputedStyle(document.documentElement);
+    const timeColWidth = parseFloat(computedStyle.getPropertyValue('--timeCol')) || 76;
+    const dayHeadHeight = 42; // Фиксированная высота заголовков дней
+    
+    // Пытаемся получить размеры через запрос в DOM
+    let scheduleWidth = 0;
+    let scheduleHeight = 0;
+    const scheduleWrap = context.querySelector('.schedule-wrap');
+    if (scheduleWrap) {
+      scheduleWidth = scheduleWrap.scrollWidth || scheduleWrap.offsetWidth;
+      scheduleHeight = scheduleWrap.scrollHeight || scheduleWrap.offsetHeight;
+    }
+    
+    const contentWidth = Math.max(0, scheduleWidth - timeColWidth);
+    const contentHeight = Math.max(0, scheduleHeight - dayHeadHeight);
+    
+    console.log('Schedule not found, using computed metrics:', {
+      timeColWidth,
+      dayHeadHeight,
+      scheduleWidth,
+      scheduleHeight,
+      contentWidth,
+      contentHeight
+    });
+    
     return {
-      timeColWidth: 76,
-      dayHeadHeight: 42,
-      scheduleWidth: 0,
-      scheduleHeight: 0,
-      contentWidth: 0,
-      contentHeight: 0
+      timeColWidth,
+      dayHeadHeight,
+      scheduleWidth,
+      scheduleHeight,
+      contentWidth,
+      contentHeight
     };
   }
 
@@ -1391,6 +1418,11 @@ function getScheduleMetrics(context = document) {
   if (timeCell) {
     const rect = timeCell.getBoundingClientRect();
     timeColWidth = rect.width;
+  } else {
+    // Если не нашли колонку времени, пробуем получить из CSS переменных
+    const computedStyle = getComputedStyle(schedule);
+    const cssWidth = parseFloat(computedStyle.getPropertyValue('--timeCol')) || 76;
+    timeColWidth = cssWidth;
   }
   
   // Ищем заголовок дня
@@ -1402,21 +1434,42 @@ function getScheduleMetrics(context = document) {
   }
   
   // Полная ширина и высота расписания
-  const scheduleWidth = schedule.scrollWidth;
-  const scheduleHeight = schedule.scrollHeight;
+  let scheduleWidth, scheduleHeight;
+  
+  // Для compact режима используем другие элементы для определения размеров
+  if (schedule.classList.contains('compact-mode')) {
+    const cells = schedule.querySelectorAll('.cell.droppable');
+    if (cells.length > 0) {
+      const firstCell = cells[0];
+      const cellRect = firstCell.getBoundingClientRect();
+      scheduleWidth = cellRect.width * 7; // 7 дней
+      // Вычисляем высоту на основе содержимого
+      scheduleHeight = schedule.scrollHeight;
+    } else {
+      scheduleWidth = schedule.scrollWidth;
+      scheduleHeight = schedule.scrollHeight;
+    }
+  } else {
+    scheduleWidth = schedule.scrollWidth;
+    scheduleHeight = schedule.scrollHeight;
+  }
   
   // Ширина и высота области контента (без заголовков)
-  const contentWidth = scheduleWidth - timeColWidth;
-  const contentHeight = scheduleHeight - dayHeadHeight;
+  const contentWidth = Math.max(0, scheduleWidth - timeColWidth);
+  const contentHeight = Math.max(0, scheduleHeight - dayHeadHeight);
 
-  return {
+  const metrics = {
     timeColWidth,
     dayHeadHeight,
     scheduleWidth,
     scheduleHeight,
-    contentWidth: Math.max(0, contentWidth),
-    contentHeight: Math.max(0, contentHeight)
+    contentWidth,
+    contentHeight
   };
+
+  console.log('Schedule metrics calculated:', metrics);
+  
+  return metrics;
 }
 
 function getLogoVariant() {
@@ -1652,11 +1705,34 @@ window.getLogoSvgBlobUrl = function (variant) {
   return window._logoSvgBlobUrls[variant];
 };
 
+
+function calculateTileSizeInPixels(percent, metrics, layout) {
+  // Если нет метрик, возвращаем минимальный размер
+  if (!metrics || !metrics.contentWidth || !metrics.contentHeight) {
+    const defaultPixelSize = Math.round((percent / 100) * 300); // 300px как базовый размер
+    return Math.max(20, defaultPixelSize);
+  }
+  
+  // Для центрированных режимов используем минимальную сторону области контента
+  if (layout === "center" || layout === "stamp") {
+    const minContentDimension = Math.min(metrics.contentWidth, metrics.contentHeight);
+    const pixelSize = Math.round((percent / 100) * minContentDimension);
+    return Math.max(20, pixelSize);
+  }
+  
+  // Для плиточных режимов используем ширину области контента
+  const pixelSize = Math.round((percent / 100) * metrics.contentWidth);
+  return Math.max(20, pixelSize);
+}
+
 // --- /НОВЫЙ КОД ---
 function applyLogo() {
   const layer = document.getElementById("logoLayer");
   const mark = document.getElementById("logoMark");
-  if (!layer || !mark) return;
+  if (!layer || !mark) {
+    console.warn('Logo layer or mark elements not found');
+    return;
+  }
 
   const lg = state.settings.logo || {};
   const hasLogo = !!lg.enabled;
@@ -1673,7 +1749,12 @@ function applyLogo() {
   // Получаем метрики расписания
   const metrics = getScheduleMetrics();
   
+  // Рассчитываем размер в пикселях на основе процентов
+  const tileSizePercent = clamp(Number(lg.tileSize || 30), 0, 100);
+  const tileSizePixels = calculateTileSizeInPixels(tileSizePercent, metrics, layout);
+  
   console.log('Logo positioning metrics:', metrics);
+  console.log('Tile size:', tileSizePercent + '% = ' + tileSizePixels + 'px');
   
   // Общие стили для слоя логотипа
   layer.style.cssText = `
@@ -1700,18 +1781,54 @@ function applyLogo() {
   `;
   
   if (layout === "center") {
-    // ЦЕНТРИРОВАННЫЙ РЕЖИМ
-    const tileSize = Math.max(100, Math.min(400, Number(lg.tileSize) || 140));
+    // ЦЕНТРИРОВАННЫЙ РЕЖИМ - используем рассчитанный размер в пикселях
+    const tileSize = Math.max(20, tileSizePixels);
+    const halfSize = tileSize / 2;
     
     // Рассчитываем центр области контента
     const centerX = metrics.timeColWidth + metrics.contentWidth / 2;
     const centerY = metrics.dayHeadHeight + metrics.contentHeight / 2;
     
+    // Рассчитываем начальную позицию
+    let left = centerX - halfSize;
+    let top = centerY - halfSize;
+    let finalTileSize = tileSize;
+    
+    // Проверяем границы
+    const leftBoundary = metrics.timeColWidth;
+    const rightBoundary = metrics.timeColWidth + metrics.contentWidth;
+    const topBoundary = metrics.dayHeadHeight;
+    const bottomBoundary = metrics.dayHeadHeight + metrics.contentHeight;
+    
+    // Корректируем позицию при необходимости
+    if (left < leftBoundary) {
+      left = leftBoundary;
+    }
+    if (left + finalTileSize > rightBoundary) {
+      left = rightBoundary - finalTileSize;
+    }
+    if (top < topBoundary) {
+      top = topBoundary;
+    }
+    if (top + finalTileSize > bottomBoundary) {
+      top = bottomBoundary - finalTileSize;
+    }
+    
+    // Если логотип не помещается, уменьшаем его
+    if (rightBoundary - leftBoundary < finalTileSize) {
+      finalTileSize = rightBoundary - leftBoundary;
+      left = leftBoundary;
+    }
+    if (bottomBoundary - topBoundary < finalTileSize) {
+      finalTileSize = Math.min(finalTileSize, bottomBoundary - topBoundary);
+      top = topBoundary;
+    }
+    
     mark.style.cssText += `
-      width: ${tileSize}px;
-      height: ${tileSize}px;
-      left: ${centerX - tileSize / 2}px;
-      top: ${centerY - tileSize / 2}px;
+      width: ${finalTileSize}px;
+      height: ${finalTileSize}px;
+      left: ${left}px;
+      top: ${top}px;
       transform: rotate(${lg.rotation || 0}deg);
     `;
     
@@ -1722,7 +1839,7 @@ function applyLogo() {
   } 
   else if (layout === "stamp") {
     // ШТАМП - в правом нижнем углу области контента
-    const tileSize = Math.max(100, Math.min(400, Number(lg.tileSize) || 140));
+    const tileSize = Math.max(20, tileSizePixels);
     
     const stampX = metrics.timeColWidth + metrics.contentWidth - tileSize - 20;
     const stampY = metrics.dayHeadHeight + metrics.contentHeight - tileSize - 20;
@@ -1741,7 +1858,7 @@ function applyLogo() {
   }
   else if (layout === "tile" || layout === "diagonal") {
     // ПЛИТОЧНЫЕ РЕЖИМЫ - заполняем только область контента
-    const tileSize = Math.max(20, Math.min(400, Number(lg.tileSize) || 140));
+    const tileSize = Math.max(20, tileSizePixels);
     const horizontalGap = Number(lg.horizontalGap || 180);
     const verticalGap = Number(lg.verticalGap || 180);
     
@@ -1807,7 +1924,10 @@ function applyLogo() {
   // Принудительно пересчитываем стили
   layer.style.display = hasLogo ? 'block' : 'none';
   mark.style.display = hasLogo ? 'block' : 'none';
+  
+  console.log('Logo applied with layout:', layout, 'size:', tileSizePercent + '%');
 }
+
 
 // Вспомогательная функция для применения стилей логотипа
 function applyLogoStyle(element, src, recolorColor = null, isTile = false) {
@@ -1855,7 +1975,7 @@ function syncLogoPreview() {
   preview.style.display = 'block';
   
   // Устанавливаем размер предпросмотра
-  const tileSize = Math.max(20, Math.min(400, Number(lg.tileSize) || 140));
+  const tileSize = Math.max(20, Math.min(1000, Number(lg.tileSize) || 140));
   preview.style.width = `${tileSize}px`;
   preview.style.height = `${tileSize}px`;
   preview.style.opacity = `${Number(lg.opacity) / 100}`;
@@ -3733,7 +3853,7 @@ function setupLogoNumberInputs() {
   if (logoTileSize) {
     logoTileSize.addEventListener("input", () => {
       console.log("logoTileSize slider changed:", logoTileSize.value);
-      const value = clamp(Math.round(Number(logoTileSize.value || 140)), 20, 400);
+      const value = clamp(Math.round(Number(logoTileSize.value || 140)), 20, 1000);
       state.settings.logo.tileSize = value;
       
       // Обновляем числовое поле
@@ -3749,7 +3869,7 @@ function setupLogoNumberInputs() {
   if (logoTileSizeNum) {
     logoTileSizeNum.addEventListener("input", function() {
       console.log("logoTileSizeNum changed:", this.value);
-      const value = clamp(Math.round(Number(this.value || 140)), 20, 400);
+      const value = clamp(Math.round(Number(this.value || 140)), 20, 1000);
       state.settings.logo.tileSize = value;
       
       // Обновляем слайдер
@@ -5020,7 +5140,7 @@ function saveSettings() {
 
   let tileSize = Number(logoTileSize?.value);
   if (!Number.isFinite(tileSize)) tileSize = 140;
-  tileSize = clamp(Math.round(tileSize), 20, 400);
+  tileSize = clamp(Math.round(tileSize), 20, 1000);
   state.settings.logo.tileSize = tileSize;
 
   let tileOffsetX = Number(logoTileOffsetX?.value);
@@ -5512,9 +5632,9 @@ function initLogoSync() {
       slider: "logoTileSize",
       num: "logoTileSizeNum",
       param: "tileSize",
-      min: 20,
-      max: 400,
-      unit: "px",
+      min: 0,    // ИЗМЕНЕНИЕ: теперь 0-100% вместо 20-400px
+      max: 100,  // ИЗМЕНЕНИЕ: теперь 0-100% вместо 20-400px
+      unit: "%",
     },
     {
       slider: "logoHorizontalGap",
@@ -5545,8 +5665,8 @@ function initLogoSync() {
     },
     {
       slider: "logoOpacity",
-      num: "logoOpacityNum",  // Исправлено: теперь это input, а не span
-      val: "logoOpacityVal",  // Это span для отображения
+      num: "logoOpacityNum",
+      val: "logoOpacityVal",
       param: "opacity",
       min: 0,
       max: 100,
@@ -5602,9 +5722,6 @@ function initLogoSync() {
           numInput.value = numValue;
           console.log(`Updated number input for ${control.param} to:`, numValue);
         }
-      } else if (numInput && control.num === "logoOpacityNum") {
-        // Для logoOpacityNum это input
-        numInput.value = numValue;
       }
 
       // Обновляем слайдер (только если значение изменилось)
@@ -5669,16 +5786,6 @@ function initLogoSync() {
       
       numInput.addEventListener("input", numInput._logoHandler);
       console.log(`Added handler for number input ${control.num}`);
-    }
-    
-    // Также добавляем обработчик изменения для select элементов
-    if (numInput && numInput.tagName === "SELECT") {
-      numInput.removeEventListener("change", numInput._logoHandler);
-      numInput._logoHandler = function() {
-        console.log(`Select ${control.param} changed:`, this.value);
-        updateValue(this.value, 'select');
-      };
-      numInput.addEventListener("change", numInput._logoHandler);
     }
   });
 
@@ -5786,8 +5893,8 @@ function syncLogoLayoutFromState() {
 
   console.log("Syncing logo layout from state:", lg);
 
-  // Устанавливаем CSS переменные
-  document.documentElement.style.setProperty('--logo-tile-size', `${lg.tileSize || 140}px`);
+  // Устанавливаем CSS переменные - теперь tileSize в процентах
+  document.documentElement.style.setProperty('--logo-tile-size', `${lg.tileSize || 30}%`);
   document.documentElement.style.setProperty('--logo-offset-x', `${lg.tileOffsetX || 0}px`);
   document.documentElement.style.setProperty('--logo-offset-y', `${lg.tileOffsetY || 0}px`);
   document.documentElement.style.setProperty('--logo-opacity', `${(lg.opacity || 12) / 100}`);
@@ -5897,9 +6004,9 @@ function syncLogoLayoutFromState() {
     }
   }
 
-  // 6. Размер плитки - синхронизация слайдера и числового поля
+  // 6. Размер плитки - синхронизация слайдера и числового поля (теперь в процентах)
   if (logoTileSize || logoTileSizeNum) {
-    const tileSizeValue = clamp(Math.round(Number(lg.tileSize ?? 140)), 20, 400);
+    const tileSizeValue = clamp(Math.round(Number(lg.tileSize ?? 30)), 0, 100);
     
     if (logoTileSize) logoTileSize.value = String(tileSizeValue);
     if (logoTileSizeNum && logoTileSizeNum.tagName === "INPUT") {
@@ -5914,7 +6021,7 @@ function syncLogoLayoutFromState() {
     // Добавляем обработчик изменения размера плитки
     if (logoTileSize && !logoTileSize.hasTileSizeChangeHandler) {
       logoTileSize.addEventListener('input', function() {
-        const value = clamp(Math.round(Number(this.value)), 20, 400);
+        const value = clamp(Math.round(Number(this.value)), 0, 100);
         state.settings.logo.tileSize = value;
         
         if (logoTileSizeNum && logoTileSizeNum.tagName === "INPUT") {
@@ -5928,7 +6035,7 @@ function syncLogoLayoutFromState() {
     
     if (logoTileSizeNum && logoTileSizeNum.tagName === "INPUT" && !logoTileSizeNum.hasTileSizeNumChangeHandler) {
       logoTileSizeNum.addEventListener('input', function() {
-        const value = clamp(Math.round(Number(this.value)), 20, 400);
+        const value = clamp(Math.round(Number(this.value)), 0, 100);
         state.settings.logo.tileSize = value;
         
         if (logoTileSize) {
@@ -6683,7 +6790,7 @@ function matchWeight(ruleWeight, wantedWeight) {
     .split(/\s+/)
     .map((x) => parseInt(x, 10))
     .filter(Number.isFinite);
-  if (!parts.length) return wantedWeight === 400;
+  if (!parts.length) return wantedWeight === 1000;
   if (parts.length === 1) return parts[0] === wantedWeight;
   const [a, b] = parts;
   return wantedWeight >= Math.min(a, b) && wantedWeight <= Math.max(a, b);
@@ -6712,7 +6819,7 @@ async function buildFontFaceCssForVariants(
     const [fam, weight, style] = k.split("||");
     return {
       fam,
-      weight: parseInt(weight, 10) || 400,
+      weight: parseInt(weight, 10) || 1000,
       style: (style || "normal").toLowerCase(),
     };
   });
@@ -6734,7 +6841,7 @@ async function buildFontFaceCssForVariants(
       const style = (
         rule.style.getPropertyValue("font-style") || "normal"
       ).toLowerCase();
-      const ruleWeight = rule.style.getPropertyValue("font-weight") || "400";
+      const ruleWeight = rule.style.getPropertyValue("font-weight") || "1000";
 
       const matched = wanted.some((w) => {
         if (w.fam !== fam) return false;
@@ -6772,30 +6879,27 @@ function resolveExportBackground(expBg) {
 
 
 async function generateWatermarkSVG(state, width, height, metrics = null) {
-  const lg = state.settings.logo || {};
-  if (!lg.enabled) return "";
-  
-  const variant = getLogoVariant();
-  const layout = lg.layout || "center";
-  const opacity = (lg.opacity || 12) / 100;
-  const rotation = lg.rotation || 0;
-  
-  if (layout === "center") {
-    // Используем исправленную функцию для центрированного режима
-    return generateCenteredLogoSVG(lg, variant, width, height, opacity, rotation, metrics);
-  } else if (layout === "tile" || layout === "diagonal") {
-    // Используем исправленную функцию для плиточных режимов
-    return generateTilePatternSVG(lg, variant, width, height, opacity, rotation);
-  } else if (layout === "stamp") {
-    // Добавим поддержку режима "stamp" (штамп)
-    return generateStampLogoSVG(lg, variant, width, height, opacity, rotation);
-  }
-  
-  return "";
+    const lg = state.settings.logo || {};
+    if (!lg.enabled) return "";
+    
+    const variant = getLogoVariant();
+    const layout = lg.layout || "center";
+    const opacity = (lg.opacity || 12) / 100;
+    const rotation = lg.rotation || 0;
+    
+    if (layout === "center") {
+        return generateCenteredLogoSVG(lg, variant, width, height, opacity, rotation, metrics);
+    } else if (layout === "tile" || layout === "diagonal") {
+        return generateTilePatternSVG(lg, variant, width, height, opacity, rotation, metrics);
+    } else if (layout === "stamp") {
+        return generateStampLogoSVG(lg, variant, width, height, opacity, rotation, metrics);
+    }
+    
+    return "";
 }
 
 function generateStampLogoSVG(lg, variant, width, height, opacity, rotation) {
-  const tileSize = Math.max(100, Math.min(400, Number(lg.tileSize) || 140));
+  const tileSize = Math.max(100, Math.min(1000, Number(lg.tileSize) || 140));
   const stampX = width - tileSize - 40; // 40px от правого края
   const stampY = height - tileSize - 40; // 40px от нижнего края
   const halfSize = tileSize / 2;
@@ -6820,103 +6924,133 @@ function generateStampLogoSVG(lg, variant, width, height, opacity, rotation) {
 }
 
 function generateCenteredLogoSVG(lg, variant, width, height, opacity, rotation, metrics = null) {
-  const tileSize = Math.max(100, Math.min(400, Number(lg.tileSize) || 140));
-  const halfSize = tileSize / 2;
-  
-  // Если переданы метрики, используем их для расчета центра области контента
-  // Иначе используем центр всего SVG (старая логика)
-  let centerX, centerY;
-  
-  if (metrics && typeof metrics === 'object') {
-    // Используем метрики для расчета центра области контента
-    centerX = (metrics.timeColWidth || 0) + (metrics.contentWidth || width) / 2;
-    centerY = (metrics.dayHeadHeight || 0) + (metrics.contentHeight || height) / 2;
-  } else {
-    // Старая логика - центр всего изображения
-    centerX = width / 2;
-    centerY = height / 2;
-  }
-  
-  let logoContent = '';
-  const color = lg.recolor ? (lg.color || "#0ea5e9") : "#000000";
-  
-  if (variant === 1) {
-    logoContent = `<circle cx="${centerX}" cy="${centerY}" r="${halfSize}" fill="${color}" stroke="none"/>`;
-  } else if (variant === 2) {
-    const rectX = centerX - halfSize;
-    const rectY = centerY - halfSize;
-    logoContent = `<rect x="${rectX}" y="${rectY}" width="${tileSize}" height="${tileSize}" fill="${color}" stroke="none"/>`;
-  } else if (variant === 3 && lg.uploadedFileData) {
-    const imgX = centerX - halfSize;
-    const imgY = centerY - halfSize;
-    logoContent = `<image href="${lg.uploadedFileData}" 
-                  x="${imgX}" y="${imgY}" 
-                  width="${tileSize}" height="${tileSize}"
-                  preserveAspectRatio="xMidYMid meet"/>`;
-  }
-  
-  return `<g opacity="${opacity}" transform="rotate(${rotation || 0}, ${centerX}, ${centerY})">
-            ${logoContent}
-          </g>`;
+    // Рассчитываем размер в пикселях на основе процентов
+    const tileSizePercent = clamp(Number(lg.tileSize || 30), 0, 100);
+    const tileSizePixels = calculateTileSizeInPixels(tileSizePercent, metrics || {}, "center");
+    
+    const tileSize = Math.max(20, tileSizePixels);
+    const halfSize = tileSize / 2;
+    
+    // Получаем границы области контента
+    const timeColWidth = metrics?.timeColWidth || 76;
+    const dayHeadHeight = metrics?.dayHeadHeight || 42;
+    const contentWidth = metrics?.contentWidth || (width - timeColWidth);
+    const contentHeight = metrics?.contentHeight || (height - dayHeadHeight);
+    
+    // Центр области контента (исключая колонку времени и заголовки)
+    const centerX = timeColWidth + contentWidth / 2;
+    const centerY = dayHeadHeight + contentHeight / 2;
+    
+    // Границы области контента
+    const leftBoundary = timeColWidth;
+    const rightBoundary = timeColWidth + contentWidth;
+    const topBoundary = dayHeadHeight;
+    const bottomBoundary = dayHeadHeight + contentHeight;
+    
+    // Начальная позиция
+    let finalLeft = centerX - halfSize;
+    let finalTop = centerY - halfSize;
+    let finalSize = tileSize;
+    
+    // Корректируем позицию, если логотип выходит за границы
+    if (finalLeft < leftBoundary) finalLeft = leftBoundary;
+    if (finalLeft + finalSize > rightBoundary) finalLeft = rightBoundary - finalSize;
+    if (finalTop < topBoundary) finalTop = topBoundary;
+    if (finalTop + finalSize > bottomBoundary) finalTop = bottomBoundary - finalSize;
+    
+    // Если логотип не помещается, уменьшаем его
+    if (rightBoundary - leftBoundary < finalSize) {
+        finalSize = rightBoundary - leftBoundary;
+        finalLeft = leftBoundary;
+    }
+    if (bottomBoundary - topBoundary < finalSize) {
+        finalSize = Math.min(finalSize, bottomBoundary - topBoundary);
+        finalTop = topBoundary;
+    }
+    
+    const finalCenterX = finalLeft + finalSize / 2;
+    const finalCenterY = finalTop + finalSize / 2;
+    const color = lg.recolor ? (lg.color || "#0ea5e9") : "#000000";
+    
+    // Создаём clipPath для ограничения области контента
+    return `
+<defs>
+<clipPath id="contentClip">
+<rect x="${timeColWidth}" y="${dayHeadHeight}" width="${contentWidth}" height="${contentHeight}"/>
+</clipPath>
+</defs>
+<g clip-path="url(#contentClip)" opacity="${opacity}" transform="rotate(${rotation || 0}, ${finalCenterX}, ${finalCenterY})">
+${variant === 1 ? 
+    `<circle cx="${finalCenterX}" cy="${finalCenterY}" r="${finalSize/2}" fill="${color}" stroke="none"/>` : 
+ variant === 2 ? 
+    `<rect x="${finalLeft}" y="${finalTop}" width="${finalSize}" height="${finalSize}" fill="${color}" stroke="none"/>` : 
+ variant === 3 && lg.uploadedFileData ? 
+    `<image href="${lg.uploadedFileData}" x="${finalLeft}" y="${finalTop}" width="${finalSize}" height="${finalSize}" preserveAspectRatio="xMidYMid meet"/>` : ''}
+</g>`;
 }
 
-function generateTilePatternSVG(lg, variant, width, height, opacity) {
-  const tileSize = lg.tileSize || 140;
-  const hGap = lg.horizontalGap || 180;
-  const vGap = lg.verticalGap || 180;
-  const rotation = lg.rotation || 0;
-  const layout = lg.layout || "tile";
-  const tileOffsetX = lg.tileOffsetX || 0;
-  const tileOffsetY = lg.tileOffsetY || 0;
-  
-  // Рассчитываем размеры ячейки для повёрнутого изображения
-  const angle = Math.abs(rotation) % 180;
-  const rad = (angle * Math.PI) / 180;
-  const sin = Math.abs(Math.sin(rad));
-  const cos = Math.abs(Math.cos(rad));
-  const requiredSize = tileSize * (sin + cos);
-  
-  let patternSVG = '';
-  
-  if (layout === "diagonal") {
-    // Существующий код для диагонального режима - оставить без изменений
-    const cellW = Math.ceil(requiredSize) + hGap;
-    const cellH = Math.ceil(requiredSize) + vGap;
+function generateTilePatternSVG(lg, variant, width, height, opacity, rotation, metrics = null) {
+    const tileSize = lg.tileSize || 140;
+    const hGap = lg.horizontalGap || 180;
+    const vGap = lg.verticalGap || 180;
+    const layout = lg.layout || "tile";
+    const tileOffsetX = lg.tileOffsetX || 0;
+    const tileOffsetY = lg.tileOffsetY || 0;
     
-    patternSVG = `
-    <defs>
-      <pattern id="tilePattern" 
-               patternUnits="userSpaceOnUse" 
-               width="${cellW * 2}" 
-               height="${cellH * 2}">
-        ${generateLogoImageSVG(lg, variant, cellW/2, cellH/2, tileSize, rotation)}
-        ${generateLogoImageSVG(lg, variant, cellW * 1.5, cellH * 1.5, tileSize, rotation)}
-      </pattern>
-    </defs>
-    <rect width="100%" height="100%" fill="url(#tilePattern)" opacity="${opacity}"
-          transform="translate(${tileOffsetX}, ${tileOffsetY})"/>`;
-  } else if (layout === "tile") {
-    // Исправленный код для плиточного режима
-    const cellW = Math.ceil(requiredSize) + hGap;
-    const cellH = Math.ceil(requiredSize) + vGap;
+    // Получаем границы области контента
+    const timeColWidth = metrics?.timeColWidth || 76;
+    const dayHeadHeight = metrics?.dayHeadHeight || 42;
+    const contentWidth = metrics?.contentWidth || (width - timeColWidth);
+    const contentHeight = metrics?.contentHeight || (height - dayHeadHeight);
     
-    patternSVG = `
-    <defs>
-      <pattern id="tilePattern" 
-               patternUnits="userSpaceOnUse" 
-               width="${cellW}" 
-               height="${cellH}"
-               x="${tileOffsetX}" 
-               y="${tileOffsetY}">
-        <g transform="rotate(${rotation}, ${cellW/2}, ${cellH/2})">
-          ${generateLogoImageSVG(lg, variant, (cellW - tileSize)/2, (cellH - tileSize)/2, tileSize, 0)}
-        </g>
-      </pattern>
-    </defs>
-    <rect width="100%" height="100%" fill="url(#tilePattern)" opacity="${opacity}"/>`;
-  }
-  
-  return patternSVG;
+    const angle = Math.abs(rotation) % 180;
+    const rad = (angle * Math.PI) / 180;
+    const sin = Math.abs(Math.sin(rad));
+    const cos = Math.abs(Math.cos(rad));
+    const requiredSize = tileSize * (sin + cos);
+    
+    let patternSVG = '';
+    
+    if (layout === "diagonal") {
+        const cellW = Math.ceil(requiredSize) + hGap;
+        const cellH = Math.ceil(requiredSize) + vGap;
+        patternSVG = `
+<defs>
+<clipPath id="contentClip">
+<rect x="${timeColWidth}" y="${dayHeadHeight}" width="${contentWidth}" height="${contentHeight}"/>
+</clipPath>
+<pattern id="tilePattern" patternUnits="userSpaceOnUse" width="${cellW * 2}" height="${cellH * 2}">
+${generateLogoImageSVG(lg, variant, cellW/2, cellH/2, tileSize, rotation)}
+${generateLogoImageSVG(lg, variant, cellW * 1.5, cellH * 1.5, tileSize, rotation)}
+</pattern>
+</defs>
+<g clip-path="url(#contentClip)">
+<rect x="${timeColWidth}" y="${dayHeadHeight}" width="${contentWidth}" height="${contentHeight}" 
+fill="url(#tilePattern)" opacity="${opacity}" 
+transform="translate(${tileOffsetX}, ${tileOffsetY})"/>
+</g>`;
+    } else if (layout === "tile") {
+        const cellW = Math.ceil(requiredSize) + hGap;
+        const cellH = Math.ceil(requiredSize) + vGap;
+        patternSVG = `
+<defs>
+<clipPath id="contentClip">
+<rect x="${timeColWidth}" y="${dayHeadHeight}" width="${contentWidth}" height="${contentHeight}"/>
+</clipPath>
+<pattern id="tilePattern" patternUnits="userSpaceOnUse" width="${cellW}" height="${cellH}" 
+x="${tileOffsetX}" y="${tileOffsetY}">
+<g transform="rotate(${rotation}, ${cellW/2}, ${cellH/2})">
+${generateLogoImageSVG(lg, variant, (cellW - tileSize)/2, (cellH - tileSize)/2, tileSize, 0)}
+</g>
+</pattern>
+</defs>
+<g clip-path="url(#contentClip)">
+<rect x="${timeColWidth}" y="${dayHeadHeight}" width="${contentWidth}" height="${contentHeight}" 
+fill="url(#tilePattern)" opacity="${opacity}"/>
+</g>`;
+    }
+    
+    return patternSVG;
 }
 
 function generateLogoImageSVG(lg, variant, x, y, size, rotation = 0) {
@@ -6997,16 +7131,20 @@ async function captureScheduleCanvas({
     );
     return null;
   }
-
+  
   const loadingToast = toast("INFO", "Экспорт", "Подготовка к экспорту...", 0);
-
+  
+  // Получаем метрики из оригинального документа ДО создания клона
+  const originalMetrics = getOriginalScheduleMetrics();
+  console.log('Original metrics for export:', originalMetrics);
+  
   // Создаем клон с логотипом
   const { clone, cleanup } = makeExportClone({ compact });
   if (!clone) {
     toast("ERR", "Экспорт", "Не удалось создать клон для экспорта", 3000);
     return null;
   }
-
+  
   try {
     // Удаляем интерактивные элементы
     removeInteractiveElements(clone);
@@ -7017,21 +7155,18 @@ async function captureScheduleCanvas({
     if (scheduleEl) {
       scheduleEl.style.overflow = 'hidden';
     }
-
+    
     // Получаем настройки логотипа
     const lg = state.settings.logo;
-    
-    // Получаем метрики клона для правильного позиционирования логотипа
-    const metrics = getScheduleMetrics(clone);
     
     // Обновляем логотип в клоне для ВСЕХ режимов
     if (lg.enabled) {
       // Для центрированного режима нужно создать специальный SVG
       if (lg.layout === "center") {
-        await applyCenteredLogoToClone(clone, lg, metrics);
+        await applyCenteredLogoToClone(clone, lg, originalMetrics);
       } else {
         // Для остальных режимов используем существующий подход
-        await applyTileLogoToClone(clone, lg);
+        await applyTileLogoToClone(clone, lg, originalMetrics);
       }
     } else {
       // Скрываем логотип, если он отключен
@@ -7042,27 +7177,27 @@ async function captureScheduleCanvas({
         logoMark.style.display = "none";
       }
     }
-
+    
     const headEls = Array.from(clone.querySelectorAll(".cell.head"));
     headEls.forEach((el) => {
       el.style.position = "static";
       el.style.top = "auto";
       el.style.zIndex = "auto";
     });
-
+    
     const changed = hideEmptyTimeRows(clone, true, false);
-
+    
     // Ждем загрузки всех ресурсов
     await waitForResources(clone, 3000);
-
+    
     // Получаем метрики для установки точных размеров
-    const w = Math.max(100, Math.ceil(metrics.scheduleWidth || 1));
-    const h = Math.max(100, Math.ceil(metrics.scheduleHeight || 1));
-
+    const w = Math.max(100, Math.ceil(originalMetrics.scheduleWidth || 1));
+    const h = Math.max(100, Math.ceil(originalMetrics.scheduleHeight || 1));
+    
     clone.style.width = `${w}px`;
     clone.style.height = `${h}px`;
     clone.style.overflow = "hidden";
-
+    
     // Обновляем стили для экспорта
     clone.style.boxSizing = "border-box";
     clone.style.display = "block";
@@ -7073,9 +7208,9 @@ async function captureScheduleCanvas({
       scheduleEl.style.height = `${h}px`;
       scheduleEl.style.overflow = "hidden";
     }
-
+    
     await new Promise((resolve) => setTimeout(resolve, 200));
-
+    
     const html2canvasOptions = {
       backgroundColor: background,
       scale: 2,
@@ -7096,14 +7231,11 @@ async function captureScheduleCanvas({
           const clonedLogoLayer = clonedDoc.querySelector("#logoLayer");
           const clonedLogoMark = clonedDoc.querySelector("#logoMark");
           if (clonedLogoLayer && clonedLogoMark) {
-            // Получаем метрики клонированного документа
-            const clonedMetrics = getScheduleMetrics(clonedDoc);
-            
-            // Применяем логотип с учетом метрик
+            // Применяем логотип с учетом оригинальных метрик
             if (lg.layout === "center") {
-              applyCenteredLogoToClonedDoc(clonedDoc, lg, clonedMetrics);
+              applyCenteredLogoToClonedDoc(clonedDoc, lg, originalMetrics);
             } else {
-              applyLogoToClonedDoc(clonedDoc, lg);
+              applyLogoToClonedDoc(clonedDoc, lg, originalMetrics);
             }
           }
         }
@@ -7123,7 +7255,7 @@ async function captureScheduleCanvas({
         });
       },
     };
-
+    
     const capturePromise = window.html2canvas(clone, html2canvasOptions);
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(
@@ -7131,17 +7263,14 @@ async function captureScheduleCanvas({
         10000,
       ),
     );
-
+    
     const canvas = await Promise.race([capturePromise, timeoutPromise]);
-
+    
     if (loadingToast && loadingToast.remove) loadingToast.remove();
-
     toast("OK", "Экспорт", "Изображение готово", 2000);
-
     return canvas;
   } catch (e) {
     console.error("Ошибка захвата canvas:", e);
-
     try {
       const fallbackCanvas = await fallbackCapture(clone, background);
       toast("WARN", "Экспорт", "Использован упрощённый экспорт", 3000);
@@ -7181,53 +7310,63 @@ window.addEventListener('resize', updateLogoCSSVariables);
 async function applyCenteredLogoToClone(clone, lg, metrics) {
   const logoLayer = clone.querySelector("#logoLayer");
   const logoMark = clone.querySelector("#logoMark");
-  
-  if (!logoLayer || !logoMark) return;
+  if (!logoLayer || !logoMark) {
+    console.warn('Logo layer or mark not found in clone');
+    return;
+  }
   
   const variant = getLogoVariant();
-  const tileSize = Math.max(100, Math.min(400, Number(lg.tileSize) || 140));
+  const tileSize = Math.max(100, Math.min(1000, Number(lg.tileSize) || 140));
+  const halfSize = tileSize / 2;
   
   // Рассчитываем центр области контента с учетом метрик
   const centerX = metrics.timeColWidth + metrics.contentWidth / 2;
   const centerY = metrics.dayHeadHeight + metrics.contentHeight / 2;
   
-  // Ограничиваем левую границу, чтобы логотип не заходил за колонку времени
+  // Ограничиваем границы области контента
   const leftBoundary = metrics.timeColWidth;
   const rightBoundary = metrics.timeColWidth + metrics.contentWidth;
   const topBoundary = metrics.dayHeadHeight;
   const bottomBoundary = metrics.dayHeadHeight + metrics.contentHeight;
   
-  // Рассчитываем позицию с учетом границ
-  let left = centerX - tileSize / 2;
-  let top = centerY - tileSize / 2;
+  // Рассчитываем начальную позицию
+  let left = centerX - halfSize;
+  let top = centerY - halfSize;
+  let finalTileSize = tileSize;
   
   // Проверяем и корректируем, если логотип выходит за границы
   if (left < leftBoundary) {
     left = leftBoundary;
   }
-  if (left + tileSize > rightBoundary) {
-    left = rightBoundary - tileSize;
+  if (left + finalTileSize > rightBoundary) {
+    left = rightBoundary - finalTileSize;
   }
   if (top < topBoundary) {
     top = topBoundary;
   }
-  if (top + tileSize > bottomBoundary) {
-    top = bottomBoundary - tileSize;
+  if (top + finalTileSize > bottomBoundary) {
+    top = bottomBoundary - finalTileSize;
   }
   
   // Если после корректировки логотип все еще не помещается, уменьшаем его размер
-  let finalTileSize = tileSize;
-  if (rightBoundary - leftBoundary < tileSize) {
+  if (rightBoundary - leftBoundary < finalTileSize) {
     finalTileSize = rightBoundary - leftBoundary;
     left = leftBoundary;
   }
-  if (bottomBoundary - topBoundary < tileSize) {
+  if (bottomBoundary - topBoundary < finalTileSize) {
     finalTileSize = Math.min(finalTileSize, bottomBoundary - topBoundary);
     top = topBoundary;
   }
   
+  console.log('Centered logo positioning in clone:', {
+    centerX, centerY,
+    leftBoundary, rightBoundary, topBoundary, bottomBoundary,
+    left, top, finalTileSize
+  });
+  
   // Устанавливаем границы контейнера для логотипа, чтобы он не выходил за область контента
   const logoContainer = document.createElement('div');
+  logoContainer.className = 'logo-container';
   logoContainer.style.cssText = `
     position: absolute;
     top: ${metrics.dayHeadHeight}px;
@@ -7260,6 +7399,9 @@ async function applyCenteredLogoToClone(clone, lg, metrics) {
   `;
   
   // Сбрасываем и устанавливаем стили логотипа
+  const relativeLeft = left - metrics.timeColWidth;
+  const relativeTop = top - metrics.dayHeadHeight;
+  
   logoMark.style.cssText = `
     position: absolute;
     pointer-events: none;
@@ -7267,8 +7409,8 @@ async function applyCenteredLogoToClone(clone, lg, metrics) {
     opacity: ${(lg.opacity || 12) / 100};
     width: ${finalTileSize}px;
     height: ${finalTileSize}px;
-    left: ${left - metrics.timeColWidth}px; // Относительно контейнера
-    top: ${top - metrics.dayHeadHeight}px; // Относительно контейнера
+    left: ${relativeLeft}px;
+    top: ${relativeTop}px;
     transform: rotate(${lg.rotation || 0}deg);
   `;
   
@@ -7293,11 +7435,10 @@ async function applyCenteredLogoToClone(clone, lg, metrics) {
   }
   
   // Устанавливаем CSS переменные для метрик
-  const style = clone.style;
-  style.setProperty('--time-col-width', `${metrics.timeColWidth}px`);
-  style.setProperty('--day-head-height', `${metrics.dayHeadHeight}px`);
-  style.setProperty('--content-width', `${metrics.contentWidth}px`);
-  style.setProperty('--content-height', `${metrics.contentHeight}px`);
+  clone.style.setProperty('--time-col-width', `${metrics.timeColWidth}px`);
+  clone.style.setProperty('--day-head-height', `${metrics.dayHeadHeight}px`);
+  clone.style.setProperty('--content-width', `${metrics.contentWidth}px`);
+  clone.style.setProperty('--content-height', `${metrics.contentHeight}px`);
   
   // Добавляем атрибут data-wm
   logoLayer.setAttribute('data-wm', 'center');
@@ -7306,37 +7447,30 @@ async function applyCenteredLogoToClone(clone, lg, metrics) {
   logoLayer.style.display = 'block';
   logoMark.style.display = 'block';
   
-  // Также добавим CSS-класс для дополнительного контроля
-  logoLayer.classList.add('logo-container');
-  logoMark.classList.add('logo-image');
-  
   // Добавляем CSS для границ
   const styleEl = document.createElement('style');
   styleEl.textContent = `
     .logo-container {
       position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
+      top: var(--day-head-height, 42px);
+      left: var(--time-col-width, 76px);
+      width: var(--content-width, 100%);
+      height: var(--content-height, 100%);
+      overflow: hidden;
       pointer-events: none;
       z-index: 0;
-      overflow: visible;
     }
-    
     .logo-image {
       position: absolute;
       pointer-events: none;
       z-index: 0;
     }
-    
     /* Гарантируем, что заголовки и колонка времени закрывают логотип */
     .cell.head, .cell.time {
       background-color: var(--gridHead) !important;
       position: relative !important;
-      z-index: 10 !important;
+      z-index: 0 !important;
     }
-    
     /* Убедимся, что область контента отрезает логотип */
     .schedule-wrap {
       position: relative;
@@ -7344,21 +7478,26 @@ async function applyCenteredLogoToClone(clone, lg, metrics) {
     }
   `;
   
-  clone.appendChild(styleEl);
+  if (!clone.querySelector('#logo-styles')) {
+    styleEl.id = 'logo-styles';
+    clone.appendChild(styleEl);
+  }
 }
 
+
 // Вспомогательная функция для применения логотипа в клонированном документе
-function applyLogoToClonedDoc(clonedDoc, lg) {
+function applyLogoToClonedDoc(clonedDoc, lg, metrics = null) {
   const clonedLogoLayer = clonedDoc.querySelector("#logoLayer");
   const clonedLogoMark = clonedDoc.querySelector("#logoMark");
-  
   if (!clonedLogoLayer || !clonedLogoMark) return;
   
   const variant = getLogoVariant();
   const layout = lg.layout || "center";
   
-  // Получаем метрики из клонированного документа
-  const metrics = getScheduleMetrics(clonedDoc);
+  // Если метрики не переданы, получаем из клонированного документа
+  if (!metrics) {
+    metrics = getScheduleMetrics(clonedDoc);
+  }
   
   // Показываем слой логотипа
   clonedLogoLayer.style.cssText = `
@@ -7374,7 +7513,6 @@ function applyLogoToClonedDoc(clonedDoc, lg) {
   `;
   
   // Сбрасываем стили
-  clonedLogoMark.style.cssText = '';
   clonedLogoMark.style.cssText = `
     position: absolute;
     pointer-events: none;
@@ -7384,7 +7522,7 @@ function applyLogoToClonedDoc(clonedDoc, lg) {
   
   if (layout === "center") {
     // Центральный режим
-    const tileSize = Math.max(100, Math.min(400, Number(lg.tileSize) || 140));
+    const tileSize = Math.max(100, Math.min(1000, Number(lg.tileSize) || 140));
     
     // Рассчитываем центр области контента
     const centerX = metrics.timeColWidth + metrics.contentWidth / 2;
@@ -7419,8 +7557,7 @@ function applyLogoToClonedDoc(clonedDoc, lg) {
   }
   else if (layout === "stamp") {
     // Режим штампа
-    const tileSize = Math.max(100, Math.min(400, Number(lg.tileSize) || 140));
-    
+    const tileSize = Math.max(100, Math.min(1000, Number(lg.tileSize) || 140));
     const stampX = metrics.timeColWidth + metrics.contentWidth - tileSize - 20;
     const stampY = metrics.dayHeadHeight + metrics.contentHeight - tileSize - 20;
     
@@ -7453,7 +7590,7 @@ function applyLogoToClonedDoc(clonedDoc, lg) {
   }
   else if (layout === "tile" || layout === "diagonal") {
     // Плиточные режимы
-    const tileSize = Math.max(20, Math.min(400, Number(lg.tileSize) || 140));
+    const tileSize = Math.max(20, Math.min(1000, Number(lg.tileSize) || 140));
     const horizontalGap = Number(lg.horizontalGap || 180);
     const verticalGap = Number(lg.verticalGap || 180);
     
@@ -7519,19 +7656,13 @@ function applyLogoToClonedDoc(clonedDoc, lg) {
 }
 
 // Новая вспомогательная функция для применения плиточного логотипа к клону
-async function applyTileLogoToClone(clone, lg) {
+async function applyTileLogoToClone(clone, lg, metrics) {
   const logoLayer = clone.querySelector("#logoLayer");
   const logoMark = clone.querySelector("#logoMark");
-  
   if (!logoLayer || !logoMark) return;
   
   const variant = getLogoVariant();
   const layout = lg.layout || "center";
-  
-  // Получаем метрики из клона
-  const metrics = getScheduleMetrics(clone);
-  
-  console.log('Clone logo positioning metrics:', metrics);
   
   // Показываем слой логотипа
   logoLayer.style.cssText = `
@@ -7541,7 +7672,7 @@ async function applyTileLogoToClone(clone, lg) {
     width: 100%;
     height: 100%;
     pointer-events: none;
-    z-index: 1; // В экспорте выше
+    z-index: 1;
     overflow: hidden;
     display: block;
   `;
@@ -7557,7 +7688,7 @@ async function applyTileLogoToClone(clone, lg) {
   
   if (layout === "center") {
     // Центральный режим
-    const tileSize = Math.max(100, Math.min(400, Number(lg.tileSize) || 140));
+    const tileSize = Math.max(100, Math.min(1000, Number(lg.tileSize) || 140));
     
     // Рассчитываем центр области контента
     const centerX = metrics.timeColWidth + metrics.contentWidth / 2;
@@ -7572,13 +7703,11 @@ async function applyTileLogoToClone(clone, lg) {
     `;
     
     const src = getLogoDataUrl(variant, lg.recolor ? lg.color : null);
-    
     applyLogoStyle(logoMark, src, lg.recolor && variant === 3 ? lg.color : null, false);
   }
   else if (layout === "stamp") {
     // Режим штампа
-    const tileSize = Math.max(100, Math.min(400, Number(lg.tileSize) || 140));
-    
+    const tileSize = Math.max(100, Math.min(1000, Number(lg.tileSize) || 140));
     const stampX = metrics.timeColWidth + metrics.contentWidth - tileSize - 20;
     const stampY = metrics.dayHeadHeight + metrics.contentHeight - tileSize - 20;
     
@@ -7591,12 +7720,11 @@ async function applyTileLogoToClone(clone, lg) {
     `;
     
     const src = getLogoDataUrl(variant, lg.recolor ? lg.color : null);
-    
     applyLogoStyle(logoMark, src, lg.recolor && variant === 3 ? lg.color : null, false);
   }
   else if (layout === "tile" || layout === "diagonal") {
     // Плиточные режимы
-    const tileSize = Math.max(20, Math.min(400, Number(lg.tileSize) || 140));
+    const tileSize = Math.max(20, Math.min(1000, Number(lg.tileSize) || 140));
     const horizontalGap = Number(lg.horizontalGap || 180);
     const verticalGap = Number(lg.verticalGap || 180);
     
@@ -7668,31 +7796,30 @@ let lastPreview = null;
 function makeExportClone({ compact = false } = {}) {
   const node = document.querySelector(".schedule-wrap");
   if (!node) return { clone: null, cleanup: () => {} };
-
+  
   const wrap = document.createElement("div");
   wrap.style.cssText = `
     position: fixed;
-    left: 0;
-    top: 0;
-    width: 0;
-    height: 0;
-    overflow: hidden;
+    left: -9999px;
+    top: -9999px;
+    width: auto;
+    height: auto;
+    overflow: visible;
     pointer-events: none;
     z-index: -1;
-    opacity: 0;
+    opacity: 1;
   `;
   wrap.setAttribute("aria-hidden", "true");
-
+  
   // Глубокое клонирование с сохранением стилей
   const clone = node.cloneNode(true);
   
   // Копируем инлайн-стили
   const originalStyle = window.getComputedStyle(node);
   clone.style.cssText = originalStyle.cssText;
-  
   clone.classList.add("export-mode");
   if (compact) clone.classList.add("compact-export");
-
+  
   // Устанавливаем позиционирование
   clone.style.position = "static";
   clone.style.left = "";
@@ -7700,15 +7827,15 @@ function makeExportClone({ compact = false } = {}) {
   clone.style.right = "";
   clone.style.bottom = "";
   
-  // Получаем реальные размеры содержимого
-  const scheduleEl = clone.querySelector('.schedule');
-  let contentWidth = node.scrollWidth;
-  let contentHeight = node.scrollHeight;
+  // Получаем реальные размеры из оригинального элемента
+  const scheduleEl = node.querySelector('.schedule');
+  let contentWidth = node.scrollWidth || node.offsetWidth;
+  let contentHeight = node.scrollHeight || node.offsetHeight;
   
   // Если есть schedule элемент, используем его размеры
   if (scheduleEl) {
-    contentWidth = Math.max(contentWidth, scheduleEl.scrollWidth);
-    contentHeight = Math.max(contentHeight, scheduleEl.scrollHeight);
+    contentWidth = Math.max(contentWidth, scheduleEl.scrollWidth || scheduleEl.offsetWidth);
+    contentHeight = Math.max(contentHeight, scheduleEl.scrollHeight || scheduleEl.offsetHeight);
   }
   
   // Добавляем отступы для безопасности
@@ -7717,16 +7844,18 @@ function makeExportClone({ compact = false } = {}) {
   
   clone.style.width = `${contentWidth}px`;
   clone.style.height = `${contentHeight}px`;
+  clone.style.minWidth = `${contentWidth}px`;
+  clone.style.minHeight = `${contentHeight}px`;
   clone.style.maxWidth = "none";
   clone.style.maxHeight = "none";
   clone.style.overflow = "visible";
   clone.style.margin = "0";
   clone.style.transform = "none";
   clone.style.boxSizing = "border-box";
-
+  
   wrap.appendChild(clone);
   document.body.appendChild(wrap);
-
+  
   return {
     clone,
     cleanup: () => {
@@ -7734,6 +7863,73 @@ function makeExportClone({ compact = false } = {}) {
         wrap.remove();
       }
     },
+  };
+}
+
+function getOriginalScheduleMetrics() {
+  const schedule = document.querySelector('.schedule');
+  if (!schedule) {
+    const computedStyle = getComputedStyle(document.documentElement);
+    const timeColWidth = parseFloat(computedStyle.getPropertyValue('--timeCol')) || 76;
+    const dayHeadHeight = 42;
+    
+    const scheduleWrap = document.querySelector('.schedule-wrap');
+    let scheduleWidth = 0;
+    let scheduleHeight = 0;
+    
+    if (scheduleWrap) {
+      scheduleWidth = scheduleWrap.scrollWidth || scheduleWrap.offsetWidth;
+      scheduleHeight = scheduleWrap.scrollHeight || scheduleWrap.offsetHeight;
+    }
+    
+    const contentWidth = Math.max(0, scheduleWidth - timeColWidth);
+    const contentHeight = Math.max(0, scheduleHeight - dayHeadHeight);
+    
+    return {
+      timeColWidth,
+      dayHeadHeight,
+      scheduleWidth,
+      scheduleHeight,
+      contentWidth,
+      contentHeight
+    };
+  }
+  
+  // Ищем колонку времени
+  let timeColWidth = 76;
+  const timeCell = schedule.querySelector('.cell.time');
+  if (timeCell) {
+    const rect = timeCell.getBoundingClientRect();
+    timeColWidth = rect.width;
+  } else {
+    const computedStyle = getComputedStyle(schedule);
+    const cssWidth = parseFloat(computedStyle.getPropertyValue('--timeCol')) || 76;
+    timeColWidth = cssWidth;
+  }
+  
+  // Ищем заголовок дня
+  let dayHeadHeight = 42;
+  const headCell = schedule.querySelector('.cell.head');
+  if (headCell) {
+    const rect = headCell.getBoundingClientRect();
+    dayHeadHeight = rect.height;
+  }
+  
+  // Полная ширина и высота расписания
+  let scheduleWidth = schedule.scrollWidth || schedule.offsetWidth;
+  let scheduleHeight = schedule.scrollHeight || schedule.offsetHeight;
+  
+  // Ширина и высота области контента (без заголовков)
+  const contentWidth = Math.max(0, scheduleWidth - timeColWidth);
+  const contentHeight = Math.max(0, scheduleHeight - dayHeadHeight);
+  
+  return {
+    timeColWidth,
+    dayHeadHeight,
+    scheduleWidth,
+    scheduleHeight,
+    contentWidth,
+    contentHeight
   };
 }
 

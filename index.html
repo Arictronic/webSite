@@ -1360,25 +1360,27 @@
             <div class="hr"></div>
 
             <div class="grid2">
+
               <div class="field">
-                <label for="logoTileSize">Размер плитки (px)</label>
-                <div class="range-wrap">
-                  <input
-                    id="logoTileSize"
-                    type="range"
-                    min="20"
-                    max="400"
-                    value="140"
-                  />
-                  <input
-                    id="logoTileSizeNum"
-                    type="number"
-                    value="140"
-                    min="20"
-                    max="400"
-                    style="margin-left: 10px; width: 80px"
-                  />
-                </div>
+                <label for="logoTileSize">Размер логотипа (%)</label>
+                  <div class="range-wrap">
+                    <input
+                      id="logoTileSize"
+                      type="range"
+                      min="0"
+                      max="1000"
+                      value="30"
+                    />
+                    <input
+                      id="logoTileSizeNum"
+                      type="number"
+                      value="30"
+                      min="0"
+                      max="1000"
+                      style="margin-left: 10px; width: 80px"
+                    />
+                  </div>
+              
               </div>
 
               <div class="field">
@@ -1605,21 +1607,6 @@
           </div>
         </footer>
       </div>
-    </div>
-
-    <div
-      class="mobile-actions"
-      id="mobileActions"
-      aria-label="Быстрые действия"
-    >
-      <button
-        class="primary"
-        id="btnFabAdd"
-        type="button"
-        aria-label="Добавить занятие"
-      >
-        +
-      </button>
     </div>
 
     <div
