@@ -1,0 +1,2051 @@
+// export.js - Полный унифицированный код экспорта
+
+
+Ты программист с 30 летним стажем в веб разработке и архетектуре.
+Тебе представлен код при нажатии на кнопку (btnExpPreview->buildExportPreview) и (btnExpDownload->downloadFromExportModal) как это работает и что представляет.
+Также Html кусок как выглядит панель экспорта:
+    <div
+      class="backdrop"
+      id="exportBackdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="exportTitle"
+      hidden
+    >
+      <div class="modal modal-wide">
+        <header class="modal-head">
+          <h2 id="exportTitle">Экспорт</h2>
+          <button
+            class="ghost"
+            id="btnCloseExport"
+            title="Закрыть"
+            aria-label="Закрыть"
+          >
+            ×
+          </button>
+        </header>
+
+        <div class="modal-body">
+          <div class="grid2">
+            <div class="field">
+              <label for="expPreset">Пресет</label>
+              <select id="expPreset"></select>
+            </div>
+
+            <div class="field">
+              <label for="expFormat">Формат</label>
+              <select id="expFormat">
+                <option value="png">PNG</option>
+                <option value="jpeg">JPEG</option>
+                <option value="svg">SVG</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid2" id="expRasterOptions">
+            <div class="field">
+              <label for="expBg">Фон</label>
+              <select id="expBg">
+                <option value="auto">Авто (тема)</option>
+                <option value="transparent">Прозрачный</option>
+                <option value="white">Белый</option>
+              </select>
+            </div>
+
+            <div class="field" id="expJpegWrap" style="display: none">
+              <label for="expQuality">Качество JPEG</label>
+              <input
+                id="expQuality"
+                type="range"
+                min="60"
+                max="100"
+                step="1"
+                value="92"
+              />
+              <div class="mini" id="expQualityVal">92</div>
+            </div>
+          </div>
+
+          <div class="note" id="expHint" role="note">
+            Экспортируется только расписание (без панели управления).
+            Предпросмотр может занять 1–2 секунды.
+          </div>
+
+          <div class="hr"></div>
+
+          <div class="export-preview">
+            <div class="export-preview-frame">
+              <img id="expPreviewImg" alt="Предпросмотр экспорта" />
+            </div>
+          </div>
+        </div>
+
+        <footer class="modal-foot">
+          <div class="left-actions">
+            <button class="ghost" id="btnExpPreview" type="button">
+              Предпросмотр
+            </button>
+          </div>
+          <div class="right-actions">
+            <button class="ghost" id="btnExpCancel" type="button">
+              Отмена
+            </button>
+            <button class="primary" id="btnExpDownload" type="button">
+              Скачать
+            </button>
+          </div>
+        </footer>
+      </div>
+    </div>
+
+Проблема при нажатии кнопки Предпросмотр в PNG видно как поверх таблицы, области без времени и недели, просто залит цвет заливки логотипа, самого логотипа нету, расписания нету (занятий), кроме SVG файла, там есть и логотип и расписание. Надо решить эту проблему, я не знаю в чем имменно она, но я дам тебе ещё css файл, проверь все и код тоже
+В других режимах тоже проблема. В Jpeg тоже самое, только цвет сплошной без прозрачности. В SVG есть небольшая проблема не передается прозрачность занятий
+// ===================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И КОНСТАНТЫ =====================
+
+let state = DEFAULT_STATE();
+let filters = {
+  day: "all",
+  time: "all",
+  dir: new Set(),
+  q: ""
+};
+let filterCache = new Map();
+let lastPreview = null;
+let cachedMetrics = null;
+let metricsTimestamp = 0;
+const METRICS_CACHE_TIME = 1000;
+
+const EXPORT_PRESETS = [
+  { id: "vk_square", name: "VK пост 1:1 (1080×1080)", w: 1080, h: 1080 },
+  { id: "vk_wide", name: "VK обложка 1.91:1 (1200×630)", w: 1200, h: 630 },
+  { id: "tg_16_9", name: "Telegram 16:9 (1280×720)", w: 1280, h: 720 },
+  { id: "tg_square", name: "Telegram 1:1 (1080×1080)", w: 1080, h: 1080 },
+  { id: "a4_portrait", name: "A4 портрет (2480×3508)", w: 2480, h: 3508 },
+  { id: "a4_land", name: "A4 альбом (3508×2480)", w: 3508, h: 2480 },
+  { id: "auto", name: "Auto (по размеру расписания)", w: 0, h: 0 },
+];
+
+const THEME_PRESETS = [
+  {
+    id: "warm-red",
+    name: "Warm Red",
+    tokens: {
+      bg: "#f6f7fb",
+      card: "#ffffff",
+      text: "#0f172a",
+      muted: "#64748b",
+      border: "#e2e8f0",
+      gridHead: "#f8fafc",
+      accent: "#ef4444",
+      now: "#fff7c2",
+      today: "#fff5f5",
+    },
+  },
+  {
+    id: "ocean",
+    name: "Ocean Blue",
+    tokens: {
+      bg: "#f5fbff",
+      card: "#ffffff",
+      text: "#0b1220",
+      muted: "#475569",
+      border: "#dbeafe",
+      gridHead: "#eef6ff",
+      accent: "#0ea5e9",
+      now: "#dbeafe",
+      today: "#e0f2fe",
+    },
+  },
+  {
+    id: "emerald",
+    name: "Emerald",
+    tokens: {
+      bg: "#f6fbf7",
+      card: "#ffffff",
+      text: "#0b1220",
+      muted: "#475569",
+      border: "#d1fae5",
+      gridHead: "#ecfdf5",
+      accent: "#22c55e",
+      now: "#dcfce7",
+      today: "#e7fbe9",
+    },
+  },
+  {
+    id: "violet",
+    name: "Violet",
+    tokens: {
+      bg: "#f7f7ff",
+      card: "#ffffff",
+      text: "#0b1220",
+      muted: "#475569",
+      border: "#e0e7ff",
+      gridHead: "#f0f1ff",
+      accent: "#6366f1",
+      now: "#e0e7ff",
+      today: "#eef2ff",
+    },
+  },
+  {
+    id: "graphite-dark",
+    name: "Graphite Dark",
+    tokens: {
+      bg: "#0b1220",
+      card: "#0f172a",
+      text: "#e5e7eb",
+      muted: "#94a3b8",
+      border: "#1f2a44",
+      gridHead: "#0b1220",
+      accent: "#f59e0b",
+      now: "#3a2f00",
+      today: "#2a1212",
+    },
+  },
+];
+
+// ===================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====================
+
+function DEFAULT_STATE() {
+  return {
+    version: 13,
+    settings: {
+      schedule: {
+        start: "08:00",
+        end: "22:00",
+        slotMinutes: 60,
+        slotHeight: 72,
+        snapMinutes: 5,
+        maxPerCell: 2,
+        defaultDuration: 60,
+      },
+      display: {
+        cellView: "timeline",
+        cardMode: "namecoachroom",
+        showNotes: true,
+        showEmptyHint: true,
+        showDayView: false,
+        showTodayHighlight: true,
+        dayWidthPx: 0,
+        cellPadPx: 6,
+      },
+      font: {
+        preset: "custom",
+        tightness: "normal",
+        titleFamily: "system",
+        metaFamily: "system",
+        family: "system",
+        lineHeight: 1.12,
+        titleSize1: 12,
+        titleSize2: 10,
+        metaSize1: 11,
+        metaSize2: 9,
+        weightTitle: 900,
+        weightMeta: 600,
+        sampleText: "(расписание / РАСПИСАНИЕ)",
+        letterSpacing: 0,
+        textTransform: "none",
+        titleClamp: 3,
+        cardPadY: 7,
+        cardRadius: 12,
+      },
+      theme: {
+        mode: "auto",
+        customTokens: deepCopy(THEME_PRESETS[0].tokens),
+        alpha: { today: 60, now: 65, event: 100, shadow: 10 },
+      },
+      logo: {
+        enabled: false,
+        variant: 1,
+        opacity: 12,
+        recolor: false,
+        color: "#0ea5e9",
+        layout: "center",
+        tileSize: 30,
+        horizontalGap: 180,
+        verticalGap: 180,
+        rotation: 0,
+        tileOffsetX: 0,
+        tileOffsetY: 0,
+        uploadedFileData: null,
+      },
+    },
+    directions: [
+      { id: "yoga", name: "Йога", color: "#ef4444" },
+      { id: "pilates", name: "Пилатес", color: "#14b8a6" },
+      { id: "crossfit", name: "Кроссфит", color: "#0ea5e9" },
+    ],
+    coaches: ["Анна", "Дмитрий", "Елена"],
+    events: [],
+  };
+}
+
+function deepCopy(o) {
+  return JSON.parse(JSON.stringify(o));
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function toast(kind, title, text) {
+  const toasts = document.querySelector("#toasts");
+  if (!toasts) {
+    console.warn("Контейнер для тостов не найден");
+    return;
+  }
+  
+  const el = document.createElement("div");
+  el.className = "toast";
+  
+  const icon = document.createElement("div");
+  icon.className = "icon";
+  icon.textContent = kind === "OK" ? "✓" : kind === "WARN" ? "!" : "×";
+  icon.style.background = 
+    kind === "OK" 
+      ? "var(--ok)" 
+      : kind === "WARN" 
+        ? "var(--warn)" 
+        : "var(--danger)";
+  
+  const content = document.createElement("div");
+  content.className = "content";
+  const t = document.createElement("div");
+  t.className = "title";
+  t.textContent = title;
+  const d = document.createElement("div");
+  d.className = "text";
+  d.textContent = text || "";
+  content.appendChild(t);
+  content.appendChild(d);
+  
+  const actions = document.createElement("div");
+  actions.className = "actions";
+  const close = document.createElement("button");
+  close.className = "close";
+  close.textContent = "×";
+  close.addEventListener("click", () => el.remove());
+  actions.appendChild(close);
+  
+  el.appendChild(icon);
+  el.appendChild(content);
+  el.appendChild(actions);
+  
+  toasts.appendChild(el);
+  
+  setTimeout(() => {
+    if (el.isConnected) el.remove();
+  }, 4500);
+}
+
+// ===================== ФУНКЦИИ ФИЛЬТРАЦИИ =====================
+
+function getDir(directionId) {
+  return state.directions.find(d => d.id === directionId);
+}
+
+function memoizedEventVisible(ev) {
+  const hash = getFilterHash();
+  
+  if (!filterCache.has(ev)) {
+    filterCache.set(ev, {
+      cache: {},
+      timestamps: {},
+      keys: []
+    });
+  }
+  
+  const cacheData = filterCache.get(ev);
+  
+  if (cacheData.cache[hash] !== undefined) {
+    cacheData.timestamps[hash] = Date.now();
+    return cacheData.cache[hash];
+  }
+  
+  const isVisible = 
+    matchesDay(ev) && 
+    matchesTime(ev) && 
+    matchesDir(ev) && 
+    matchesQuery(ev);
+  
+  cacheData.cache[hash] = isVisible;
+  cacheData.timestamps[hash] = Date.now();
+  cacheData.keys.push(hash);
+  
+  if (cacheData.keys.length > 5) {
+    let oldestKey = cacheData.keys[0];
+    let oldestTime = cacheData.timestamps[oldestKey];
+    
+    for (let i = 1; i < cacheData.keys.length; i++) {
+      const key = cacheData.keys[i];
+      if (cacheData.timestamps[key] < oldestTime) {
+        oldestKey = key;
+        oldestTime = cacheData.timestamps[key];
+      }
+    }
+    
+    delete cacheData.cache[oldestKey];
+    delete cacheData.timestamps[oldestKey];
+    cacheData.keys = cacheData.keys.filter(k => k !== oldestKey);
+  }
+  
+  return isVisible;
+}
+
+function getFilterHash() {
+  const { day, time, dir, q } = filters;
+  const dirStr = Array.from(dir).sort().join(",");
+  return `${day}|${time}|${dirStr}|${q}`;
+}
+
+function matchesDay(ev) {
+  if (filters.day === "all") return true;
+  return ev.dayIndex === filters.day;
+}
+
+function matchesTime(ev) {
+  if (filters.time === "all") return true;
+  
+  const m = ev.startMin;
+  
+  if (filters.time === "morning") return m >= 360 && m < 720;
+  if (filters.time === "day") return m >= 720 && m < 1080;
+  if (filters.time === "evening") return m >= 1080 && m < 1380;
+  
+  return true;
+}
+
+function matchesDir(ev) {
+  if (!filters.dir.size) return true;
+  return filters.dir.has(ev.directionId);
+}
+
+function matchesQuery(ev) {
+  const q = (filters.q || "").trim().toLowerCase();
+  if (!q) return true;
+  const dir = getDir(ev.directionId);
+  const hay = `${ev.name || ""} ${ev.coach || ""} ${ev.room || ""} ${dir?.name || ""}`.toLowerCase();
+  return hay.includes(q);
+}
+
+// ===================== ФУНКЦИИ РАБОТЫ СО ШРИФТАМИ =====================
+
+function isGenericFamily(family) {
+  const generic = ['serif', 'sans-serif', 'monospace', 'cursive', 'fantasy', 'system-ui'];
+  return generic.includes(family.toLowerCase());
+}
+
+function matchWeight(ruleWeight, wantedWeight) {
+  const rw = String(ruleWeight).toLowerCase();
+  if (rw === "normal") return wantedWeight === 400;
+  if (rw === "bold") return wantedWeight === 700;
+  const rn = parseInt(rw, 10);
+  return rn === wantedWeight;
+}
+
+function normalizeFontWeight(w) {
+  const s = String(w || "").trim().toLowerCase();
+  if (!s) return 400;
+  if (s === "normal") return 400;
+  if (s === "bold") return 700;
+  const n = parseInt(s, 10);
+  return Number.isFinite(n) ? n : 400;
+}
+
+function _firstFontFamily(fontFamily) {
+  const first = (fontFamily || "").split(",")[0].trim();
+  return first.replace(/^["']|["']$/g, "");
+}
+
+function absolutizeCssUrls(cssText, baseHref) {
+  return String(cssText || "").replace(/url\(([^)]+)\)/g, (m, p1) => {
+    const raw = String(p1).trim().replace(/^["']|["']$/g, "");
+    if (!raw) return m;
+    if (/^(data:|blob:|https?:)/i.test(raw)) return m;
+    const abs = new URL(raw, baseHref).href;
+    return `url("${abs}")`;
+  });
+}
+
+function collectUsedFontVariantsFromDom(rootEl) {
+  const set = new Set();
+  if (!rootEl) return set;
+  
+  const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      return node.nodeValue && node.nodeValue.trim()
+        ? NodeFilter.FILTER_ACCEPT
+        : NodeFilter.FILTER_REJECT;
+    },
+  });
+  
+  let node;
+  while ((node = walker.nextNode())) {
+    const el = node.parentElement;
+    if (!el) continue;
+    
+    const cs = getComputedStyle(el);
+    const fam = _firstFontFamily(cs.fontFamily);
+    if (!fam || isGenericFamily(fam)) continue;
+    
+    const weight = normalizeFontWeight(cs.fontWeight);
+    const style = (cs.fontStyle || "normal").toLowerCase();
+    
+    set.add(`${fam}||${weight}||${style}`);
+  }
+  
+  return set;
+}
+
+async function ensureFontsLoaded(timeoutMs = 2500, variantsSet = null) {
+  try {
+    if (document.fonts) {
+      if (variantsSet && variantsSet.size && document.fonts.load) {
+        const loads = [];
+        for (const key of variantsSet) {
+          const [fam, weight, style] = key.split("||");
+          loads.push(document.fonts.load(`${style} ${weight} 16px "${fam}"`));
+        }
+        await Promise.allSettled(loads);
+      }
+      
+      if (document.fonts.ready) {
+        await Promise.race([
+          document.fonts.ready,
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("fonts timeout")), timeoutMs),
+          ),
+        ]);
+      }
+    }
+  } catch (_) {}
+  
+  await new Promise((r) =>
+    requestAnimationFrame(() => requestAnimationFrame(r)),
+  );
+}
+
+async function buildFontFaceCssForVariants(variantsSet, { embedData = false } = {}) {
+  let css = "";
+  if (!variantsSet || !variantsSet.size) return css;
+  
+  const wanted = Array.from(variantsSet).map((k) => {
+    const [fam, weight, style] = k.split("||");
+    return {
+      fam,
+      weight: parseInt(weight, 10) || 1000,
+      style: (style || "normal").toLowerCase(),
+    };
+  });
+  
+  for (const sheet of Array.from(document.styleSheets)) {
+    const baseHref = sheet.href || document.baseURI;
+    
+    let rules;
+    try {
+      rules = sheet.cssRules;
+    } catch (_) {
+      continue;
+    }
+    
+    for (const rule of Array.from(rules)) {
+      if (rule.type !== CSSRule.FONT_FACE_RULE) continue;
+      
+      const fam = _firstFontFamily(rule.style.getPropertyValue("font-family"));
+      const style = (rule.style.getPropertyValue("font-style") || "normal").toLowerCase();
+      const ruleWeight = rule.style.getPropertyValue("font-weight") || "1000";
+      
+      const matched = wanted.some((w) => {
+        if (w.fam !== fam) return false;
+        if (w.style !== style) return false;
+        return matchWeight(ruleWeight, w.weight);
+      });
+      
+      if (!matched) continue;
+      
+      css += absolutizeCssUrls(rule.cssText, baseHref) + "\n";
+    }
+  }
+  
+  void embedData;
+  return css;
+}
+
+// ===================== ФУНКЦИИ РАБОТЫ С ВРЕМЕНЕМ =====================
+
+function getBounds() {
+  const s = state.settings.schedule;
+  return {
+    start: parseHHMM(s.start),
+    end: parseHHMM(s.end),
+    step: Number(s.slotMinutes),
+    h: Number(s.slotHeight),
+    snap: Number(s.snapMinutes),
+    max: 2,
+    defDur: Number(s.defaultDuration),
+  };
+}
+
+function parseHHMM(s) {
+  const [h, m] = (s || "").split(":").map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  return h * 60 + m;
+}
+
+function buildSlots() {
+  const { start, end, step } = getBounds();
+  const out = [];
+  if (start == null || end == null || step <= 0) return out;
+  for (let t = start; t < end; t += step) out.push(t);
+  return out;
+}
+
+// ===================== ОСНОВНЫЕ ФУНКЦИИ ЭКСПОРТА =====================
+
+
+async function buildExportPreview() {
+  const opts = getExportOptsFromUI();
+  
+  toast("OK", "Экспорт", "Генерация предпросмотра…");
+  
+  try {
+    const exportResult = await executeExport(opts);
+    if (!exportResult) return;
+    
+    const { dataUrl } = exportResult;
+    expPreviewImg.src = dataUrl;
+    lastPreview = { dataUrl, ...opts };
+    
+    toast("OK", "Экспорт", "Предпросмотр готов.");
+  } catch (error) {
+    console.error("Export error:", error);
+    toast("ERR", "Экспорт", error?.message || "Ошибка экспорта");
+  }
+}
+
+async function executeExport(opts) {
+  const { fmt } = opts;
+  
+  if (fmt === "svg") {
+    return await exportToSvg(opts);
+  } else {
+    return await exportToCanvas(opts);
+  }
+}
+
+async function prepareDomForExport({ compact = false, format = 'canvas' } = {}) {
+  // Принудительно обновляем метрики
+  const metrics = getExportMetrics(true);
+  const { clone, cleanup } = makeExportClone({ compact });
+
+  if (!clone) {
+    throw new Error("Не удалось создать клон расписания");
+  }
+
+  // 1. Удаляем интерактивные элементы
+  removeInteractiveElements(clone);
+
+  // 2. Применяем стили к событиям (важно: устанавливает прямые стили!)
+  applyCssVariablesToEvents(clone);
+
+  // 3. Скрываем пустые строки
+  const hiddenRows = hideEmptyTimeRows(clone, {
+    respectFilters: false,
+    keepNowRow: false
+  });
+
+  // 4. Фиксируем шапку
+  const headEls = Array.from(clone.querySelectorAll(".cell.head"));
+  headEls.forEach(el => {
+    el.style.position = "static";
+    el.style.top = "auto";
+    el.style.zIndex = "auto";
+  });
+
+  // 5. Создаем элементы логотипа (пока без стилей)
+  const lg = state.settings.logo;
+  let logoLayer = clone.querySelector("#logoLayer");
+  let logoMark = clone.querySelector("#logoMark");
+
+  if (lg.enabled) {
+    if (!logoLayer) {
+      logoLayer = document.createElement('div');
+      logoLayer.id = 'logoLayer';
+      clone.querySelector('.schedule-wrap')?.prepend(logoLayer);
+    }
+    if (!logoMark) {
+      logoMark = document.createElement('div');
+      logoMark.id = 'logoMark';
+      logoLayer.appendChild(logoMark);
+    }
+    // Стили будут установлены позже в applyLogoToExport
+  }
+
+  // 6. Даем браузеру пересчитать layout
+  await new Promise(r => requestAnimationFrame(r));
+  await new Promise(r => setTimeout(r, 50));
+
+  // 7. Измеряем размеры
+  const scheduleEl = clone.querySelector('.schedule');
+  let width, height;
+
+  if (scheduleEl) {
+    const rect = scheduleEl.getBoundingClientRect();
+    width = Math.max(100, Math.ceil(rect.width || scheduleEl.scrollWidth || 800));
+    height = Math.max(100, Math.ceil(rect.height || scheduleEl.scrollHeight || 600));
+
+    // Устанавливаем размеры НА КОНТЕЙНЕР (.schedule-wrap)
+    clone.style.width = `${width}px`;
+    clone.style.height = `${height}px`;
+    clone.style.overflow = "visible";
+
+    // Расписание растягивается на контейнер
+    scheduleEl.style.width = '100%';
+    scheduleEl.style.height = '100%';
+    scheduleEl.style.position = 'relative'; // Для позиционирования логотипа
+  } else {
+    width = Math.max(100, Math.ceil(metrics.scheduleWidth || 800));
+    height = Math.max(100, Math.ceil(metrics.scheduleHeight || 600));
+    clone.style.width = `${width}px`;
+    clone.style.height = `${height}px`;
+  }
+
+  // 8. Применяем логотип ПОСЛЕ измерений, устанавливая прямые стили
+  if (lg.enabled) {
+    await applyLogoToExport(clone, lg, metrics, format);
+  }
+
+  return {
+    clone,
+    cleanup,
+    metrics,
+    hiddenRows,
+    width,
+    height
+  };
+}
+
+async function exportToSvg(opts) {
+  if (typeof htmlToImage === "undefined" || typeof htmlToImage.toSvg !== "function") {
+    toast("WARN", "SVG", "html-to-image не найден (проверь подключение).");
+    return null;
+  }
+
+  // 1. Принудительно обновляем рендер перед экспортом
+  await new Promise(resolve => {
+    renderAll();
+    setTimeout(resolve, 100); // Даем время на перерисовку
+  });
+
+  // 2. Получаем подготовленный DOM
+  const prepared = await prepareDomForExport({
+    compact: opts.compact,
+    format: 'svg'
+  });
+
+  if (!prepared) {
+    toast("ERR", "SVG", "Не удалось подготовить DOM для экспорта");
+    return null;
+  }
+
+  const { clone, cleanup, width, height } = prepared;
+
+  try {
+    // 3. Проверяем, что расписание видно
+    const scheduleEl = clone.querySelector('.schedule');
+    if (!scheduleEl) {
+      console.error('Расписание не найдено в клоне для SVG экспорта');
+      toast("ERR", "SVG", "Расписание не найдено");
+      throw new Error("Расписание не найдено");
+    }
+
+    // 4. Повторно применяем стили ко всем событиям в КЛОНЕЕ перед генерацией SVG
+    // Это критически важно для html-to-image.toSvg
+    applyCssVariablesToEventsForExport(clone);
+
+    // 5. Собираем используемые шрифты
+    const usedFonts = collectUsedFontVariantsFromDom(clone);
+
+    // 6. Загружаем шрифты
+    await ensureFontsLoaded(2500, usedFonts);
+
+    // 7. Ждем перерисовки
+    await new Promise((r) =>
+      requestAnimationFrame(() => requestAnimationFrame(r))
+    );
+
+    // 8. Собираем CSS для встраивания шрифтов
+    const fontEmbedCSS = await buildFontFaceCssForVariants(usedFonts, {
+      embedData: false,
+    });
+
+    // 9. Получаем цвет фона из темы
+    const bgColor = getThemeBgCssColor() || "#ffffff";
+
+    console.log(`SVG экспорт: размеры ${width}x${height}, фон ${bgColor}`);
+
+    // 10. Генерируем SVG
+    const dataUrl = await htmlToImage.toSvg(clone, {
+      backgroundColor: bgColor,
+      width: width,
+      height: height,
+      pixelRatio: 1,
+      cacheBust: true,
+      quality: 1.0,
+      fontEmbedCSS: fontEmbedCSS,
+      style: {
+        // Гарантируем, что все элементы видны
+        visibility: 'visible',
+        opacity: '1'
+      }
+    });
+
+    toast("OK", "SVG", "SVG предпросмотр готов.");
+    return { dataUrl };
+  } catch (e) {
+    console.error("SVG export error:", e);
+    toast("ERR", "SVG", e?.message || "Ошибка генерации SVG");
+    throw new Error(e?.message || "Ошибка генерации SVG");
+  } finally {
+    cleanup();
+  }
+}
+
+async function exportToCanvas(opts) {
+  if (typeof window.html2canvas !== "function") {
+    toast("WARN", "Экспорт", "html2canvas не найден. Проверьте подключение библиотеки.");
+    return null;
+  }
+
+  // 1. Принудительно обновляем рендер перед экспортом
+  await new Promise(resolve => {
+    renderAll();
+    setTimeout(resolve, 100); // Даем время на перерисовку
+  });
+
+  // 2. Получаем подготовленный DOM
+  const prepared = await prepareDomForExport({
+    compact: opts.compact,
+    format: 'canvas'
+  });
+
+  if (!prepared) {
+    toast("ERR", "Экспорт", "Не удалось подготовить DOM для экспорта");
+    return null;
+  }
+
+  const { clone, cleanup, width, height } = prepared;
+
+  try {
+    // 3. Убедимся, что все ресурсы загружены
+    await waitForResources(clone, 3000);
+
+    // 4. Проверяем, что расписание видно в клоне
+    const scheduleEl = clone.querySelector('.schedule');
+    if (!scheduleEl) {
+      console.error('Расписание не найдено в клоне для экспорта');
+      toast("ERR", "Экспорт", "Расписание не найдено");
+      throw new Error("Расписание не найдено в клоне");
+    }
+
+    // 5. Подсчитываем видимые события для отладки
+    const visibleEvents = clone.querySelectorAll('.event:not(.dim)').length;
+    const allEvents = clone.querySelectorAll('.event').length;
+    console.log(`Экспорт: ${visibleEvents}/${allEvents} событий видимы`);
+
+    // 6. Создаем опции для html2canvas
+    const html2canvasOptions = {
+      backgroundColor: opts.background,
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      logging: false,
+      width: width,
+      height: height,
+      x: 0,
+      y: 0,
+      scrollX: 0,
+      scrollY: 0,
+      imageTimeout: 5000,
+      removeContainer: true,
+      onclone: async (clonedDoc) => { // onclone теперь асинхронный
+        // Критически важно повторно применить стили к событиям в клоне html2canvas
+        applyCssVariablesToEventsForExport(clonedDoc);
+
+        // Критически важно повторно применить стили логотипа в клоне html2canvas
+        const lg = state.settings.logo;
+        if (lg.enabled) {
+          const clonedLogoLayer = clonedDoc.querySelector("#logoLayer");
+          const clonedLogoMark = clonedDoc.querySelector("#logoMark");
+          if (clonedLogoLayer && clonedLogoMark) {
+            try {
+              const metrics = getExportMetrics(); // Получаем метрики для клона
+              // Применяем логотип с прямой установкой стилей в клоне, ИСПОЛЬЗУЯ ТУ ЖЕ ЛОГИКУ, ЧТО И В applyLogoToExport
+              clonedLogoLayer.style.position = 'absolute';
+              clonedLogoLayer.style.top = '0';
+              clonedLogoLayer.style.left = '0';
+              clonedLogoLayer.style.width = '100%';
+              clonedLogoLayer.style.height = '100%';
+              clonedLogoLayer.style.pointerEvents = 'none';
+              clonedLogoLayer.style.zIndex = '0'; // <-- КРИТИЧЕСКИ: Под расписанием
+              clonedLogoLayer.style.overflow = 'hidden';
+              clonedLogoLayer.style.display = 'block';
+              clonedLogoLayer.style.backgroundColor = lg.bg || 'transparent';
+              if (lg.url) {
+                 clonedLogoLayer.style.backgroundImage = `url("${lg.url}")`;
+                 clonedLogoLayer.style.backgroundRepeat = lg.repeat || 'no-repeat';
+                 clonedLogoLayer.style.backgroundPosition = lg.pos || 'center';
+                 clonedLogoLayer.style.backgroundSize = lg.size || 'contain';
+              } else {
+                 clonedLogoLayer.style.backgroundImage = 'none';
+              }
+
+              clonedLogoMark.style.position = 'absolute';
+              clonedLogoMark.style.pointerEvents = 'none';
+              clonedLogoMark.style.zIndex = '0'; // <-- КРИТИЧЕСКИ: Под расписанием
+              clonedLogoMark.style.opacity = (lg.opacity || 12) / 100; // <-- КРИТИЧЕСКИ: Применяем opacity
+              clonedLogoMark.style.display = 'block';
+
+              const clonedSchedule = clonedDoc.querySelector('.schedule');
+              if (clonedSchedule) {
+                clonedSchedule.style.position = 'relative';
+                clonedSchedule.style.zIndex = '1'; // Над логотипом
+              }
+
+              // Применяем содержимое логотипа, если оно зависит от DOM, в котором находится logoMark
+              // Это сложнее, если applyCenteredLogo/applyTiledLogo изменяют *DOM* logoMark.
+              // В простейшем случае, если они только устанавливают стили *на logoMark или его дочерние элементы*,
+              // и эти элементы уже скопированы, то стили, установленные в оригинальном clone.applyLogoToExport,
+              // должны быть скопированы в клон html2canvas.
+              // Однако, если applyCenteredLogo/applyTiledLogo вставляют *новые* элементы внутрь logoMark,
+              // то эти элементы могут не скопироваться, и их нужно будет воссоздать в clonedLogoMark.
+              // Проверим, что делают applyCenteredLogo/applyTiledLogo. Из кода в Pasted_Text видно,
+              // что они устанавливают стили на logoMark и могут изменять его backgroundImage/mask и т.п.
+              // Эти изменения должны быть отражены в clonedLogoMark, если он был скопирован вместе со стилями.
+              // Но если они добавляют *новые* div/img внутрь logoMark, то это не скопируется.
+              // В коде applyCenteredLogo/applyTiledLogo из Pasted_Text я вижу:
+              // - applyCenteredLogo: устанавливает cssText на logoMark, вызывает applyLogoStyle
+              // - applyLogoStyle: устанавливает backgroundImage/maskImage и т.п.
+              // - applyTiledLogo: устанавливает cssText на logoMark, вызывает applyLogoStyle
+              // Это означает, что изменения происходят *внутри* logoMark (через стили, mask, bg).
+              // Эти изменения *должны* копироваться html2canvas, если DOM-структура и стили логотипа корректны в момент клонирования.
+              // Поэтому, если applyLogoToExport корректно установил стили на logoMark в оригинальном clone,
+              // и html2canvas копирует DOM, включая *встроенные стили* (style attribute), то clonedLogoMark
+              // должен уже иметь правильные стили (opacity, mask/bg).
+              // Но! В onclone мы *перезаписываем* стили clonedLogoMark. Это может *сбросить* стили,
+              // установленные applyLogoStyle.
+              // Лучший способ - это не перезаписывать полностью, а *проверить* и *дополнить* стили,
+              // или *обновить* только критические (z-index, opacity, position).
+              // Однако, для надежности, мы просто *еще раз* применяем ту же логику applyLogoToExport к clonedDoc.
+
+              // Мы НЕ вызываем applyCenteredLogo/applyTiledLogo снова, потому что они могут
+              // изменять DOM-структуру, которой может не быть в clonedDoc в том же виде.
+              // Мы полагаемся на то, что структура скопирована, и нам нужно только убедиться,
+              // что критические стили (z-index, opacity) установлены правильно.
+              // Применение стилей выше должно быть достаточным.
+
+            } catch (error) {
+              console.warn('Ошибка применения логотипа в onclone:', error);
+            }
+          }
+        }
+      },
+    };
+
+    // 7. Захватываем canvas с таймаутом
+    const capturePromise = window.html2canvas(clone, html2canvasOptions);
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Таймаут захвата canvas (10 секунд)")), 10000)
+    );
+
+    const canvas = await Promise.race([capturePromise, timeoutPromise]);
+
+    toast("OK", "Экспорт", "Изображение готово");
+
+    let finalCanvas = canvas;
+
+    // 8. Применяем пресет если нужно
+    if (opts.preset.id !== "auto") {
+      const p = opts.preset;
+      const target = {
+        w: p.w,
+        h: p.h,
+        rotate: false // Поворот не используется
+      };
+      finalCanvas = createFinalCanvas(canvas, target);
+    }
+
+    // 9. Конвертируем в dataURL с учетом качества
+    const dataUrl = finalCanvas.toDataURL(opts.imageFormat, opts.quality);
+    return { dataUrl };
+
+  } catch (e) {
+    console.error("Canvas export error:", e);
+
+    // Fallback: пробуем упрощенный захват
+    try {
+      console.log("Пробуем fallback capture...");
+      const fallbackCanvas = await fallbackCapture(clone, opts.background);
+      toast("WARN", "Экспорт", "Использован упрощённый экспорт");
+
+      let finalCanvas = fallbackCanvas;
+      if (opts.preset.id !== "auto") {
+        const p = opts.preset;
+        finalCanvas = createFinalCanvas(fallbackCanvas, {
+          w: p.w,
+          h: p.h,
+          rotate: false
+        });
+      }
+
+      const dataUrl = finalCanvas.toDataURL(opts.imageFormat, opts.quality);
+      return { dataUrl };
+    } catch (fallbackError) {
+      console.error("Fallback также не удался:", fallbackError);
+      toast("ERR", "Экспорт", e?.message || "Ошибка при создании изображения");
+      throw new Error("Ошибка при создании изображения");
+    }
+  } finally {
+    // 10. Всегда очищаем
+    cleanup();
+  }
+}
+
+function getExportOptsFromUI() {
+  const preset = getExportPresetById(expPreset.value);
+  const fmt = expFormat.value;
+  const imageFormat = fmt === "jpeg" ? "image/jpeg" : "image/png";
+  const quality = fmt === "jpeg"
+    ? Math.min(1, Math.max(0.6, Number(expQuality.value || 92) / 100))
+    : 1.0;
+
+  const background = fmt === "svg" ? null : resolveExportBackground(expBg.value);
+  const compact = state.settings.display.cellView === "compact";
+
+  return { preset, fmt, imageFormat, quality, background, compact };
+}
+
+function makeExportClone({ compact = false } = {}) {
+  const node = document.querySelector(".schedule-wrap");
+  if (!node) return { clone: null, cleanup: () => {} };
+
+  // Обёртка вне экрана
+  const wrap = document.createElement("div");
+  wrap.style.cssText = `
+    position: fixed;
+    left: -9999px;
+    top: -9999px;
+    width: max-content;
+    height: max-content;
+    overflow: visible;
+    pointer-events: none;
+    z-index: -1;
+    opacity: 1;
+    visibility: visible;
+  `;
+  wrap.setAttribute("aria-hidden", "true");
+  wrap.setAttribute("data-export-clone", "true");
+
+  // Клонируем с глубоким копированием
+  const clone = node.cloneNode(true);
+  clone.classList.add("export-mode");
+  if (compact) clone.classList.add("compact-export");
+
+  // Сбрасываем ТОЛЬКО позиционирование, НЕ сетку!
+  // Удаляем !important, чтобы не переопределять важные стили ниже
+  clone.style.position = 'static';
+  clone.style.left = 'auto';
+  clone.style.top = 'auto';
+  clone.style.right = 'auto';
+  clone.style.bottom = 'auto';
+  clone.style.transform = 'none';
+  clone.style.margin = '0';
+  clone.style.display = 'block'; // Важно для .schedule-wrap
+
+  // 🔑 КРИТИЧЕСКИ ВАЖНО: сохранить структуру сетки .schedule
+  const scheduleEl = clone.querySelector('.schedule');
+  if (scheduleEl) {
+    const origSchedule = document.querySelector('.schedule');
+    if (origSchedule) {
+      const cs = getComputedStyle(origSchedule);
+      scheduleEl.style.display = 'grid';
+      scheduleEl.style.gridTemplateColumns = cs.gridTemplateColumns; // ← КОПИРУЕМ СЕТКУ!
+      scheduleEl.style.width = 'max-content';
+      scheduleEl.style.minWidth = '100%';
+    }
+
+    // Принудительно показываем все элементы
+    // ВАЖНО: Установка visibility/opacity после сброса display из clone.style
+    scheduleEl.querySelectorAll('.cell, .slot, .event').forEach(el => {
+      el.style.display = 'block'; // Убедиться, что отображается
+      el.style.visibility = 'visible';
+      el.classList.remove('dim');
+      el.style.opacity = '1';
+    });
+  }
+
+  wrap.appendChild(clone);
+  document.body.appendChild(wrap);
+
+  return {
+    clone,
+    cleanup: () => {
+      if (wrap.parentNode) wrap.remove();
+    },
+  };
+}
+
+function getExportMetrics(force = false) {
+  const now = Date.now();
+  if (!force && cachedMetrics && (now - metricsTimestamp) < METRICS_CACHE_TIME) {
+    return cachedMetrics;
+  }
+  
+  const scheduleWrap = document.querySelector('.schedule-wrap');
+  if (!scheduleWrap) {
+    cachedMetrics = {
+      scheduleWidth: 800,
+      scheduleHeight: 600,
+      contentWidth: 700,
+      contentHeight: 550,
+      timeColWidth: 76,
+      dayHeadHeight: 42
+    };
+    metricsTimestamp = now;
+    return cachedMetrics;
+  }
+  
+  // Принудительно показываем все для измерений
+  scheduleWrap.style.display = '';
+  scheduleWrap.style.visibility = 'visible';
+  
+  const schedule = scheduleWrap.querySelector('.schedule');
+  if (!schedule) {
+    cachedMetrics = {
+      scheduleWidth: scheduleWrap.offsetWidth,
+      scheduleHeight: scheduleWrap.offsetHeight,
+      contentWidth: scheduleWrap.offsetWidth - 76,
+      contentHeight: scheduleWrap.offsetHeight - 42,
+      timeColWidth: 76,
+      dayHeadHeight: 42
+    };
+    metricsTimestamp = now;
+    return cachedMetrics;
+  }
+  
+  // Измеряем после пересчета layout
+  setTimeout(() => {}, 0);
+  
+  const rect = schedule.getBoundingClientRect();
+  const timeCell = schedule.querySelector('.cell.time');
+  const headCell = schedule.querySelector('.cell.head');
+  
+  cachedMetrics = {
+    scheduleWidth: Math.max(100, rect.width || schedule.offsetWidth || 800),
+    scheduleHeight: Math.max(100, rect.height || schedule.offsetHeight || 600),
+    contentWidth: Math.max(100, (rect.width || 800) - (timeCell?.offsetWidth || 76)),
+    contentHeight: Math.max(100, (rect.height || 600) - (headCell?.offsetHeight || 42)),
+    timeColWidth: timeCell?.offsetWidth || 76,
+    dayHeadHeight: headCell?.offsetHeight || 42
+  };
+  
+  metricsTimestamp = now;
+  return cachedMetrics;
+}
+
+function removeInteractiveElements(element) {
+  const selectors = [
+    ".grab",
+    ".day-actions",
+    "button",
+    '[draggable="true"]',
+    ".empty-slot",
+  ];
+  
+  selectors.forEach((selector) => {
+    element.querySelectorAll(selector).forEach((el) => {
+      el.style.display = "none";
+      el.style.visibility = "hidden";
+      el.style.pointerEvents = "none";
+    });
+  });
+}
+
+function hideEmptyTimeRows(rootEl, options = {}) {
+  const { respectFilters = true, keepNowRow = true } = options;
+  const scheduleEl = rootEl.querySelector(".schedule");
+  if (!scheduleEl) return [];
+  
+  if (scheduleEl.classList.contains("compact-mode")) return [];
+  
+  const { step } = getBounds();
+  const slots = buildSlots();
+  if (!slots.length || !step) return [];
+  
+  const allCells = Array.from(scheduleEl.children);
+  if (!allCells.length) return [];
+  
+  const COLS = scheduleEl.querySelectorAll(".cell.head").length || 8;
+  const headerCount = COLS;
+  
+  const events = respectFilters && typeof memoizedEventVisible === "function"
+    ? state.events.filter(memoizedEventVisible)
+    : state.events;
+  
+  const base = slots[0];
+  const diff = new Array(slots.length + 1).fill(0);
+  
+  for (const ev of events) {
+    const evStart = ev && Number(ev.startMin);
+    const evEnd = evStart + Number(ev.durationMin);
+    
+    if (!Number.isFinite(evStart) || !Number.isFinite(evEnd) || evEnd <= evStart)
+      continue;
+    
+    let first = Math.floor((evStart - base) / step);
+    let last = Math.floor((evEnd - 1 - base) / step);
+    
+    if (last < 0 || first >= slots.length) continue;
+    
+    first = Math.max(0, first);
+    last = Math.min(slots.length - 1, last);
+    
+    diff[first] += 1;
+    diff[last + 1] -= 1;
+  }
+  
+  const has = new Array(slots.length).fill(false);
+  let run = 0;
+  for (let i = 0; i < slots.length; i++) {
+    run += diff[i];
+    has[i] = run > 0;
+  }
+  
+  const changed = [];
+  const hideCell = (el) => {
+    const prevDisplay = el.style.display;
+    if (prevDisplay === "none") return;
+    changed.push({ el, prevDisplay });
+    el.style.display = "none";
+  };
+  
+  for (let slotIndex = 0; slotIndex < slots.length; slotIndex++) {
+    if (has[slotIndex]) continue;
+    
+    const rowStartIndex = headerCount + slotIndex * COLS;
+    const timeCell = allCells[rowStartIndex];
+    
+    if (keepNowRow && timeCell && timeCell.classList.contains("now"))
+      continue;
+    
+    for (let i = 0; i < COLS; i++) {
+      const cell = allCells[rowStartIndex + i];
+      if (cell) hideCell(cell);
+    }
+  }
+  
+  return changed;
+}
+
+async function applyLogoToExport(element, lg, metrics, format = 'canvas') {
+  let logoLayer = element.querySelector("#logoLayer");
+  let logoMark = element.querySelector("#logoMark");
+
+  if (!logoLayer || !logoMark) {
+    console.warn('Элементы логотипа не найдены в DOM для экспорта.');
+    return;
+  }
+
+  // Устанавливаем ВСЕ стили напрямую, чтобы html2canvas/html-to-image их увидел
+  // ЛОГОТИП ПОД расписанием (ключевое!)
+  logoLayer.style.position = 'absolute';
+  logoLayer.style.top = '0';
+  logoLayer.style.left = '0';
+  logoLayer.style.width = '100%';
+  logoLayer.style.height = '100%';
+  logoLayer.style.pointerEvents = 'none';
+  logoLayer.style.zIndex = '0'; // <-- КРИТИЧЕСКИ: Под расписанием
+  logoLayer.style.overflow = 'hidden';
+  logoLayer.style.display = 'block';
+
+  // Применяем фоновые стили напрямую
+  logoLayer.style.backgroundColor = lg.bg || 'transparent';
+  if (lg.url) {
+     logoLayer.style.backgroundImage = `url("${lg.url}")`;
+     logoLayer.style.backgroundRepeat = lg.repeat || 'no-repeat';
+     logoLayer.style.backgroundPosition = lg.pos || 'center';
+     logoLayer.style.backgroundSize = lg.size || 'contain';
+  } else {
+     logoLayer.style.backgroundImage = 'none';
+  }
+
+  logoMark.style.position = 'absolute';
+  logoMark.style.pointerEvents = 'none';
+  logoMark.style.zIndex = '0'; // <-- КРИТИЧЕСКИ: Под расписанием
+  logoMark.style.opacity = (lg.opacity || 12) / 100;
+  logoMark.style.display = 'block';
+
+  // Расписание НАД логотипом
+  const scheduleEl = element.querySelector('.schedule');
+  if (scheduleEl) {
+    scheduleEl.style.position = 'relative';
+    scheduleEl.style.zIndex = '1'; // Над логотипом
+  }
+
+  // Применяем содержимое логотипа (центральный, тайловый и т.д.)
+  try {
+    const variant = getLogoVariant();
+    const layout = lg.layout || "center";
+    const opacity = (lg.opacity || 12) / 100;
+
+    if (layout === "center") {
+      await applyCenteredLogo(logoMark, lg, metrics, variant, opacity);
+    } else if (layout === "tile" || layout === "diagonal") {
+      await applyTiledLogo(logoMark, lg, metrics, variant, opacity, layout);
+    }
+  } catch (error) {
+    console.error('Ошибка применения логотипа:', error);
+    logoLayer.style.display = 'none';
+    logoMark.style.display = 'none';
+  }
+}
+
+async function applyCenteredLogo(logoMark, lg, metrics, variant, opacity) {
+  const tileSize = Math.max(100, Math.min(1000, Number(lg.tileSize) || 140));
+  const halfSize = tileSize / 2;
+  
+  const centerX = metrics.timeColWidth + metrics.contentWidth / 2;
+  const centerY = metrics.dayHeadHeight + metrics.contentHeight / 2;
+  
+  const leftBoundary = metrics.timeColWidth;
+  const rightBoundary = metrics.timeColWidth + metrics.contentWidth;
+  const topBoundary = metrics.dayHeadHeight;
+  const bottomBoundary = metrics.dayHeadHeight + metrics.contentHeight;
+  
+  let left = centerX - halfSize;
+  let top = centerY - halfSize;
+  let finalTileSize = tileSize;
+  
+  if (left < leftBoundary) left = leftBoundary;
+  if (left + finalTileSize > rightBoundary) left = rightBoundary - finalTileSize;
+  if (top < topBoundary) top = topBoundary;
+  if (top + finalTileSize > bottomBoundary) top = bottomBoundary - finalTileSize;
+  
+  if (rightBoundary - leftBoundary < finalTileSize) {
+    finalTileSize = rightBoundary - leftBoundary;
+    left = leftBoundary;
+  }
+  if (bottomBoundary - topBoundary < finalTileSize) {
+    finalTileSize = Math.min(finalTileSize, bottomBoundary - topBoundary);
+    top = topBoundary;
+  }
+  
+  logoMark.style.cssText = `
+    position: absolute;
+    pointer-events: none;
+    z-index: 1;
+    opacity: ${opacity};
+    width: ${finalTileSize}px;
+    height: ${finalTileSize}px;
+    left: ${left}px;
+    top: ${top}px;
+    transform: rotate(${lg.rotation || 0}deg);
+  `;
+  
+  const src = getLogoDataUrl(variant, lg.recolor ? lg.color : null, lg.opacity);
+  applyLogoStyle(logoMark, src, lg.recolor && variant === 3 ? lg.color : null, opacity, false);
+}
+
+async function applyTiledLogo(logoMark, lg, metrics, variant, opacity, layout) {
+  const tileSize = Math.max(20, Math.min(1000, Number(lg.tileSize) || 140));
+  const horizontalGap = Number(lg.horizontalGap || 180);
+  const verticalGap = Number(lg.verticalGap || 180);
+  const offsetX = Number(lg.tileOffsetX || 0);
+  const offsetY = Number(lg.tileOffsetY || 0);
+  
+  logoMark.style.cssText = `
+    position: absolute;
+    pointer-events: none;
+    z-index: 1;
+    opacity: ${opacity};
+    left: ${metrics.timeColWidth}px;
+    top: ${metrics.dayHeadHeight}px;
+    width: ${metrics.contentWidth}px;
+    height: ${metrics.contentHeight}px;
+  `;
+  
+  const src = window.getTileSrc?.(
+    variant,
+    tileSize,
+    horizontalGap,
+    verticalGap,
+    lg.rotation || 0,
+    layout,
+    lg.recolor ? lg.color : null,
+    lg.opacity
+  ) || getLogoDataUrl(variant, lg.recolor ? lg.color : null, lg.opacity);
+  
+  if (lg.recolor && variant === 3) {
+    logoMark.style.backgroundColor = lg.color || "#0ea5e9";
+    logoMark.style.webkitMaskImage = `url(${src})`;
+    logoMark.style.maskImage = `url(${src})`;
+    logoMark.style.webkitMaskRepeat = 'repeat';
+    logoMark.style.maskRepeat = 'repeat';
+    
+    const patternSize = layout === "diagonal" 
+      ? `${(tileSize + horizontalGap) * 2}px ${(tileSize + verticalGap) * 2}px`
+      : `${tileSize + horizontalGap}px ${tileSize + verticalGap}px`;
+    
+    logoMark.style.webkitMaskSize = patternSize;
+    logoMark.style.maskSize = patternSize;
+    logoMark.style.webkitMaskPosition = `${offsetX}px ${offsetY}px`;
+    logoMark.style.maskPosition = `${offsetX}px ${offsetY}px`;
+  } else {
+    logoMark.style.backgroundImage = `url(${src})`;
+    logoMark.style.backgroundRepeat = 'repeat';
+    
+    const patternSize = layout === "diagonal"
+      ? `${(tileSize + horizontalGap) * 2}px ${(tileSize + verticalGap) * 2}px`
+      : `${tileSize + horizontalGap}px ${tileSize + verticalGap}px`;
+    
+    logoMark.style.backgroundSize = patternSize;
+    logoMark.style.backgroundPosition = `${offsetX}px ${offsetY}px`;
+  }
+}
+
+function applyLogoToClonedDoc(logoLayer, logoMark, lg, metrics) {
+  if (!logoLayer || !logoMark) return;
+  
+  const variant = getLogoVariant();
+  const layout = lg.layout || "center";
+  const opacity = (lg.opacity || 12) / 100;
+  
+  logoLayer.style.cssText = `
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+    overflow: hidden;
+    display: block;
+  `;
+  
+  logoMark.style.cssText = `
+    position: absolute;
+    pointer-events: none;
+    z-index: 1;
+    opacity: ${opacity};
+  `;
+  
+  if (layout === "center") {
+    const tileSize = Math.max(100, Math.min(1000, Number(lg.tileSize) || 140));
+    const centerX = metrics.timeColWidth + metrics.contentWidth / 2;
+    const centerY = metrics.dayHeadHeight + metrics.contentHeight / 2;
+    
+    logoMark.style.cssText += `
+      width: ${tileSize}px;
+      height: ${tileSize}px;
+      left: ${centerX - tileSize / 2}px;
+      top: ${centerY - tileSize / 2}px;
+      transform: rotate(${lg.rotation || 0}deg);
+    `;
+    
+    const src = getLogoDataUrl(variant, lg.recolor ? lg.color : null, lg.opacity);
+    
+    if (lg.recolor && variant === 3) {
+      logoMark.style.backgroundColor = lg.color || "#0ea5e9";
+      logoMark.style.webkitMaskImage = `url(${src})`;
+      logoMark.style.maskImage = `url(${src})`;
+      logoMark.style.webkitMaskRepeat = 'no-repeat';
+      logoMark.style.maskRepeat = 'no-repeat';
+      logoMark.style.webkitMaskPosition = 'center';
+      logoMark.style.maskPosition = 'center';
+      logoMark.style.webkitMaskSize = 'contain';
+      logoMark.style.maskSize = 'contain';
+    } else {
+      logoMark.style.backgroundImage = `url(${src})`;
+      logoMark.style.backgroundRepeat = 'no-repeat';
+      logoMark.style.backgroundPosition = 'center';
+      logoMark.style.backgroundSize = 'contain';
+    }
+  } else if (layout === "tile" || layout === "diagonal") {
+    const tileSize = Math.max(20, Math.min(1000, Number(lg.tileSize) || 140));
+    const horizontalGap = Number(lg.horizontalGap || 180);
+    const verticalGap = Number(lg.verticalGap || 180);
+    const offsetX = Number(lg.tileOffsetX || 0);
+    const offsetY = Number(lg.tileOffsetY || 0);
+    
+    logoMark.style.cssText += `
+      left: ${metrics.timeColWidth}px;
+      top: ${metrics.dayHeadHeight}px;
+      width: ${metrics.contentWidth}px;
+      height: ${metrics.contentHeight}px;
+    `;
+    
+    const src = window.getTileSrc?.(
+      variant,
+      tileSize,
+      horizontalGap,
+      verticalGap,
+      lg.rotation || 0,
+      layout,
+      lg.recolor ? lg.color : null,
+      lg.opacity
+    ) || getLogoDataUrl(variant, lg.recolor ? lg.color : null, lg.opacity);
+    
+    if (lg.recolor && variant === 3) {
+      logoMark.style.backgroundColor = lg.color || "#0ea5e9";
+      logoMark.style.webkitMaskImage = `url(${src})`;
+      logoMark.style.maskImage = `url(${src})`;
+      logoMark.style.webkitMaskRepeat = 'repeat';
+      logoMark.style.maskRepeat = 'repeat';
+      
+      const patternSize = layout === "diagonal"
+        ? `${(tileSize + horizontalGap) * 2}px ${(tileSize + verticalGap) * 2}px`
+        : `${tileSize + horizontalGap}px ${tileSize + verticalGap}px`;
+      
+      logoMark.style.webkitMaskSize = patternSize;
+      logoMark.style.maskSize = patternSize;
+      logoMark.style.webkitMaskPosition = `${offsetX}px ${offsetY}px`;
+      logoMark.style.maskPosition = `${offsetX}px ${offsetY}px`;
+    } else {
+      logoMark.style.backgroundImage = `url(${src})`;
+      logoMark.style.backgroundRepeat = 'repeat';
+      
+      const patternSize = layout === "diagonal"
+        ? `${(tileSize + horizontalGap) * 2}px ${(tileSize + verticalGap) * 2}px`
+        : `${tileSize + horizontalGap}px ${tileSize + verticalGap}px`;
+      
+      logoMark.style.backgroundSize = patternSize;
+      logoMark.style.backgroundPosition = `${offsetX}px ${offsetY}px`;
+    }
+  }
+  
+  logoLayer.style.display = 'block';
+  logoMark.style.display = 'block';
+}
+
+function getLogoVariant() {
+  const variant = state.settings.logo?.variant;
+  if (variant === 3 && !state.settings.logo.uploadedFileData) {
+    return 1;
+  }
+  return clamp(Math.round(Number(variant ?? 1)), 1, 3);
+}
+
+window.getLogoDataUrl = function getLogoDataUrl(variant, recolorColor = null, opacity = 100) {
+  variant = Number(variant);
+  
+  if (variant === 3) {
+    const fileData = state.settings.logo?.uploadedFileData;
+    if (fileData && fileData.startsWith("data:")) {
+      if (recolorColor || opacity < 100) {
+        const base64 = fileData.split(',')[1];
+        let svgText = atob(base64);
+        
+        if (recolorColor && fileData.includes("image/svg+xml")) {
+          svgText = svgText.replace(/(fill|stroke)="[^"]*"/g, `$1="${recolorColor}"`);
+        }
+        
+        if (opacity < 100) {
+          const opacityValue = opacity / 100;
+          const svgStart = svgText.indexOf('<svg');
+          if (svgStart !== -1) {
+            const svgEnd = svgText.indexOf('>', svgStart);
+            const svgTag = svgText.substring(svgStart, svgEnd + 1);
+            
+            if (svgTag.includes('style="')) {
+              svgText = svgText.replace(/style="([^"]*)"/, `style="$1;opacity:${opacityValue}"`);
+            } else {
+              svgText = svgText.replace(svgTag, svgTag.replace('>', ` style="opacity:${opacityValue}">`));
+            }
+          }
+        }
+        
+        return `data:image/svg+xml;base64,${btoa(svgText)}`;
+      }
+      return fileData;
+    }
+    variant = 1;
+  }
+  
+  let svgString;
+  if (variant === 1) {
+    svgString = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="currentColor"/></svg>';
+  } else if (variant === 2) {
+    svgString = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="10" y="10" width="80" height="80" rx="15" fill="currentColor"/></svg>';
+  } else {
+    svgString = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="currentColor"/></svg>';
+  }
+  
+  if (recolorColor && (variant === 1 || variant === 2)) {
+    svgString = svgString.replace(/fill="currentColor"/g, `fill="${recolorColor}"`);
+  }
+  
+  if (opacity < 100 && (variant === 1 || variant === 2)) {
+    const opacityValue = opacity / 100;
+    if (variant === 1) {
+      svgString = svgString.replace('<circle ', `<circle style="opacity:${opacityValue}" `);
+    } else if (variant === 2) {
+      svgString = svgString.replace('<rect ', `<rect style="opacity:${opacityValue}" `);
+    }
+  }
+  
+  const base64 = btoa(unescape(encodeURIComponent(svgString)));
+  return `data:image/svg+xml;base64,${base64}`;
+};
+
+function applyLogoStyle(element, src, recolorColor = null, opacity = 1, isTile = false) {
+  element.style.opacity = opacity;
+  
+  if (recolorColor && src) {
+    element.style.backgroundColor = recolorColor;
+    element.style.webkitMaskImage = `url(${src})`;
+    element.style.maskImage = `url(${src})`;
+    element.style.webkitMaskRepeat = isTile ? 'repeat' : 'no-repeat';
+    element.style.maskRepeat = isTile ? 'repeat' : 'no-repeat';
+    element.style.webkitMaskPosition = 'center';
+    element.style.maskPosition = 'center';
+    element.style.webkitMaskSize = isTile ? 'contain' : 'contain';
+    element.style.maskSize = isTile ? 'contain' : 'contain';
+    element.style.backgroundImage = 'none';
+  } else if (src) {
+    element.style.backgroundImage = `url(${src})`;
+    element.style.backgroundRepeat = isTile ? 'repeat' : 'no-repeat';
+    element.style.backgroundPosition = 'center';
+    element.style.backgroundSize = 'contain';
+  }
+}
+
+async function waitForResources(element, timeout = 2000) {
+  const startTime = Date.now();
+  const resources = [];
+  
+  const images = element.querySelectorAll("img");
+  images.forEach((img) => {
+    if (!img.complete) {
+      resources.push(
+        new Promise((resolve) => {
+          img.onload = resolve;
+          img.onerror = resolve;
+        })
+      );
+    }
+  });
+  
+  const elementsWithBg = element.querySelectorAll('[style*="background"], [style*="mask"]');
+  elementsWithBg.forEach((el) => {
+    const style = getComputedStyle(el);
+    const bg = style.backgroundImage;
+    const mask = style.maskImage || style.webkitMaskImage;
+    
+    if (bg && bg !== "none" && !bg.includes("gradient")) {
+      resources.push(new Promise((resolve) => {
+        const img = new Image();
+        img.onload = resolve;
+        img.onerror = resolve;
+        const urlMatch = bg.match(/url\(["']?(.*?)["']?\)/);
+        if (urlMatch && urlMatch[1]) img.src = urlMatch[1];
+        else resolve();
+      }));
+    }
+    
+    if (mask && mask !== "none") {
+      resources.push(new Promise((resolve) => {
+        const img = new Image();
+        img.onload = resolve;
+        img.onerror = resolve;
+        const urlMatch = mask.match(/url\(["']?(.*?)["']?\)/);
+        if (urlMatch && urlMatch[1]) img.src = urlMatch[1];
+        else resolve();
+      }));
+    }
+  });
+  
+  if (document.fonts && document.fonts.ready) {
+    resources.push(document.fonts.ready);
+  }
+  
+  try {
+    await Promise.race([
+      Promise.allSettled(resources),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Таймаут загрузки ресурсов")), timeout)
+      )
+    ]);
+  } catch (e) {
+    console.warn("Не все ресурсы загрузились:", e.message);
+  }
+  
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+}
+
+async function fallbackCapture(element, background = null) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  
+  // Получаем реальные размеры элемента
+  const rect = element.getBoundingClientRect();
+  const width = Math.max(100, rect.width || element.offsetWidth || 800);
+  const height = Math.max(100, rect.height || element.offsetHeight || 600);
+  
+  canvas.width = width;
+  canvas.height = height;
+  
+  // Заливаем фон
+  if (background) {
+    ctx.fillStyle = background;
+  } else {
+    ctx.fillStyle = '#ffffff';
+  }
+  ctx.fillRect(0, 0, width, height);
+  
+  // Рисуем простой текст с информацией об ошибке
+  ctx.fillStyle = '#000000';
+  ctx.font = '16px Arial';
+  ctx.fillText("Упрощенный предпросмотр экспорта", 20, 30);
+  
+  // Добавляем информацию о количестве событий
+  const eventCount = element.querySelectorAll('.event').length;
+  ctx.fillText(`Событий в расписании: ${eventCount}`, 20, 60);
+  
+  // Добавляем текущую дату
+  const now = new Date();
+  ctx.fillText(`Дата экспорта: ${now.toLocaleDateString()}`, 20, 90);
+  
+  return canvas;
+}
+
+function createFinalCanvas(sourceCanvas, fmt) {
+  const final = document.createElement("canvas");
+  final.width = fmt.w;
+  final.height = fmt.h;
+  
+  const ctx = final.getContext("2d");
+  
+  const srcW = sourceCanvas.width;
+  const srcH = sourceCanvas.height;
+  
+  const scale = Math.min(fmt.w / srcW, fmt.h / srcH);
+  const dw = srcW * scale;
+  const dh = srcH * scale;
+  const x = (fmt.w - dw) / 2;
+  const y = (fmt.h - dh) / 2;
+  
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  
+  // Просто масштабируем без поворота
+  ctx.drawImage(sourceCanvas, x, y, dw, dh);
+  
+  ctx.restore();
+  return final;
+}
+
+function getExportPresetById(id) {
+  return EXPORT_PRESETS.find((p) => p.id === id) || EXPORT_PRESETS[0];
+}
+
+function resolveExportBackground(expBg) {
+  if (expBg === "transparent") {
+    return expFormat.value === "jpeg" ? "#ffffff" : null;
+  }
+  if (expBg === "white") return "#ffffff";
+  return getThemeBgCssColor();
+}
+
+function getThemeBgCssColor() {
+  const cs = getComputedStyle(document.documentElement);
+  let bg = (cs.getPropertyValue("--bg") || "").trim();
+  if (!bg) return "#ffffff";
+  if (bg.startsWith("#")) return bg;
+  return `#${bg}`;
+}
+
+async function downloadFromExportModal() {
+  const opts = getExportOptsFromUI();
+  
+  // Определяем, нужно ли перестраивать изображение
+  const needsRebuild =
+    !lastPreview ||
+    lastPreview.fmt !== opts.fmt ||
+    lastPreview.preset?.id !== opts.preset?.id ||
+    lastPreview.imageFormat !== opts.imageFormat ||
+    lastPreview.quality !== opts.quality ||
+    lastPreview.background !== opts.background ||
+    lastPreview.compact !== opts.compact;
+  
+  try {
+    // Если нужно перестроить или нет предпросмотра
+    if (needsRebuild || !lastPreview?.dataUrl) {
+      toast("OK", "Экспорт", "Подготовка файла для скачивания…");
+      const exportResult = await executeExport(opts);
+      
+      if (!exportResult) {
+        toast("ERR", "Экспорт", "Не удалось подготовить файл для скачивания");
+        return;
+      }
+      
+      // Сохраняем результат в lastPreview
+      lastPreview = { dataUrl: exportResult.dataUrl, ...opts };
+    }
+    
+    // Проверяем, что данные для скачивания есть
+    if (!lastPreview?.dataUrl) {
+      toast("ERR", "Скачивание", "Нет данных для скачивания");
+      return;
+    }
+    
+    // Создаем элемент для скачивания
+    const a = document.createElement("a");
+    const stamp = new Date().toISOString().slice(0, 10);
+    const timestamp = new Date().toISOString().slice(11, 19).replace(/:/g, '-');
+    
+    // Генерируем имя файла в зависимости от формата
+    if (opts.fmt === "svg") {
+      const fileName = `schedule-${opts.preset.id}-${stamp}_${timestamp}.svg`;
+      a.download = fileName;
+      a.href = lastPreview.dataUrl;
+      a.click();
+      toast("OK", "SVG", `Файл "${fileName}" скачан.`);
+      return;
+    }
+    
+    // Для форматов изображений
+    const ext = opts.imageFormat === "image/jpeg" ? "jpg" : "png";
+    const fileName = `schedule-${opts.preset.id}-${stamp}_${timestamp}.${ext}`;
+    a.download = fileName;
+    a.href = lastPreview.dataUrl;
+    a.click();
+    
+    toast("OK", "Экспорт", `Файл "${fileName}" скачан.`);
+    
+  } catch (error) {
+    console.error("Download error:", error);
+    toast("ERR", "Скачивание", error?.message || "Ошибка при скачивании файла");
+  }
+}
+
+function setupExportDownloadButton() {
+  const downloadBtn = document.querySelector('#btnExpDownload');
+  if (downloadBtn) {
+    downloadBtn.addEventListener('click', downloadFromExportModal);
+  }
+
+
+function rotateCanvas90CW(sourceCanvas) {
+  const out = document.createElement("canvas");
+  out.width = sourceCanvas.height;
+  out.height = sourceCanvas.width;
+
+  const ctx = out.getContext("2d");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+
+  ctx.translate(out.width, 0);
+  ctx.rotate(Math.PI / 2);
+  ctx.drawImage(sourceCanvas, 0, 0);
+
+  return out;
+}}
+
+window.downloadFromExportModal = downloadFromExportModal;
+window.setupExportDownloadButton = setupExportDownloadButton;
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', setupExportDownloadButton);
+} else {
+  setupExportDownloadButton();
+}
+
+function applyCssVariablesToEvents(clone) {
+  const eventEls = clone.querySelectorAll(".event");
+  
+  eventEls.forEach((el) => {
+    // Показываем событие
+    el.style.display = 'block';
+    el.style.visibility = 'visible';
+    el.classList.remove('dim');
+    el.style.opacity = '1';
+    
+    // Копируем вычисленные стили из оригинала
+    const originalId = el.dataset.eid;
+    if (!originalId) return;
+    
+    const original = document.querySelector(`.event[data-eid="${originalId}"]`);
+    if (!original) return;
+    
+    const cs = getComputedStyle(original);
+    
+    // 🔑 УБРАТЬ !important из переменных (ломает тему!)
+    const evBg = cs.getPropertyValue("--ev-bg").trim();
+    const evText = cs.getPropertyValue("--ev-text").trim();
+    
+    if (evBg) {
+      el.style.backgroundColor = evBg;
+      el.style.setProperty("--ev-bg", evBg); // ← БЕЗ !important
+    }
+    
+    if (evText) {
+      el.style.color = evText;
+      el.style.setProperty("--ev-text", evText); // ← БЕЗ !important
+    }
+    
+    // Копируем остальные стили
+    const borderColor = cs.borderColor;
+    if (borderColor && borderColor !== "rgba(0, 0, 0, 0)") {
+      el.style.borderColor = borderColor;
+      el.style.borderStyle = cs.borderStyle || "solid";
+      el.style.borderWidth = cs.borderWidth || "1px";
+    }
+    
+    const boxShadow = cs.boxShadow;
+    if (boxShadow && boxShadow !== "none") {
+      el.style.boxShadow = boxShadow;
+    }
+  });
+}
+
+function applyCssVariablesToEventsForExport(targetElement) {
+  const eventEls = targetElement.querySelectorAll(".event");
+
+  // Получаем значение alpha.event из настроек
+  const globalEventAlpha = state.settings.theme.alpha.event / 100; // Преобразуем в 0.0 - 1.0
+
+  eventEls.forEach((el) => {
+    const originalId = el.dataset.eid;
+    if (!originalId) return;
+
+    // Находим оригинальный элемент в документе
+    // ВАЖНО: Получаем значение переменной НЕ из computedStyle, а из атрибута style
+    const original = document.querySelector(`.event[data-eid="${originalId}"]`);
+    if (!original) return;
+
+    // --- ПРАВИЛЬНОЕ получение значения переменной ---
+    let evBg = original.style.getPropertyValue("--ev-bg").trim(); // <-- Ключевая строка
+    const evText = original.style.getPropertyValue("--ev-text").trim(); // <-- Также из style
+    // --- Конец правильного получения ---
+
+    // --- Логика обработки evBg с учетом alpha.event ---
+    let finalBackgroundColor = evBg;
+
+    // Проверяем, является ли evBg пустым (означает прозрачный?)
+    if (!evBg) {
+      // Если переменная не установлена в style, считаем прозрачным
+      finalBackgroundColor = 'rgba(0, 0, 0, 0)';
+    } else {
+       // evBg может быть #RRGGBB, rgb(r,g,b), rgba(r,g,b,a)
+       // Нужно получить базовый цвет и применить к нему globalEventAlpha
+       const parsedColor = parseRgbaOrHex(evBg);
+       if (parsedColor) {
+         // Устанавливаем цвет с новой альфой
+         // Умножаем исходную альфу (если была) на globalEventAlpha
+         const finalAlpha = parsedColor.a !== undefined ? parsedColor.a * globalEventAlpha : globalEventAlpha;
+         finalBackgroundColor = `rgba(${parsedColor.r}, ${parsedColor.g}, ${parsedColor.b}, ${finalAlpha})`;
+       } else {
+         // Если не удалось распарсить, используем evBg как есть.
+         // Это может быть именованный цвет ('red'), который html2canvas/svg может обработать.
+         // Но это менее надежно. Лучше парсить.
+         console.warn(`Не удалось распарсить цвет события: ${evBg}. Используем как есть.`);
+         // Однако, если evBg был hex, он не будет иметь альфы. Нужно обязательно преобразовать в rgba.
+         // parseRgbaOrHex выше должен справиться.
+         // Если он вернул null, значит формат совсем неизвестен.
+         // В таком случае, fallback - прозрачный или черный с alpha.
+         finalBackgroundColor = `rgba(0, 0, 0, ${globalEventAlpha})`;
+       }
+    }
+    // --- Конец логики обработки evBg ---
+
+    // КРИТИЧЕСКИ: Устанавливаем прямые стили
+    if (finalBackgroundColor) {
+      el.style.backgroundColor = finalBackgroundColor; // <-- Это ключ для html2canvas и html-to-image
+    }
+    if (evText) {
+      el.style.color = evText; // <-- Устанавливаем цвет текста напрямую
+    }
+
+    // Убираем затемнение
+    el.classList.remove("dim");
+    el.style.opacity = "1";
+  });
+}
+
+function parseRgba(colorString) {
+  // Регулярное выражение для rgb(r, g, b)
+  const rgbMatch = colorString.match(/^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i);
+  if (rgbMatch) {
+    return {
+      r: parseInt(rgbMatch[1], 10),
+      g: parseInt(rgbMatch[2], 10),
+      b: parseInt(rgbMatch[3], 10),
+      a: 1.0 // Устанавливаем a=1, потому что в rgb() нет альфы
+    };
+  }
+
+  // Регулярное выражение для rgba(r, g, b, a)
+  const rgbaMatch = colorString.match(/^rgba\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(0|1|0?\.\d+)\s*\)$/i);
+  if (rgbaMatch) {
+    return {
+      r: parseInt(rgbaMatch[1], 10),
+      g: parseInt(rgbaMatch[2], 10),
+      b: parseInt(rgbaMatch[3], 10),
+      a: parseFloat(rgbaMatch[4])
+    };
+  }
+
+  // Можно добавить поддержку HEX, но для CSS-переменных обычно используется rgb/rgba
+  return null;
+}
+
+function parseRgbaOrHex(colorString) {
+  // Регулярное выражение для rgb(r, g, b)
+  const rgbMatch = colorString.match(/^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i);
+  if (rgbMatch) {
+    return {
+      r: parseInt(rgbMatch[1], 10),
+      g: parseInt(rgbMatch[2], 10),
+      b: parseInt(rgbMatch[3], 10),
+      a: 1.0 // Устанавливаем a=1, потому что в rgb() нет альфы
+    };
+  }
+
+  // Регулярное выражение для rgba(r, g, b, a)
+  const rgbaMatch = colorString.match(/^rgba\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(0|1|0?\.\d+)\s*\)$/i);
+  if (rgbaMatch) {
+    return {
+      r: parseInt(rgbaMatch[1], 10),
+      g: parseInt(rgbaMatch[2], 10),
+      b: parseInt(rgbaMatch[3], 10),
+      a: parseFloat(rgbaMatch[4])
+    };
+  }
+
+  // Регулярное выражение для HEX (#RGB or #RRGGBB)
+  const hexMatch = colorString.match(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/);
+  if (hexMatch) {
+    let hex = hexMatch[1];
+    // Expand shorthand form (e.g. "03F") to full form (e.g. "0033FF")
+    if (hex.length === 3) {
+      hex = hex.split('').map(char => char + char).join('');
+    }
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+    return {
+      r: r,
+      g: g,
+      b: b,
+      a: 1.0 // HEX не содержит альфы
+    };
+  }
+
+  // Регулярное выражение для HEXA (#RGBA or #RRGGBBAA) - если поддерживается
+  // Это нестандарт, но встречается
+  // const hexaMatch = colorString.match(/^#([A-Fa-f0-9]{8}|[A-Fa-f0-9]{4})$/);
+  // if (hexaMatch) { ... }
+
+  return null;
+}

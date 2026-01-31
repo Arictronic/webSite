@@ -2171,3 +2171,17 @@ html[data-scheme="dark"] .event:hover {
   top: var(--day-head-height, 42px) !important;
 }
 
+
+.event {
+  background-color: var(--ev-bg-color, rgba(var(--ev-bg-rgb), var(--eventAlpha, 1)));
+  transition: opacity 0.2s;
+}
+
+.event.dim {
+  opacity: 0.35 !important;
+}
+
+.col-today {
+  background-color: var(--todayColRGBA, rgba(255, 245, 245, 0.6)) !important;
+}
+

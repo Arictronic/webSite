@@ -4,100 +4,19 @@ import {
   FONT_ID_ALIASES,
 } from "./fonts.generated.js";
 
-const AUTH_PASSWORD = "12345678";
-const AUTH_OK_KEY = "studio_auth_ok";
-let authorized = false;
-
-function isAuthorized() {
-  return localStorage.getItem(AUTH_OK_KEY) === "1";
-}
-
-function setAuthorizedTrue() {
-  authorized = true;
-  localStorage.setItem(AUTH_OK_KEY, "1");
-}
-
-function renderAuthGate(onSuccess) {
-  const appRoot = document.getElementById("appRoot");
-  if (appRoot) appRoot.style.display = "none";
-
-  const wrap = document.createElement("div");
-  wrap.id = "authGate";
-  wrap.className = "backdrop show";
-
-  wrap.innerHTML = `
-    <div class="modal auth-modal" role="dialog" aria-modal="true" aria-labelledby="authTitle">
-      <header class="modal-head">
-        <h2 id="authTitle">Вход</h2>
-      </header>
-
-      <div class="modal-body">
-        <div class="field">
-          <label for="authLogin">Логин (любой)</label>
-          <input id="authLogin" type="text" autocomplete="username" />
-        </div>
-
-        <div class="field">
-          <label for="authPass">Пароль</label>
-          <input id="authPass" type="password" autocomplete="current-password" />
-        </div>
-
-        <div id="authErr" class="warning" style="display:none;">Неверный пароль</div>
-      </div>
-
-      <footer class="modal-foot">
-        <div class="right-actions">
-          <button id="authBtn" class="primary" type="button">Войти</button>
-        </div>
-      </footer>
-    </div>
-  `;
-
-  document.body.appendChild(wrap);
-
-  const passEl = wrap.querySelector("#authPass");
-  const btn = wrap.querySelector("#authBtn");
-  const err = wrap.querySelector("#authErr");
-
-  function submit() {
-    const pass = String(passEl.value || "");
-    if (pass === AUTH_PASSWORD) {
-      setAuthorizedTrue();
-
-      const appRoot = document.getElementById("appRoot");
-      if (appRoot) appRoot.style.display = "";
-
-      wrap.remove();
-      onSuccess();
-    } else {
-      err.style.display = "block";
-      passEl.focus();
-      passEl.select?.();
-    }
-  }
-
-  btn.addEventListener("click", submit);
-  passEl.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") submit();
-  });
-}
-
-console.log("app.js загружен");
-
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => {
-    console.log("DOM загружен, запускаем инициализацию");
-  });
-} else {
-  console.log("DOM уже загружен");
-}
-
-const MAX_NAME_LINES = 3;
-const MAX_NAME_CHARS = 150;
-const MAX_NAME_LINE_LEN = 50;
-
+// ===================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И КОНСТАНТЫ =====================
+const $ = (id) => document.getElementById(id);
 const DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
-
+const LOGO_URLS = {
+  1: "./src/Logo.svg",
+  2: "./src/Logo2.svg",
+  3: "uploaded"
+};
+const LOGO_SVG_STRINGS = {
+  1: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="currentColor"/></svg>',
+  2: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="10" y="10" width="80" height="80" rx="15" fill="currentColor"/></svg>',
+  3: null
+};
 const COLOR_SWATCHES = [
   "#0f172a",
   "#111827",
@@ -121,7 +40,6 @@ const COLOR_SWATCHES = [
   "#a855f7",
   "#ec4899",
 ];
-
 const FONT_PRESETS = {
   compact: {
     lineHeight: 1.05,
@@ -161,7 +79,27 @@ const FONT_PRESETS = {
     textTransform: "none",
   },
 };
-
+const EXPORT_PRESETS = [
+  { id: "vk_square", name: "VK пост 1:1 (1080×1080)", w: 1080, h: 1080 },
+  { id: "vk_wide", name: "VK обложка 1.91:1 (1200×630)", w: 1200, h: 630 },
+  { id: "tg_16_9", name: "Telegram 16:9 (1280×720)", w: 1280, h: 720 },
+  { id: "tg_square", name: "Telegram 1:1 (1080×1080)", w: 1080, h: 1080 },
+  { id: "a4_portrait", name: "A4 портрет (2480×3508)", w: 2480, h: 3508 },
+  { id: "a4_land", name: "A4 альбом (3508×2480)", w: 3508, h: 2480 },
+  { id: "auto", name: "Auto (по размеру расписания)", w: 0, h: 0 },
+];
+const GENERIC_FAMILIES = new Set([
+  "serif",
+  "sans-serif",
+  "monospace",
+  "cursive",
+  "fantasy",
+  "system-ui",
+  "ui-serif",
+  "ui-sans-serif",
+  "ui-monospace",
+  "-apple-system",
+]);
 const THEME_PRESETS = [
   {
     id: "warm-red",
@@ -239,34 +177,437 @@ const THEME_PRESETS = [
     },
   },
 ];
+const DEFAULT_LIGHT = THEME_PRESETS[0].tokens;
+const DEFAULT_DARK = THEME_PRESETS.find((p) => p.id === "graphite-dark").tokens;
+const DEFAULT_FONT_SAMPLE_TEXT = DEFAULT_STATE().settings.font.sampleText;
+const pickerMain = initFontPicker({
+  wrapId: "fontPicker",
+  btnId: "fontPickerBtn",
+  popId: "fontPickerPop",
+  listId: "fontPickerList",
+  searchId: "fontPickerSearch",
+  titleId: "fontPickerTitle",
+  sampleId: "fontPickerSample",
+  getValue: () => fontFamily.value,
+  setValue: (id) => {
+    fontFamily.value = id;
+    state.settings.font.family = id;
+  },
+});
+const pickerTitle = initFontPicker({
+  wrapId: "fontTitlePicker",
+  btnId: "fontTitlePickerBtn",
+  popId: "fontTitlePickerPop",
+  listId: "fontTitlePickerList",
+  searchId: "fontTitlePickerSearch",
+  titleId: "fontTitlePickerTitle",
+  sampleId: "fontTitlePickerSample",
+  getValue: () => fontTitleFamily.value,
+  setValue: (id) => {
+    fontTitleFamily.value = id;
+    state.settings.font.titleFamily = id;
+  },
+});
+const pickerMeta = initFontPicker({
+  wrapId: "fontMetaPicker",
+  btnId: "fontMetaPickerBtn",
+  popId: "fontMetaPickerPop",
+  listId: "fontMetaPickerList",
+  searchId: "fontMetaPickerSearch",
+  titleId: "fontMetaPickerTitle",
+  sampleId: "fontMetaPickerSample",
+  getValue: () => fontMetaFamily.value,
+  setValue: (id) => {
+    fontMetaFamily.value = id;
+    state.settings.font.metaFamily = id;
+  },
+});
+function DEFAULT_STATE() {
+  return {
+    version: 13,
+    settings: {
+      schedule: {
+        start: "08:00",
+        end: "22:00",
+        slotMinutes: 60,
+        slotHeight: 72,
+        snapMinutes: 5,
+        maxPerCell: 2,
+        defaultDuration: 60,
+      },
+      display: {
+        cellView: "timeline",
+        cardMode: "namecoachroom",
+        showNotes: true,
+        showEmptyHint: true,
+        showDayView: false,
+        showTodayHighlight: true,
+        dayWidthPx: 0,
+        cellPadPx: 6,
+      },
+      font: {
+        preset: "custom",
+        tightness: "normal",
+        titleFamily: "system",
+        metaFamily: "system",
+        family: "system",
+        lineHeight: 1.12,
+        titleSize1: 12,
+        titleSize2: 10,
+        metaSize1: 11,
+        metaSize2: 9,
+        weightTitle: 900,
+        weightMeta: 600,
+        sampleText: "(расписание / РАСПИСАНИЕ)",
+        letterSpacing: 0,
+        textTransform: "none",
+        titleClamp: 3,
+        cardPadY: 7,
+        cardRadius: 12,
+      },
+      theme: {
+        mode: "auto",
+        customTokens: deepCopy(THEME_PRESETS[0].tokens),
+        alpha: { today: 60, now: 65, event: 100, shadow: 10 },
+      },
+      logo: {
+        enabled: false,
+        variant: 1,
+        opacity: 12,
+        recolor: false,
+        color: "#0ea5e9",
+        layout: "center",
+        tileSize: 30,
+        horizontalGap: 180,
+        verticalGap: 180,
+        rotation: 0,
+        tileOffsetX: 0,
+        tileOffsetY: 0,
+        uploadedFileData: null,
+      },
+    },
+    directions: [
+      { id: "yoga", name: "Йога", color: "#ef4444" },
+      { id: "pilates", name: "Пилатес", color: "#14b8a6" },
+      { id: "crossfit", name: "Кроссфит", color: "#0ea5e9" },
+    ],
+    coaches: ["Анна", "Дмитрий", "Елена"],
+    events: [],
+  };
+}
+let state = DEFAULT_STATE();
+let filters = {
+  day: "all",
+  time: "all",
+  dir: new Set(),
+  q: ""
+};
+
+let filterCache = new Map();
+let lastPreview = null;
+let cachedMetrics = null;
+let metricsTimestamp = 0;
+let lastLogoState = null;
+let isSaving = false;
+let lastSaveTime = 0;
+let autoSaveTimer;
+let history = [];
+let future = [];
+let searchDebounce;
+let authorized = false;
+let lastGeomKey = "";
+let lastCellView = null;
+let geometrySyncRaf = 0;
+let resizeDebounce = null;
+let geometryDirty = false;
+let geometryRafId = null;
+let geometryCache = new WeakMap();
+let searchDebounceTimer = null;
+let lastSearchValue = "";
+let lastFilterHash = "";
+
+const SEARCH_DEBOUNCE_MS = 300;
+const METRICS_CACHE_TIME = 1000;
 const STORAGE_KEY = "studio_schedule_v13";
+const AUTH_PASSWORD = "12345678";
+const AUTH_OK_KEY = "studio_auth_ok";
+const MAX_NAME_LINES = 3;
+const MAX_NAME_CHARS = 150;
+const MAX_NAME_LINE_LEN = 50;
+const HISTORY_LIMIT = 60;
 
-const exportBackdrop = document.getElementById("exportBackdrop");
-const expPreset = document.getElementById("expPreset");
-const expFormat = document.getElementById("expFormat");
-const expBg = document.getElementById("expBg");
-const expQuality = document.getElementById("expQuality");
-const expQualityVal = document.getElementById("expQualityVal");
-const expJpegWrap = document.getElementById("expJpegWrap");
-const expPreviewImg = document.getElementById("expPreviewImg");
+// ================== ID HTML элементы ============================
+const exportBackdrop = $("exportBackdrop");
+const expPreset = $("expPreset");
+const expFormat = $("expFormat");
+const expBg = $("expBg");
+const expQuality = $("expQuality");
+const expQualityVal = $("expQualityVal");
+const expJpegWrap = $("expJpegWrap");
+const expPreviewImg = $("expPreviewImg");
+const fontPreset = $("fontPreset");
+const fontQuickTightness = $("fontQuickTightness");
+const fontLetterSpacing = $("fontLetterSpacing");
+const fontTextTransform = $("fontTextTransform");
+const fontTitleClamp = $("fontTitleClamp");
+const fontCardPaddingY = $("fontCardPaddingY");
+const fontCardRadius = $("fontCardRadius");
+const eventBackdrop = $("eventBackdrop");
+const evId = $("evId");
+const evDay = $("evDay");
+const evName = $("evName");
+const evDir = $("evDir");
+const evStart = $("evStart");
+const evDur = $("evDur");
+const evCoach = $("evCoach");
+const evRoom = $("evRoom");
+const evNotes = $("evNotes");
+const dirPreviewWrap = $("dirPreviewWrap");
+const conflictsEl = $("conflicts");
+const newDirName = $("newDirName");
+const newDirColor = $("newDirColor");
+const swatches = $("swatches");
+const newDirPreview = $("newDirPreview");
+const btnDelete = $("btnDelete");
+const btnDuplicate = $("btnDuplicate");
+const logoVariant = $("logoVariant");
+const setStart = $("setStart");
+const setEnd = $("setEnd");
+const setDefaultDur = $("setDefaultDur");
+const dispCellView = $("dispCellView");
+const dispCardMode = $("dispCardMode");
+const dispShowNotes = $("dispShowNotes");
+const dispShowEmptyHint = $("dispShowEmptyHint");
+const dispShowToday = $("dispShowToday");
+const dispDayWidth = $("dispDayWidth");
+const dispCellPad = $("dispCellPad");
+const fontFamily = $("fontFamily");
+const fontTitleFamily = $("fontTitleFamily");
+const fontMetaFamily = $("fontMetaFamily");
+const logoLayout = $("logoLayout");
+const logoEnabled = $("logoEnabled");
+const logoOpacity = $("logoOpacity");
+const logoOpacityVal = $("logoOpacityVal");
+const logoRecolor = $("logoRecolor");
+const logoColorWrap = $("logoColorWrap");
+const logoColor = $("logoColor");
+const logoTileSize = $("logoTileSize");
+const logoTileGap = $("logoTileGap");
+const logoTileOffsetX = $("logoTileOffsetX");
+const logoTileOffsetY = $("logoTileOffsetY");
+const logoHorizontalGap = $("logoHorizontalGap");
+const logoVerticalGap = $("logoVerticalGap");
+const logoRotation = $("logoRotation");
+const logoRotationVal = $("logoRotationVal");
+const logoHorizontalGapVal = $("logoHorizontalGapVal");
+const logoVerticalGapVal = $("logoVerticalGapVal");
+const logoTileSizeNum = $("logoTileSizeNum");
+const logoUpload = $("logoUpload");
+const logoHorizontalGapNum = $("logoHorizontalGapNum");
+const logoVerticalGapNum = $("logoVerticalGapNum");
+const logoRotationNum = $("logoRotationNum");
+const logoTileOffsetXNum = $("logoTileOffsetXNum");
+const logoTileOffsetYNum = $("logoTileOffsetYNum");
+const logoOpacityNum = $("logoOpacityNum");
+const settingsBackdrop = $("settingsBackdrop");
+const settingsWarn = $("settingsWarn");
+const tabSchedule = $("tabSchedule");
+const tabDisplay = $("tabDisplay");
+const tabFont = $("tabFont");
+const tabTheme = $("tabTheme");
+const panelSchedule = $("panelSchedule");
+const panelDisplay = $("panelDisplay");
+const panelFont = $("panelFont");
+const panelTheme = $("panelTheme");
+const tabLogo = $("tabLogo");
+const panelLogo = $("panelLogo");
+const fontLineHeight = $("fontLineHeight");
+const fontSampleText = $("fontSampleText");
+const fontTitle1 = $("fontTitle1");
+const fontTitle2 = $("fontTitle2");
+const fontMeta1 = $("fontMeta1");
+const fontMeta2 = $("fontMeta2");
+const fontWeightTitle = $("fontWeightTitle");
+const fontWeightMeta = $("fontWeightMeta");
+const themeMode = $("themeMode");
+const themePreset = $("themePreset");
+const paletteGrid = $("paletteGrid");
+const themeWarn = $("themeWarn");
+const tAccent = $("tAccent");
+const tBg = $("tBg");
+const tCard = $("tCard");
+const tText = $("tText");
+const tBorder = $("tBorder");
+const tGridHead = $("tGridHead");
+const tNowRow = $("tNowRow");
+const tTodayCol = $("tTodayCol");
+const alphaToday = $("alphaToday");
+const alphaNow = $("alphaNow");
+const alphaEvent = $("alphaEvent");
+const alphaShadow = $("alphaShadow");
+const alphaTodayVal = $("alphaTodayVal");
+const alphaNowVal = $("alphaNowVal");
+const alphaEventVal = $("alphaEventVal");
+const alphaShadowVal = $("alphaShadowVal");
+// ================== Вспомогательные функции ============================
+$("btnSettings").addEventListener("click", openSettings);
+$("btnUndo").addEventListener("click", undo);
+$("btnRedo").addEventListener("click", redo);
+$("btnExportJson").addEventListener("click", exportJson);
+$("btnImportJson").addEventListener("click", () => $("fileInput").click());
+$("btnExportPng").addEventListener("click", openExportModal);
 
-const $ = (id) => document.getElementById(id);
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => {
+    console.log("DOM загружен, запускаем инициализацию");
+  });
+} else {
+  console.log("DOM уже загружен");
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function toast(kind, title, text) {
+  const toasts = document.querySelector("#toasts");
+  if (!toasts) {
+    console.warn("Контейнер для тостов не найден");
+    return;
+  }
+  
+  const el = document.createElement("div");
+  el.className = "toast";
+  
+  const icon = document.createElement("div");
+  icon.className = "icon";
+  icon.textContent = kind === "OK" ? "✓" : kind === "WARN" ? "!" : "×";
+  icon.style.background = 
+    kind === "OK" 
+      ? "var(--ok)" 
+      : kind === "WARN" 
+        ? "var(--warn)" 
+        : "var(--danger)";
+  
+  const content = document.createElement("div");
+  content.className = "content";
+  const t = document.createElement("div");
+  t.className = "title";
+  t.textContent = title;
+  const d = document.createElement("div");
+  d.className = "text";
+  d.textContent = text || "";
+  content.appendChild(t);
+  content.appendChild(d);
+  
+  const actions = document.createElement("div");
+  actions.className = "actions";
+  const close = document.createElement("button");
+  close.className = "close";
+  close.textContent = "×";
+  close.addEventListener("click", () => el.remove());
+  actions.appendChild(close);
+  
+  el.appendChild(icon);
+  el.appendChild(content);
+  el.appendChild(actions);
+  
+  toasts.appendChild(el);
+  
+  setTimeout(() => {
+    if (el.isConnected) el.remove();
+  }, 4500);
+}
+
+function isAuthorized() {
+  return localStorage.getItem(AUTH_OK_KEY) === "1";
+}
+
+function setAuthorizedTrue() {
+  authorized = true;
+  localStorage.setItem(AUTH_OK_KEY, "1");
+}
+
+function renderAuthGate(onSuccess) {
+  const appRoot = $("appRoot");
+  if (appRoot) appRoot.style.display = "none";
+
+  const wrap = document.createElement("div");
+  wrap.id = "authGate";
+  wrap.className = "backdrop show";
+
+  wrap.innerHTML = `
+    <div class="modal auth-modal" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+      <header class="modal-head">
+        <h2 id="authTitle">Вход</h2>
+      </header>
+
+      <div class="modal-body">
+        <div class="field">
+          <label for="authLogin">Логин (любой)</label>
+          <input id="authLogin" type="text" autocomplete="username" />
+        </div>
+
+        <div class="field">
+          <label for="authPass">Пароль</label>
+          <input id="authPass" type="password" autocomplete="current-password" />
+        </div>
+
+        <div id="authErr" class="warning" style="display:none;">Неверный пароль</div>
+      </div>
+
+      <footer class="modal-foot">
+        <div class="right-actions">
+          <button id="authBtn" class="primary" type="button">Войти</button>
+        </div>
+      </footer>
+    </div>
+  `;
+
+  document.body.appendChild(wrap);
+
+  const passEl = wrap.querySelector("#authPass");
+  const btn = wrap.querySelector("#authBtn");
+  const err = wrap.querySelector("#authErr");
+
+  function submit() {
+    const pass = String(passEl.value || "");
+    if (pass === AUTH_PASSWORD) {
+      setAuthorizedTrue();
+
+      const appRoot = $("appRoot");
+      if (appRoot) appRoot.style.display = "";
+
+      wrap.remove();
+      onSuccess();
+    } else {
+      err.style.display = "block";
+      passEl.focus();
+      passEl.select?.();
+    }
+  }
+
+  btn.addEventListener("click", submit);
+  passEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") submit();
+  });
+}
 
 function pad2(n) {
   return String(n).padStart(2, "0");
 }
+
 function parseHHMM(s) {
   const [h, m] = (s || "").split(":").map(Number);
   if (Number.isNaN(h) || Number.isNaN(m)) return null;
   return h * 60 + m;
 }
+
 function minToHHMM(min) {
   const h = Math.floor(min / 60);
   const m = min % 60;
   return `${pad2(h)}:${pad2(m)}`;
-}
-function clamp(v, a, b) {
-  return Math.max(a, Math.min(b, v));
 }
 
 function initErrorHandling() {
@@ -296,19 +637,6 @@ function initErrorHandling() {
     console.error("Необработанный промис:", e.reason);
   });
 }
-
-const GENERIC_FAMILIES = new Set([
-  "serif",
-  "sans-serif",
-  "monospace",
-  "cursive",
-  "fantasy",
-  "system-ui",
-  "ui-serif",
-  "ui-sans-serif",
-  "ui-monospace",
-  "-apple-system",
-]);
 
 function quoteCssString(s) {
   return `"${String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
@@ -342,15 +670,18 @@ function hexToRgb(hex) {
     b: parseInt(h.slice(4, 6), 16),
   };
 }
+
 function rgba(hex, alpha) {
   const rgb = hexToRgb(hex);
   if (!rgb) return `rgba(0,0,0,${alpha})`;
   return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
 }
+
 function srgbToLin(c) {
   const v = c / 255;
   return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
 }
+
 function relLuminance(hex) {
   const rgb = hexToRgb(hex);
   if (!rgb) return 0;
@@ -359,6 +690,7 @@ function relLuminance(hex) {
     b = srgbToLin(rgb.b);
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
+
 function contrastRatio(fgHex, bgHex) {
   const L1 = relLuminance(fgHex);
   const L2 = relLuminance(bgHex);
@@ -366,6 +698,7 @@ function contrastRatio(fgHex, bgHex) {
   const darker = Math.min(L1, L2);
   return (lighter + 0.05) / (darker + 0.05);
 }
+
 function bestTextOn(bgHex) {
   const dark = "#0f172a";
   const light = "#ffffff";
@@ -374,87 +707,6 @@ function bestTextOn(bgHex) {
     : light;
 }
 
-const DEFAULT_STATE = () => ({
-  version: 13,
-  settings: {
-    schedule: {
-      start: "08:00",
-      end: "22:00",
-      slotMinutes: 60,
-      slotHeight: 72,
-      snapMinutes: 5,
-      maxPerCell: 2,
-      defaultDuration: 60,
-    },
-    display: {
-      cellView: "timeline",
-      cardMode: "namecoachroom",
-      showNotes: true,
-      showEmptyHint: true,
-      showDayView: false,
-      showTodayHighlight: true,
-      dayWidthPx: 0,
-      cellPadPx: 6,
-    },
-    font: {
-      preset: "custom",
-      tightness: "normal",
-      titleFamily: "system",
-      metaFamily: "system",
-      family: "system",
-      lineHeight: 1.12,
-      titleSize1: 12,
-      titleSize2: 10,
-      metaSize1: 11,
-      metaSize2: 9,
-      weightTitle: 900,
-      weightMeta: 600,
-      sampleText: "(расписание / РАСПИСАНИЕ)",
-      letterSpacing: 0,
-      textTransform: "none",
-      titleClamp: 3,
-      cardPadY: 7,
-      cardRadius: 12,
-    },
-    theme: {
-      mode: "auto",
-      customTokens: deepCopy(THEME_PRESETS[0].tokens),
-      alpha: { today: 60, now: 65, event: 100, shadow: 10 },
-    },
-    logo: {
-      enabled: false,
-      variant: 1,
-      opacity: 12,
-      recolor: false,
-      color: "#0ea5e9",
-      layout: "center",
-      tileSize: 30,
-      horizontalGap: 180,
-      verticalGap: 180,
-      rotation: 0,
-      tileOffsetX: 0,
-      tileOffsetY: 0,
-      uploadedFileData: null,
-    },
-  },
-  directions: [
-    { id: "yoga", name: "Йога", color: "#ef4444" },
-    { id: "pilates", name: "Пилатес", color: "#14b8a6" },
-    { id: "crossfit", name: "Кроссфит", color: "#0ea5e9" },
-  ],
-
-  coaches: ["Анна", "Дмитрий", "Елена"],
-  events: [],
-});
-
-let state = DEFAULT_STATE();
-let isSaving = false;
-let lastSaveTime = 0;
-
-let history = [];
-let future = [];
-const HISTORY_LIMIT = 60;
-
 function pushHistory(reason) {
   history.push({ snapshot: deepCopy(state), reason, ts: Date.now() });
   if (history.length > HISTORY_LIMIT) history.shift();
@@ -462,10 +714,12 @@ function pushHistory(reason) {
   updateUndoRedoButtons();
   scheduleAutoSave(`history: ${reason}`);
 }
+
 function updateUndoRedoButtons() {
   $("btnUndo").disabled = history.length === 0;
   $("btnRedo").disabled = future.length === 0;
 }
+
 function undo() {
   if (!history.length) return;
   const last = history.pop();
@@ -481,6 +735,7 @@ function undo() {
   toast("OK", "Undo", last.reason || "Отменено");
   updateUndoRedoButtons();
 }
+
 function redo() {
   if (!future.length) return;
   const next = future.pop();
@@ -497,7 +752,6 @@ function redo() {
   updateUndoRedoButtons();
 }
 
-let autoSaveTimer;
 function scheduleAutoSave(reason) {
   clearTimeout(autoSaveTimer);
   autoSaveTimer = setTimeout(() => {
@@ -515,7 +769,7 @@ window.clearTileBlobCache = function clearTileBlobCache() {
   for (const blobUrl of window._tileBlobCache.values()) {
     try {
       URL.revokeObjectURL(blobUrl);
-    } catch {}
+    } catch { }
   }
   window._tileBlobCache.clear();
 };
@@ -974,7 +1228,7 @@ function hardenState() {
   lg.recolor = !!lg.recolor;
   lg.color = typeof lg.color === "string" ? lg.color.trim() : "#0ea5e9";
   lg.layout = (typeof lg.layout === "string" && lg.layout.trim()) || "center";
-  
+
   // ИЗМЕНЕНИЕ: Теперь tileSize - это процент (0-100) вместо пикселей
   lg.tileSize = clamp(Math.round(Number(lg.tileSize ?? 30)), 0, 100);
 
@@ -1069,9 +1323,6 @@ function generateDirectionId(name) {
   return `dir_${cleanName}_${hash}`;
 }
 
-let filters = { day: "all", time: "all", dir: new Set(), q: "" };
-let searchDebounce;
-
 function getDir(id) {
   return state.directions.find((d) => d.id === id);
 }
@@ -1080,15 +1331,15 @@ function matchesQuery(ev) {
   const q = (filters.q || "").trim().toLowerCase();
   if (!q) return true;
   const dir = getDir(ev.directionId);
-  const hay = `${ev.name || ""} ${ev.coach || ""} ${ev.room || ""} ${
-    dir?.name || ""
-  }`.toLowerCase();
+  const hay = `${ev.name || ""} ${ev.coach || ""} ${ev.room || ""} ${dir?.name || ""}`.toLowerCase();
   return hay.includes(q);
 }
+
 function matchesDay(ev) {
   if (filters.day === "all") return true;
   return ev.dayIndex === filters.day;
 }
+
 function matchesTime(ev) {
   if (filters.time === "all") return true;
 
@@ -1118,6 +1369,7 @@ function getBounds() {
     defDur: Number(s.defaultDuration),
   };
 }
+
 function buildSlots() {
   const { start, end, step } = getBounds();
   const out = [];
@@ -1125,6 +1377,7 @@ function buildSlots() {
   for (let t = start; t < end; t += step) out.push(t);
   return out;
 }
+
 function slotStartFor(min) {
   const { start, step } = getBounds();
   return start + Math.floor((min - start) / step) * step;
@@ -1213,8 +1466,6 @@ function prefersDark() {
     window.matchMedia("(prefers-color-scheme: dark)").matches
   );
 }
-const DEFAULT_LIGHT = THEME_PRESETS[0].tokens;
-const DEFAULT_DARK = THEME_PRESETS.find((p) => p.id === "graphite-dark").tokens;
 
 function ensureThemeContrast(tokens) {
   const out = { ...tokens };
@@ -1347,7 +1598,7 @@ function ensureLogoLayer() {
   const scheduleWrap = document.querySelector(".schedule-wrap");
   if (!scheduleWrap) return null;
 
-  let layer = document.getElementById("logoLayer");
+  let layer = $("logoLayer");
   if (!layer) {
     layer = document.createElement("div");
     layer.id = "logoLayer";
@@ -1356,7 +1607,7 @@ function ensureLogoLayer() {
     scheduleWrap.appendChild(layer);
   }
 
-  let mark = document.getElementById("logoMark");
+  let mark = $("logoMark");
   if (!mark) {
     mark = document.createElement("div");
     mark.id = "logoMark";
@@ -1372,7 +1623,6 @@ function ensureLogoLayer() {
   return layer;
 }
 
-// Добавьте после функции ensureLogoLayer()
 function getScheduleMetrics(context = document) {
   const schedule = context.querySelector('.schedule');
   if (!schedule) {
@@ -1380,7 +1630,7 @@ function getScheduleMetrics(context = document) {
     const computedStyle = getComputedStyle(document.documentElement);
     const timeColWidth = parseFloat(computedStyle.getPropertyValue('--timeCol')) || 76;
     const dayHeadHeight = 42; // Фиксированная высота заголовков дней
-    
+
     // Пытаемся получить размеры через запрос в DOM
     let scheduleWidth = 0;
     let scheduleHeight = 0;
@@ -1389,10 +1639,10 @@ function getScheduleMetrics(context = document) {
       scheduleWidth = scheduleWrap.scrollWidth || scheduleWrap.offsetWidth;
       scheduleHeight = scheduleWrap.scrollHeight || scheduleWrap.offsetHeight;
     }
-    
+
     const contentWidth = Math.max(0, scheduleWidth - timeColWidth);
     const contentHeight = Math.max(0, scheduleHeight - dayHeadHeight);
-    
+
     console.log('Schedule not found, using computed metrics:', {
       timeColWidth,
       dayHeadHeight,
@@ -1401,7 +1651,7 @@ function getScheduleMetrics(context = document) {
       contentWidth,
       contentHeight
     });
-    
+
     return {
       timeColWidth,
       dayHeadHeight,
@@ -1424,7 +1674,7 @@ function getScheduleMetrics(context = document) {
     const cssWidth = parseFloat(computedStyle.getPropertyValue('--timeCol')) || 76;
     timeColWidth = cssWidth;
   }
-  
+
   // Ищем заголовок дня
   let dayHeadHeight = 42;
   const headCell = schedule.querySelector('.cell.head');
@@ -1432,10 +1682,10 @@ function getScheduleMetrics(context = document) {
     const rect = headCell.getBoundingClientRect();
     dayHeadHeight = rect.height;
   }
-  
+
   // Полная ширина и высота расписания
   let scheduleWidth, scheduleHeight;
-  
+
   // Для compact режима используем другие элементы для определения размеров
   if (schedule.classList.contains('compact-mode')) {
     const cells = schedule.querySelectorAll('.cell.droppable');
@@ -1453,7 +1703,7 @@ function getScheduleMetrics(context = document) {
     scheduleWidth = schedule.scrollWidth;
     scheduleHeight = schedule.scrollHeight;
   }
-  
+
   // Ширина и высота области контента (без заголовков)
   const contentWidth = Math.max(0, scheduleWidth - timeColWidth);
   const contentHeight = Math.max(0, scheduleHeight - dayHeadHeight);
@@ -1468,34 +1718,18 @@ function getScheduleMetrics(context = document) {
   };
 
   console.log('Schedule metrics calculated:', metrics);
-  
+
   return metrics;
 }
 
-function getLogoVariant() {
-  const variant = state.settings.logo?.variant;
-  // Если вариант 3 выбран, но файл не загружен, возвращаем вариант 1 как запасной
-  if (variant === 3 && !state.settings.logo.uploadedFileData) {
-    return 1;
-  }
-  return clamp(Math.round(Number(variant ?? 1)), 1, 3);
-}
-
-const LOGO_URLS = {
-  1: "./src/Logo.svg",
-  2: "./src/Logo2.svg",
-  3: "uploaded" // специальное значение для загруженного файла
-};
-
-// Функция для получения URL логотипа
 function getLogoUrlByVariant(variant, recolorColor = null) {
   variant = Number(variant);
-  
+
   // Если указан цвет для перекрашивания и это встроенный логотип (1 или 2)
   if (recolorColor && (variant === 1 || variant === 2)) {
     const cacheKey = `${variant}_${recolorColor}`;
     if (!window._logoSvgBlobUrls) window._logoSvgBlobUrls = {};
-    
+
     if (!window._logoSvgBlobUrls[cacheKey]) {
       let svgString;
       if (variant === 1) {
@@ -1511,7 +1745,7 @@ function getLogoUrlByVariant(variant, recolorColor = null) {
           <rect x="10" y="10" width="80" height="80" rx="10" fill="${recolorColor}" stroke="none"/>
         </svg>`;
       }
-      
+
       if (svgString) {
         const blob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
         window._logoSvgBlobUrls[cacheKey] = URL.createObjectURL(blob);
@@ -1519,10 +1753,10 @@ function getLogoUrlByVariant(variant, recolorColor = null) {
     }
     return window._logoSvgBlobUrls[cacheKey] || getLogoUrlByVariant(variant);
   }
-  
+
   // Стандартное поведение для незакрашенных логотипов
   if (!window._logoSvgBlobUrls) window._logoSvgBlobUrls = {};
-  
+
   // Создаем встроенные SVG для логотипов 1 и 2
   if (!window._logoSvgBlobUrls[1]) {
     const svg1 = `<?xml version="1.0" encoding="UTF-8"?>
@@ -1532,7 +1766,7 @@ function getLogoUrlByVariant(variant, recolorColor = null) {
     const blob1 = new Blob([svg1], { type: "image/svg+xml;charset=utf-8" });
     window._logoSvgBlobUrls[1] = URL.createObjectURL(blob1);
   }
-  
+
   if (!window._logoSvgBlobUrls[2]) {
     const svg2 = `<?xml version="1.0" encoding="UTF-8"?>
     <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
@@ -1541,7 +1775,7 @@ function getLogoUrlByVariant(variant, recolorColor = null) {
     const blob2 = new Blob([svg2], { type: "image/svg+xml;charset=utf-8" });
     window._logoSvgBlobUrls[2] = URL.createObjectURL(blob2);
   }
-  
+
   // Для варианта 3 возвращаем загруженный файл
   if (variant === 3) {
     const fileData = state.settings.logo?.uploadedFileData;
@@ -1552,15 +1786,8 @@ function getLogoUrlByVariant(variant, recolorColor = null) {
       return window._logoSvgBlobUrls[1];
     }
   }
-  
-  return window._logoSvgBlobUrls[variant] || window._logoSvgBlobUrls[1];
-}
 
-// ПОЛЕЗНО: Можно добавить небольшую проверку при старте, чтобы убедиться, что LOGO_URLS определён
-if (typeof LOGO_URLS === 'undefined') {
-  console.error("LOGO_URLS is not defined! Please define it before calling getLogoUrlByVariant.");
-  // Можно установить временный фоллбэк, если LOGO_URLS не определён
-  // const LOGO_URLS = { 1: "", 2: "" }; // или другие пути
+  return window._logoSvgBlobUrls[variant] || window._logoSvgBlobUrls[1];
 }
 
 window.getTileSrc = function getTileSrc(
@@ -1570,35 +1797,36 @@ window.getTileSrc = function getTileSrc(
   verticalGap = 0,
   rotation = 0,
   layout = "tile",
-  recolorColor = null
+  recolorColor = null,
+  opacity = 100  // Добавляем параметр прозрачности
 ) {
   variant = Number(variant);
-  
-  // Получаем data URL логотипа
-  const logoDataUrl = getLogoDataUrl(variant, recolorColor);
-  
-  // Ключ для кэша
-  const key = `${variant}|${tileSize}|${horizontalGap}|${verticalGap}|${rotation}|${layout}|${recolorColor}`;
-  
+
+  // Получаем data URL логотипа с прозрачностью
+  const logoDataUrl = getLogoDataUrl(variant, recolorColor, opacity);
+
+  // Ключ для кэша теперь включает opacity
+  const key = `${variant}|${tileSize}|${horizontalGap}|${verticalGap}|${rotation}|${layout}|${recolorColor}|${opacity}`;
+
   // Проверяем кэш
   if (window._tileBlobCache && window._tileBlobCache.get(key)) {
     return window._tileBlobCache.get(key);
   }
-  
+
   let svg;
-  
+
   if (layout === "diagonal") {
     // ДИАГОНАЛЬНЫЙ РЕЖИМ
     const cellW = tileSize + horizontalGap;
     const cellH = tileSize + verticalGap;
-    
+
     svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${cellW * 2}" height="${cellH * 2}" viewBox="0 0 ${cellW * 2} ${cellH * 2}">
       <defs>
         <pattern id="pattern${key}" patternUnits="userSpaceOnUse" width="${cellW * 2}" height="${cellH * 2}">
-          <g transform="translate(${cellW/2}, ${cellH/2}) rotate(${rotation}) translate(${-tileSize/2}, ${-tileSize/2})">
+          <g transform="translate(${cellW / 2}, ${cellH / 2}) rotate(${rotation}) translate(${-tileSize / 2}, ${-tileSize / 2})">
             <image href="${logoDataUrl}" width="${tileSize}" height="${tileSize}" preserveAspectRatio="xMidYMid meet"/>
           </g>
-          <g transform="translate(${cellW * 1.5}, ${cellH * 1.5}) rotate(${rotation}) translate(${-tileSize/2}, ${-tileSize/2})">
+          <g transform="translate(${cellW * 1.5}, ${cellH * 1.5}) rotate(${rotation}) translate(${-tileSize / 2}, ${-tileSize / 2})">
             <image href="${logoDataUrl}" width="${tileSize}" height="${tileSize}" preserveAspectRatio="xMidYMid meet"/>
           </g>
         </pattern>
@@ -1609,11 +1837,11 @@ window.getTileSrc = function getTileSrc(
     // ОБЫЧНЫЙ ПЛИТОЧНЫЙ РЕЖИМ
     const cellW = tileSize + horizontalGap;
     const cellH = tileSize + verticalGap;
-    
+
     svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${cellW}" height="${cellH}" viewBox="0 0 ${cellW} ${cellH}">
       <defs>
         <pattern id="pattern${key}" patternUnits="userSpaceOnUse" width="${cellW}" height="${cellH}">
-          <g transform="translate(${cellW/2}, ${cellH/2}) rotate(${rotation}) translate(${-tileSize/2}, ${-tileSize/2})">
+          <g transform="translate(${cellW / 2}, ${cellH / 2}) rotate(${rotation}) translate(${-tileSize / 2}, ${-tileSize / 2})">
             <image href="${logoDataUrl}" width="${tileSize}" height="${tileSize}" preserveAspectRatio="xMidYMid meet"/>
           </g>
         </pattern>
@@ -1621,75 +1849,19 @@ window.getTileSrc = function getTileSrc(
       <rect width="100%" height="100%" fill="url(#pattern${key})"/>
     </svg>`;
   }
-  
+
   // Кэшируем результат
   const dataUrl = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
   if (window._tileBlobCache) {
     window._tileBlobCache.set(key, dataUrl);
   }
-  
+
   return dataUrl;
 };
 
-// --- НОВЫЙ КОД ---
-// Строки SVG для внутреннего использования
-// Вместо двух систем - одна простая
-const LOGO_SVG_STRINGS = {
-  1: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="currentColor"/></svg>',
-  2: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="10" y="10" width="80" height="80" rx="15" fill="currentColor"/></svg>',
-  3: null // Для загруженного файла
-};
 
-// Добавьте эту функцию после getLogoUrlByVariant
-window.getLogoDataUrl = function getLogoDataUrl(variant, recolorColor = null) {
-  variant = Number(variant);
-  
-  // Для загруженного файла (вариант 3) - возвращаем как есть
-  if (variant === 3) {
-    const fileData = state.settings.logo?.uploadedFileData;
-    if (fileData && fileData.startsWith("data:")) {
-      // Если нужно перекрасить, создаем новый data URL с перекрашиванием
-      if (recolorColor) {
-        // Для SVG файлов можно добавить стиль перекрашивания
-        if (fileData.includes("image/svg+xml")) {
-          // Извлекаем SVG и добавляем стиль
-          const base64 = fileData.split(',')[1];
-          const svgText = atob(base64);
-          let coloredSvg = svgText;
-          // Простая замена fill и stroke цветов
-          coloredSvg = coloredSvg.replace(/(fill|stroke)="[^"]*"/g, `$1="${recolorColor}"`);
-          return `data:image/svg+xml;base64,${btoa(coloredSvg)}`;
-        }
-      }
-      return fileData;
-    }
-    // Fallback на вариант 1
-    variant = 1;
-  }
-  
-  // Определяем SVG строку для вариантов 1 и 2
-  let svgString;
-  if (variant === 1) {
-    svgString = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="currentColor"/></svg>';
-  } else if (variant === 2) {
-    svgString = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="10" y="10" width="80" height="80" rx="15" fill="currentColor"/></svg>';
-  } else {
-    svgString = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="currentColor"/></svg>';
-  }
-  
-  // Если указан цвет для перекрашивания, заменяем currentColor
-  if (recolorColor && (variant === 1 || variant === 2)) {
-    svgString = svgString.replace(/fill="currentColor"/g, `fill="${recolorColor}"`);
-  }
-  
-  // Кодируем в base64 для data URL
-  const base64 = btoa(unescape(encodeURIComponent(svgString)));
-  return `data:image/svg+xml;base64,${base64}`;
-};
-
-// Глобальный объект для хранения Blob URL (чтобы можно было освобождать память)
 window._logoSvgBlobUrls = window._logoSvgBlobUrls || {};
-// Функция для получения Blob URL для SVG строк
+
 window.getLogoSvgBlobUrl = function (variant) {
   variant = Number(variant);
   if (!(variant in LOGO_SVG_STRINGS)) {
@@ -1705,29 +1877,6 @@ window.getLogoSvgBlobUrl = function (variant) {
   return window._logoSvgBlobUrls[variant];
 };
 
-
-function calculateTileSizeInPixels(percent, metrics, layout) {
-  // ОГРАНИЧИВАЕМ ПРОЦЕНТ
-  const safePercent = clamp(Number(percent), 0, 1000);
-  
-  // Если нет метрик, возвращаем минимальный размер
-  if (!metrics || !metrics.contentWidth || !metrics.contentHeight) {
-    const defaultPixelSize = Math.round((safePercent / 100) * 300);
-    return Math.max(20, defaultPixelSize);
-  }
-  
-  // Для центрированных режимов используем минимальную сторону области контента
-  if (layout === "center" || layout === "stamp") {
-    const minContentDimension = Math.min(metrics.contentWidth, metrics.contentHeight);
-    const pixelSize = Math.round((safePercent / 100) * minContentDimension);
-    return Math.max(20, pixelSize);
-  }
-  
-  // Для плиточных режимов используем ширину области контента
-  const pixelSize = Math.round((safePercent / 100) * metrics.contentWidth);
-  return Math.max(20, pixelSize);
-}
-
 function applyLogo() {
   const lg = state.settings.logo || {};
   if (!lg.enabled) {
@@ -1739,7 +1888,7 @@ function applyLogo() {
   const layer = ensureLogoLayer();
   if (!layer) return;
 
-  const logoMark = document.getElementById("logoMark");
+  const logoMark = $("logoMark");
   if (!logoMark) return;
 
   const variant = getLogoVariant();
@@ -1751,7 +1900,7 @@ function applyLogo() {
 
   // Получаем метрики расписания
   const metrics = getScheduleMetrics();
-  
+
   // Очищаем стили
   logoMark.style.cssText = "";
   layer.style.cssText = "";
@@ -1777,27 +1926,27 @@ function applyLogo() {
     const tileSizePercent = clamp(Number(lg.tileSize || 30), 0, 1000);
     const tileSizePixels = calculateTileSizeInPixels(tileSizePercent, metrics, "center");
     const tileSize = Math.max(20, tileSizePixels);
-    
+
     // Рассчитываем позицию в центре области контента
     const centerX = metrics.timeColWidth + metrics.contentWidth / 2;
     const centerY = metrics.dayHeadHeight + metrics.contentHeight / 2;
     const halfSize = tileSize / 2;
-    
+
     // Корректируем позицию, чтобы не выходить за границы контента
     let left = centerX - halfSize;
     let top = centerY - halfSize;
-    
+
     // Ограничиваем границами области контента
     const leftBoundary = metrics.timeColWidth;
     const rightBoundary = metrics.timeColWidth + metrics.contentWidth;
     const topBoundary = metrics.dayHeadHeight;
     const bottomBoundary = metrics.dayHeadHeight + metrics.contentHeight;
-    
+
     if (left < leftBoundary) left = leftBoundary;
     if (left + tileSize > rightBoundary) left = rightBoundary - tileSize;
     if (top < topBoundary) top = topBoundary;
     if (top + tileSize > bottomBoundary) top = bottomBoundary - tileSize;
-    
+
     // Устанавливаем размеры и позицию
     logoMark.style.cssText = `
       position: absolute;
@@ -1810,7 +1959,7 @@ function applyLogo() {
       top: ${top}px;
       transform: rotate(${rotation}deg);
     `;
-    
+
     if (recolor && variant === 3) {
       logoMark.style.backgroundColor = color;
       logoMark.style.webkitMaskImage = `url(${src})`;
@@ -1828,13 +1977,13 @@ function applyLogo() {
       logoMark.style.backgroundPosition = 'center';
       logoMark.style.backgroundSize = 'contain';
     }
-    
+
   } else if (layout === "tile" || layout === "diagonal") {
     // Плиточные режимы
     const tileSize = Math.max(20, Math.min(1000, Number(lg.tileSize) || 140));
     const horizontalGap = Number(lg.horizontalGap || 180);
     const verticalGap = Number(lg.verticalGap || 180);
-    
+
     // Позиционируем только в области контента
     logoMark.style.cssText = `
       position: absolute;
@@ -1846,7 +1995,7 @@ function applyLogo() {
       width: ${metrics.contentWidth}px;
       height: ${metrics.contentHeight}px;
     `;
-    
+
     // Получаем data URL для плитки
     const src = window.getTileSrc(
       variant,
@@ -1855,9 +2004,10 @@ function applyLogo() {
       verticalGap,
       rotation,
       layout,
-      recolor ? color : null
+      recolor ? color : null,
+      lg.opacity
     );
-    
+
     if (recolor && variant === 3) {
       logoMark.style.backgroundColor = color;
       logoMark.style.webkitMaskImage = `url(${src})`;
@@ -1868,7 +2018,7 @@ function applyLogo() {
       logoMark.style.backgroundImage = `url(${src})`;
       logoMark.style.backgroundRepeat = 'repeat';
     }
-    
+
     // Размер паттерна
     if (layout === "diagonal") {
       logoMark.style.backgroundSize = `${(tileSize + horizontalGap) * 2}px ${(tileSize + verticalGap) * 2}px`;
@@ -1883,50 +2033,51 @@ function applyLogo() {
         logoMark.style.maskSize = `${tileSize + horizontalGap}px ${tileSize + verticalGap}px`;
       }
     }
-    
+
     // Смещение
     const offsetX = Number(lg.tileOffsetX || 0);
     const offsetY = Number(lg.tileOffsetY || 0);
     logoMark.style.backgroundPosition = `${offsetX}px ${offsetY}px`;
-    
+
     if (recolor && variant === 3) {
       logoMark.style.webkitMaskPosition = `${offsetX}px ${offsetY}px`;
       logoMark.style.maskPosition = `${offsetX}px ${offsetY}px`;
     }
   }
-  
+
   // Принудительно показываем
   layer.style.display = 'block';
   logoMark.style.display = 'block';
 }
 
-// Вспомогательная функция для применения стилей логотипа
-function applyLogoStyle(element, src, recolorColor = null, isTile = false) {
-  if (recolorColor && src) {
-    element.style.backgroundColor = recolorColor;
-    element.style.webkitMaskImage = `url(${src})`;
-    element.style.maskImage = `url(${src})`;
-    element.style.webkitMaskRepeat = isTile ? 'repeat' : 'no-repeat';
-    element.style.maskRepeat = isTile ? 'repeat' : 'no-repeat';
-    element.style.webkitMaskPosition = 'center';
-    element.style.maskPosition = 'center';
-    element.style.webkitMaskSize = isTile ? 'contain' : 'contain';
-    element.style.maskSize = isTile ? 'contain' : 'contain';
-    element.style.backgroundImage = 'none';
-  } else if (src) {
-    element.style.backgroundImage = `url(${src})`;
-    element.style.backgroundRepeat = isTile ? 'repeat' : 'no-repeat';
-    element.style.backgroundPosition = 'center';
-    element.style.backgroundSize = 'contain';
+function calculateTileSizeInPixels(percent, metrics, layout) {
+  // ОГРАНИЧИВАЕМ ПРОЦЕНТ
+  const safePercent = clamp(Number(percent), 0, 1000);
+
+  // Если нет метрик, возвращаем минимальный размер
+  if (!metrics || !metrics.contentWidth || !metrics.contentHeight) {
+    const defaultPixelSize = Math.round((safePercent / 100) * 300);
+    return Math.max(20, defaultPixelSize);
   }
+
+  // Для центрированных режимов используем минимальную сторону области контента
+  if (layout === "center" || layout === "stamp") {
+    const minContentDimension = Math.min(metrics.contentWidth, metrics.contentHeight);
+    const pixelSize = Math.round((safePercent / 100) * minContentDimension);
+    return Math.max(20, pixelSize);
+  }
+
+  // Для плиточных режимов используем ширину области контента
+  const pixelSize = Math.round((safePercent / 100) * metrics.contentWidth);
+  return Math.max(20, pixelSize);
 }
 
 function syncLogoPreview() {
   const lg = state.settings.logo || {};
-  const previewContainer = document.getElementById("logoPreviewContainer");
-  
+  const previewContainer = $("logoPreviewContainer");
+
   if (!previewContainer) return;
-  
+
   // Создаем или обновляем предпросмотр
   let preview = previewContainer.querySelector(".logo-preview");
   if (!preview) {
@@ -1934,41 +2085,41 @@ function syncLogoPreview() {
     preview.className = "logo-preview";
     previewContainer.appendChild(preview);
   }
-  
+
   // Сбрасываем стили
   preview.style.cssText = '';
-  
+
   if (!lg.enabled) {
     preview.style.display = 'none';
     return;
   }
-  
+
   preview.style.display = 'block';
-  
+
   // Устанавливаем размер предпросмотра на основе tileSize
   const tileSize = clamp(Math.round(Number(lg.tileSize) || 30), 0, 100);
   const previewSize = 100; // Фиксированный размер для превью в пикселях
-  
+
   preview.style.width = `${previewSize}px`;
   preview.style.height = `${previewSize}px`;
-  
+
   // УСТАНАВЛИВАЕМ ПРОЗРАЧНОСТЬ
   const opacityValue = Number(lg.opacity || 12) / 100;
   preview.style.opacity = `${opacityValue}`;
-  
+
   const layout = String(lg.layout || "center");
   const variant = getLogoVariant();
-  
+
   // Получаем URL логотипа
   const src = getLogoDataUrl(variant, lg.recolor ? lg.color : null);
-  
+
   if (layout === "center") {
     // Для центрированного режима - contain для сохранения пропорций
     preview.style.backgroundImage = `url(${src})`;
     preview.style.backgroundRepeat = "no-repeat";
     preview.style.backgroundSize = "contain";
     preview.style.backgroundPosition = "center center";
-    
+
     if (lg.recolor && variant === 3) {
       preview.style.backgroundColor = lg.color || "#0ea5e9";
       preview.style.webkitMaskImage = `url(${src})`;
@@ -1986,7 +2137,7 @@ function syncLogoPreview() {
     const tileSizePx = Math.max(20, Math.min(100, tileSize));
     const horizontalGap = Number(lg.horizontalGap || 180);
     const verticalGap = Number(lg.verticalGap || 180);
-    
+
     const tileSrc = window.getTileSrc(
       variant,
       tileSizePx,
@@ -1996,14 +2147,12 @@ function syncLogoPreview() {
       layout,
       lg.recolor ? lg.color : null
     );
-    
+
     preview.style.backgroundImage = `url(${tileSrc})`;
     preview.style.backgroundRepeat = "repeat";
     preview.style.backgroundSize = `${tileSizePx}px ${tileSizePx}px`;
   }
 }
-
-let lastLogoState = null;
 
 function updateLogoIfNeeded() {
   const lg = state.settings.logo || {};
@@ -2035,6 +2184,7 @@ function mkLabel(text) {
   s.textContent = text + ":";
   return s;
 }
+
 function mkChip(active, text, onClick) {
   const c = document.createElement("button");
   c.type = "button";
@@ -2043,6 +2193,7 @@ function mkChip(active, text, onClick) {
   c.addEventListener("click", onClick);
   return c;
 }
+
 function mkDirChip(active, dir, count, onClick) {
   const c = document.createElement("button");
   c.type = "button";
@@ -2061,6 +2212,7 @@ function mkDirChip(active, dir, count, onClick) {
   c.addEventListener("click", onClick);
   return c;
 }
+
 function countByDirection() {
   const map = {};
   state.events.forEach((ev) => {
@@ -2602,8 +2754,6 @@ function renderSchedule() {
   markGeometryDirty();
 }
 
-let lastGeomKey = "";
-
 function getGeomKey() {
   const d = state.settings.display;
   const s = state.settings.schedule;
@@ -2636,10 +2786,6 @@ function markGeometryDirtyIfNeeded() {
   markGeometryDirty();
 }
 
-let lastCellView = null;
-let geometrySyncRaf = 0;
-let resizeDebounce = null;
-
 window.addEventListener("resize", () => {
   clearTimeout(resizeDebounce);
   resizeDebounce = setTimeout(() => {
@@ -2657,10 +2803,6 @@ function requestGeometrySync() {
     syncGridGeometry();
   });
 }
-
-let geometryDirty = false;
-let geometryRafId = null;
-let geometryCache = new WeakMap();
 
 function markGeometryDirty() {
   if (geometryDirty) return;
@@ -2680,7 +2822,7 @@ function syncGridGeometry() {
 
 function performGeometrySync() {
   const view = state.settings.display.cellView;
-  const scheduleEl = document.getElementById("schedule");
+  const scheduleEl = $("schedule");
   if (!scheduleEl) return;
 
   if (view === "list") return;
@@ -2911,13 +3053,6 @@ window.addEventListener("resize", () => {
   }, 150);
 });
 
-let searchDebounceTimer = null;
-let lastSearchValue = "";
-const SEARCH_DEBOUNCE_MS = 300;
-
-let filterCache = new WeakMap();
-let lastFilterHash = "";
-
 function getFilterHash() {
   const { day, time, dir, q } = filters;
   const dirStr = Array.from(dir).sort().join(",");
@@ -2926,33 +3061,36 @@ function getFilterHash() {
 
 function memoizedEventVisible(ev) {
   const hash = getFilterHash();
-
+  
   if (!filterCache.has(ev)) {
     filterCache.set(ev, {
       cache: {},
       timestamps: {},
-      keys: [],
+      keys: []
     });
   }
-
+  
   const cacheData = filterCache.get(ev);
-
+  
   if (cacheData.cache[hash] !== undefined) {
     cacheData.timestamps[hash] = Date.now();
     return cacheData.cache[hash];
   }
-
-  const isVisible =
-    matchesDay(ev) && matchesTime(ev) && matchesDir(ev) && matchesQuery(ev);
-
+  
+  const isVisible = 
+    matchesDay(ev) && 
+    matchesTime(ev) && 
+    matchesDir(ev) && 
+    matchesQuery(ev);
+  
   cacheData.cache[hash] = isVisible;
   cacheData.timestamps[hash] = Date.now();
   cacheData.keys.push(hash);
-
+  
   if (cacheData.keys.length > 5) {
     let oldestKey = cacheData.keys[0];
     let oldestTime = cacheData.timestamps[oldestKey];
-
+    
     for (let i = 1; i < cacheData.keys.length; i++) {
       const key = cacheData.keys[i];
       if (cacheData.timestamps[key] < oldestTime) {
@@ -2960,12 +3098,12 @@ function memoizedEventVisible(ev) {
         oldestTime = cacheData.timestamps[key];
       }
     }
-
+    
     delete cacheData.cache[oldestKey];
     delete cacheData.timestamps[oldestKey];
-    cacheData.keys = cacheData.keys.filter((k) => k !== oldestKey);
+    cacheData.keys = cacheData.keys.filter(k => k !== oldestKey);
   }
-
+  
   return isVisible;
 }
 
@@ -3173,36 +3311,6 @@ function smartOpenCreate(dayIndex, slotStart, slotEnd = null) {
 
   openCreate(dayIndex, defaultStart, defaultDuration);
 }
-const fontPreset = $("fontPreset");
-const fontQuickTightness = $("fontQuickTightness");
-const fontLetterSpacing = $("fontLetterSpacing");
-const fontTextTransform = $("fontTextTransform");
-const fontTitleClamp = $("fontTitleClamp");
-const fontCardPaddingY = $("fontCardPaddingY");
-const fontCardRadius = $("fontCardRadius");
-
-const eventBackdrop = $("eventBackdrop");
-const evId = $("evId");
-const evDay = $("evDay");
-const evName = $("evName");
-const evDir = $("evDir");
-const evStart = $("evStart");
-const evDur = $("evDur");
-const evCoach = $("evCoach");
-const evRoom = $("evRoom");
-const evNotes = $("evNotes");
-const dirPreviewWrap = $("dirPreviewWrap");
-const conflictsEl = $("conflicts");
-
-const newDirName = $("newDirName");
-const newDirColor = $("newDirColor");
-const swatches = $("swatches");
-const newDirPreview = $("newDirPreview");
-
-const btnDelete = $("btnDelete");
-const btnDuplicate = $("btnDuplicate");
-
-const logoVariant = $("logoVariant");
 
 function uid() {
   return "e_" + Math.random().toString(36).slice(2, 10);
@@ -3728,20 +3836,6 @@ function updateEventPosition(id, dayIndex, startMin, reason) {
   );
 }
 
-const settingsBackdrop = $("settingsBackdrop");
-const settingsWarn = $("settingsWarn");
-
-const tabSchedule = $("tabSchedule");
-const tabDisplay = $("tabDisplay");
-const tabFont = $("tabFont");
-const tabTheme = $("tabTheme");
-const panelSchedule = $("panelSchedule");
-const panelDisplay = $("panelDisplay");
-const panelFont = $("panelFont");
-const panelTheme = $("panelTheme");
-const tabLogo = $("tabLogo");
-const panelLogo = $("panelLogo");
-
 function setActiveTab(which) {
   [tabSchedule, tabDisplay, tabFont, tabTheme, tabLogo].forEach((x) =>
     x.classList.remove("active"),
@@ -3777,202 +3871,156 @@ tabFont.addEventListener("click", () => setActiveTab("font"));
 tabTheme.addEventListener("click", () => setActiveTab("theme"));
 tabLogo.addEventListener("click", () => setActiveTab("logo"));
 
-const setStart = $("setStart");
-const setEnd = $("setEnd");
-const setDefaultDur = $("setDefaultDur");
-
-const dispCellView = $("dispCellView");
-const dispCardMode = $("dispCardMode");
-const dispShowNotes = $("dispShowNotes");
-const dispShowEmptyHint = $("dispShowEmptyHint");
-const dispShowToday = $("dispShowToday");
-const dispDayWidth = $("dispDayWidth");
-const dispCellPad = $("dispCellPad");
-
-const fontFamily = $("fontFamily");
-
-const logoLayout = $("logoLayout");
-const logoEnabled = $("logoEnabled");
-const logoOpacity = $("logoOpacity");
-const logoOpacityVal = $("logoOpacityVal");
-const logoRecolor = $("logoRecolor");
-const logoColorWrap = $("logoColorWrap");
-const logoColor = $("logoColor");
-const logoTileSize = $("logoTileSize");
-const logoTileGap = $("logoTileGap");
-const logoTileOffsetX = $("logoTileOffsetX");
-const logoTileOffsetY = $("logoTileOffsetY");
-const logoHorizontalGap = $("logoHorizontalGap");
-const logoVerticalGap = $("logoVerticalGap");
-const logoRotation = $("logoRotation");
-const logoRotationVal = $("logoRotationVal");
-const logoHorizontalGapVal = $("logoHorizontalGapVal");
-const logoVerticalGapVal = $("logoVerticalGapVal");
-const logoTileSizeNum = $("logoTileSizeNum");
-const logoUpload = $("logoUpload");
-
-const logoHorizontalGapNum = $("logoHorizontalGapNum");
-const logoVerticalGapNum = $("logoVerticalGapNum");
-const logoRotationNum = $("logoRotationNum");
-const logoTileOffsetXNum = $("logoTileOffsetXNum");
-const logoTileOffsetYNum = $("logoTileOffsetYNum");
-const logoOpacityNum = $("logoOpacityNum");
-
-const DEFAULT_FONT_SAMPLE_TEXT = DEFAULT_STATE().settings.font.sampleText;
-
-// Добавьте прямые обработчики для числовых полей логотипа
 function setupLogoNumberInputs() {
   console.log("Setting up logo number inputs...");
-  
+
   // Слайдер размера плитки
   if (logoTileSize) {
     logoTileSize.addEventListener("input", () => {
       console.log("logoTileSize slider changed:", logoTileSize.value);
       const value = clamp(Math.round(Number(logoTileSize.value || 140)), 20, 1000);
       state.settings.logo.tileSize = value;
-      
+
       // Обновляем числовое поле
       if (logoTileSizeNum) {
         logoTileSizeNum.value = value;
       }
-      
+
       updateLogoAndSave();
     });
   }
 
   // Размер плитки
   if (logoTileSizeNum) {
-    logoTileSizeNum.addEventListener("input", function() {
+    logoTileSizeNum.addEventListener("input", function () {
       console.log("logoTileSizeNum changed:", this.value);
       const value = clamp(Math.round(Number(this.value || 140)), 20, 1000);
       state.settings.logo.tileSize = value;
-      
+
       // Обновляем слайдер
       if (logoTileSize) {
         logoTileSize.value = value;
       }
-      
+
       // Обновляем логотип
       updateLogoAndSave();
     });
   }
-  
+
   // Горизонтальный зазор
   if (logoHorizontalGapNum) {
-    logoHorizontalGapNum.addEventListener("input", function() {
+    logoHorizontalGapNum.addEventListener("input", function () {
       console.log("logoHorizontalGapNum changed:", this.value);
       const value = clamp(Math.round(Number(this.value || 180)), 0, 800);
       state.settings.logo.horizontalGap = value;
-      
+
       // Обновляем слайдер
       if (logoHorizontalGap) {
         logoHorizontalGap.value = value;
       }
-      
+
       if (logoHorizontalGapVal) {
         logoHorizontalGapVal.textContent = `${value}px`;
       }
-      
+
       updateLogoAndSave();
     });
   }
-  
+
   // Вертикальный зазор
   if (logoVerticalGapNum) {
-    logoVerticalGapNum.addEventListener("input", function() {
+    logoVerticalGapNum.addEventListener("input", function () {
       console.log("logoVerticalGapNum changed:", this.value);
       const value = clamp(Math.round(Number(this.value || 180)), 0, 800);
       state.settings.logo.verticalGap = value;
-      
+
       // Обновляем слайдер
       if (logoVerticalGap) {
         logoVerticalGap.value = value;
       }
-      
+
       if (logoVerticalGapVal) {
         logoVerticalGapVal.textContent = `${value}px`;
       }
-      
+
       updateLogoAndSave();
     });
   }
-  
+
   // Поворот
   if (logoRotationNum) {
-    logoRotationNum.addEventListener("input", function() {
+    logoRotationNum.addEventListener("input", function () {
       console.log("logoRotationNum changed:", this.value);
       const value = clamp(Math.round(Number(this.value || 0)), -180, 180);
       state.settings.logo.rotation = value;
-      
+
       // Обновляем слайдер
       if (logoRotation) {
         logoRotation.value = value;
       }
-      
+
       if (logoRotationVal) {
         logoRotationVal.textContent = `${value}°`;
       }
-      
+
       updateLogoAndSave();
     });
   }
-  
+
   // Смещение X
   if (logoTileOffsetXNum) {
-    logoTileOffsetXNum.addEventListener("input", function() {
+    logoTileOffsetXNum.addEventListener("input", function () {
       console.log("logoTileOffsetXNum changed:", this.value);
       const value = clamp(Math.round(Number(this.value || 0)), -2000, 2000);
       state.settings.logo.tileOffsetX = value;
-      
+
       // Обновляем слайдер
       if (logoTileOffsetX) {
         logoTileOffsetX.value = value;
       }
-      
+
       updateLogoAndSave();
     });
   }
-  
+
   // Смещение Y
   if (logoTileOffsetYNum) {
-    logoTileOffsetYNum.addEventListener("input", function() {
+    logoTileOffsetYNum.addEventListener("input", function () {
       console.log("logoTileOffsetYNum changed:", this.value);
       const value = clamp(Math.round(Number(this.value || 0)), -2000, 2000);
       state.settings.logo.tileOffsetY = value;
-      
+
       // Обновляем слайдер
       if (logoTileOffsetY) {
         logoTileOffsetY.value = value;
       }
-      
+
       updateLogoAndSave();
     });
   }
-  
+
   // Прозрачность
   if (logoOpacityNum) {
-    logoOpacityNum.addEventListener("input", function() {
+    logoOpacityNum.addEventListener("input", function () {
       console.log("logoOpacityNum changed:", this.value);
       const value = clamp(Math.round(Number(this.value || 12)), 0, 100);
       state.settings.logo.opacity = value;
-      
+
       // Обновляем слайдер
       if (logoOpacity) {
         logoOpacity.value = value;
       }
-      
+
       if (logoOpacityVal) {
         logoOpacityVal.textContent = `${value}%`;
       }
-      
+
       updateLogoAndSave();
     });
   }
-  
+
   console.log("Logo number inputs setup complete");
 }
-
-
 
 function getFontSampleText() {
   const raw = (state?.settings?.font?.sampleText ?? "").trim();
@@ -3995,17 +4043,14 @@ function fillFontSelectOptions() {
   fontFamily.appendChild(frag);
 }
 
-const fontTitleFamily = document.getElementById("fontTitleFamily");
-const fontMetaFamily = document.getElementById("fontMetaFamily");
-
 function initFontPicker(cfg) {
-  const wrap = document.getElementById(cfg.wrapId);
-  const btn = document.getElementById(cfg.btnId);
-  const pop = document.getElementById(cfg.popId);
-  const list = document.getElementById(cfg.listId);
-  const search = document.getElementById(cfg.searchId);
-  const title = document.getElementById(cfg.titleId);
-  const sample = document.getElementById(cfg.sampleId);
+  const wrap = $(cfg.wrapId);
+  const btn = $(cfg.btnId);
+  const pop = $(cfg.popId);
+  const list = $(cfg.listId);
+  const search = $(cfg.searchId);
+  const title = $(cfg.titleId);
+  const sample = $(cfg.sampleId);
 
   const PAGE = 20;
   let limit = PAGE;
@@ -4142,62 +4187,19 @@ fillFontSelectOptions(fontFamily);
 fillFontSelectOptions(fontTitleFamily);
 fillFontSelectOptions(fontMetaFamily);
 
-const pickerMain = initFontPicker({
-  wrapId: "fontPicker",
-  btnId: "fontPickerBtn",
-  popId: "fontPickerPop",
-  listId: "fontPickerList",
-  searchId: "fontPickerSearch",
-  titleId: "fontPickerTitle",
-  sampleId: "fontPickerSample",
-  getValue: () => fontFamily.value,
-  setValue: (id) => {
-    fontFamily.value = id;
-    state.settings.font.family = id;
-  },
-});
 
-const pickerTitle = initFontPicker({
-  wrapId: "fontTitlePicker",
-  btnId: "fontTitlePickerBtn",
-  popId: "fontTitlePickerPop",
-  listId: "fontTitlePickerList",
-  searchId: "fontTitlePickerSearch",
-  titleId: "fontTitlePickerTitle",
-  sampleId: "fontTitlePickerSample",
-  getValue: () => fontTitleFamily.value,
-  setValue: (id) => {
-    fontTitleFamily.value = id;
-    state.settings.font.titleFamily = id;
-  },
-});
-
-const pickerMeta = initFontPicker({
-  wrapId: "fontMetaPicker",
-  btnId: "fontMetaPickerBtn",
-  popId: "fontMetaPickerPop",
-  listId: "fontMetaPickerList",
-  searchId: "fontMetaPickerSearch",
-  titleId: "fontMetaPickerTitle",
-  sampleId: "fontMetaPickerSample",
-  getValue: () => fontMetaFamily.value,
-  setValue: (id) => {
-    fontMetaFamily.value = id;
-    state.settings.font.metaFamily = id;
-  },
-});
 
 pickerMain.setSelected(state?.settings?.font?.family || "system", true);
 pickerTitle.setSelected(
   state?.settings?.font?.titleFamily ||
-    state?.settings?.font?.family ||
-    "system",
+  state?.settings?.font?.family ||
+  "system",
   true,
 );
 pickerMeta.setSelected(
   state?.settings?.font?.metaFamily ||
-    state?.settings?.font?.family ||
-    "system",
+  state?.settings?.font?.family ||
+  "system",
   true,
 );
 
@@ -4269,38 +4271,6 @@ if (fontQuickTightness && !fontQuickTightness.dataset.hooked) {
   });
   fontQuickTightness.dataset.hooked = "1";
 }
-
-const fontLineHeight = $("fontLineHeight");
-const fontSampleText = $("fontSampleText");
-const fontTitle1 = $("fontTitle1");
-const fontTitle2 = $("fontTitle2");
-const fontMeta1 = $("fontMeta1");
-const fontMeta2 = $("fontMeta2");
-const fontWeightTitle = $("fontWeightTitle");
-const fontWeightMeta = $("fontWeightMeta");
-
-const themeMode = $("themeMode");
-const themePreset = $("themePreset");
-const paletteGrid = $("paletteGrid");
-const themeWarn = $("themeWarn");
-
-const tAccent = $("tAccent");
-const tBg = $("tBg");
-const tCard = $("tCard");
-const tText = $("tText");
-const tBorder = $("tBorder");
-const tGridHead = $("tGridHead");
-const tNowRow = $("tNowRow");
-const tTodayCol = $("tTodayCol");
-
-const alphaToday = $("alphaToday");
-const alphaNow = $("alphaNow");
-const alphaEvent = $("alphaEvent");
-const alphaShadow = $("alphaShadow");
-const alphaTodayVal = $("alphaTodayVal");
-const alphaNowVal = $("alphaNowVal");
-const alphaEventVal = $("alphaEventVal");
-const alphaShadowVal = $("alphaShadowVal");
 
 if (fontSampleText) {
   fontSampleText.addEventListener("change", () => {
@@ -4395,7 +4365,7 @@ function clearLogoCache() {
   if (window.clearTileBlobCache) {
     window.clearTileBlobCache();
   }
-  
+
   // Очищаем кэш для Blob URL логотипов
   if (window._logoSvgBlobUrls) {
     for (const key in window._logoSvgBlobUrls) {
@@ -4407,13 +4377,13 @@ function clearLogoCache() {
     }
     window._logoSvgBlobUrls = {};
   }
-  
+
   // Также очищаем глобальный кэш
   if (window._tileBlobCache) {
     for (const blobUrl of window._tileBlobCache.values()) {
       try {
         URL.revokeObjectURL(blobUrl);
-      } catch {}
+      } catch { }
     }
     window._tileBlobCache.clear();
   }
@@ -4470,21 +4440,21 @@ function openSettings() {
   if (logoVariant) {
     // Сохраняем текущее значение
     const currentVariant = String(lg.variant ?? 1);
-    
+
     // Очищаем список
     logoVariant.innerHTML = '';
-    
+
     // Добавляем стандартные варианты
     const option1 = document.createElement('option');
     option1.value = '1';
     option1.textContent = 'Логотип 1';
     logoVariant.appendChild(option1);
-    
+
     const option2 = document.createElement('option');
     option2.value = '2';
     option2.textContent = 'Логотип 2';
     logoVariant.appendChild(option2);
-    
+
     // Добавляем вариант для загруженного файла, если он есть
     if (lg.uploadedFileData) {
       const option3 = document.createElement('option');
@@ -4492,28 +4462,28 @@ function openSettings() {
       option3.textContent = 'Загруженный файл';
       logoVariant.appendChild(option3);
     }
-    
+
     // Устанавливаем текущее значение
     logoVariant.value = currentVariant;
   }
   // Обработчик изменения варианта логотипа
   if (logoVariant) {
-    logoVariant.addEventListener('change', function() {
+    logoVariant.addEventListener('change', function () {
       const variant = Number(this.value);
       state.settings.logo.variant = variant;
-      
+
       // Показываем/скрываем блок загрузки файла
-      const logoUploadWrap = document.getElementById("logoUploadWrap");
+      const logoUploadWrap = $("logoUploadWrap");
       if (logoUploadWrap) {
         logoUploadWrap.style.display = variant === 3 ? 'block' : 'none';
       }
-      
+
       // Обновляем логотип
       updateLogoAndSave();
     });
   }
 
-  const logoUploadWrap = document.getElementById("logoUploadWrap");
+  const logoUploadWrap = $("logoUploadWrap");
   if (logoUploadWrap && logoVariant) {
     logoUploadWrap.style.display = lg.variant === 3 ? "block" : "none";
   }
@@ -4537,18 +4507,18 @@ function openSettings() {
 
   // Обработчик загрузки файла
   if (logoUpload) {
-    logoUpload.addEventListener('change', function(e) {
+    logoUpload.addEventListener('change', function (e) {
       const file = e.target.files[0];
       if (!file) return;
-      
+
       const reader = new FileReader();
-      reader.onload = function(event) {
+      reader.onload = function (event) {
         // Сохраняем данные файла
         state.settings.logo.uploadedFileData = event.target.result;
-        
+
         // Устанавливаем вариант 3
         state.settings.logo.variant = 3;
-        
+
         // Обновляем выпадающий список, чтобы добавить вариант 3
         if (logoVariant) {
           // Проверяем, есть ли уже вариант 3
@@ -4559,7 +4529,7 @@ function openSettings() {
               break;
             }
           }
-          
+
           // Если нет, добавляем
           if (!hasOption3) {
             const option3 = document.createElement('option');
@@ -4567,18 +4537,18 @@ function openSettings() {
             option3.textContent = 'Загруженный файл';
             logoVariant.appendChild(option3);
           }
-          
+
           // Устанавливаем значение 3
           logoVariant.value = '3';
         }
-        
+
         // Обновляем логотип
         updateLogoAndSave();
-        
+
         // Сбрасываем значение input, чтобы можно было загрузить тот же файл снова
         logoUpload.value = '';
       };
-      
+
       reader.readAsDataURL(file);
     });
   }
@@ -5234,58 +5204,7 @@ function importJson(file) {
   r.readAsText(file);
 }
 
-function toast(kind, title, text) {
-  const toasts = $("toasts");
-  const el = document.createElement("div");
-  el.className = "toast";
 
-  const icon = document.createElement("div");
-  icon.className = "icon";
-  icon.textContent = kind === "OK" ? "✓" : kind === "WARN" ? "!" : "×";
-  icon.style.background =
-    kind === "OK"
-      ? "var(--ok)"
-      : kind === "WARN"
-        ? "var(--warn)"
-        : "var(--danger)";
-
-  const content = document.createElement("div");
-  content.className = "content";
-  const t = document.createElement("div");
-  t.className = "title";
-  t.textContent = title;
-  const d = document.createElement("div");
-  d.className = "text";
-  d.textContent = text || "";
-  content.appendChild(t);
-  content.appendChild(d);
-
-  const actions = document.createElement("div");
-  actions.className = "actions";
-  const close = document.createElement("button");
-  close.className = "close";
-  close.textContent = "×";
-  close.addEventListener("click", () => el.remove());
-  actions.appendChild(close);
-
-  el.appendChild(icon);
-  el.appendChild(content);
-  el.appendChild(actions);
-
-  toasts.appendChild(el);
-  setTimeout(() => {
-    if (el.isConnected) el.remove();
-  }, 4500);
-}
-
-$("btnSettings").addEventListener("click", openSettings);
-$("btnUndo").addEventListener("click", undo);
-$("btnRedo").addEventListener("click", redo);
-
-$("btnExportJson").addEventListener("click", exportJson);
-
-$("btnImportJson").addEventListener("click", () => $("fileInput").click());
-$("btnExportPng").addEventListener("click", openExportModal);
 
 document
   .getElementById("btnCloseExport")
@@ -5500,8 +5419,8 @@ function deleteDirection(idx) {
   if (affectedCount > 0) {
     const ok = window.confirm(
       `❌ Удалить направление "${dir.name}"?\n\n` +
-        `Это повлияет на ${affectedCount} занятий.\n` +
-        `Направление будет заменено на первое оставшееся.`,
+      `Это повлияет на ${affectedCount} занятий.\n` +
+      `Направление будет заменено на первое оставшееся.`,
     );
     if (!ok) return;
   }
@@ -5526,23 +5445,23 @@ function deleteDirection(idx) {
 function editDirection(idx) {
   const dir = state.directions[idx];
 
-  const details = document.getElementById("dirDetails");
-  const summary = document.getElementById("dirDetailsSummary");
-  const createMode = document.getElementById("dirCreateMode");
-  const editMode = document.getElementById("dirEditMode");
+  const details = $("dirDetails");
+  const summary = $("dirDetailsSummary");
+  const createMode = $("dirCreateMode");
+  const editMode = $("dirEditMode");
 
   summary.textContent = `✏️ Редактирование: ${dir.name}`;
   createMode.style.display = "none";
   editMode.style.display = "block";
   details.open = true;
 
-  const editName = document.getElementById("editDirName");
-  const editColor = document.getElementById("editDirColor");
+  const editName = $("editDirName");
+  const editColor = $("editDirColor");
   editName.value = dir.name;
   editColor.value = dir.color;
 
-  const btnSave = document.getElementById("btnSaveEditDir");
-  const btnCancel = document.getElementById("btnCancelEditDir");
+  const btnSave = $("btnSaveEditDir");
+  const btnCancel = $("btnCancelEditDir");
 
   btnSave.onclick = () => {
     const newName = editName.value.trim();
@@ -5572,7 +5491,7 @@ function editDirection(idx) {
 // Помести это в app.js ВНЕ (до или после) bootstrapCore, но не внутри неё.
 function initLogoSync() {
   console.log('Initializing logo sync...');
-  
+
   const controls = [
     {
       slider: "logoTileSize",
@@ -5637,9 +5556,9 @@ function initLogoSync() {
   ];
 
   controls.forEach((control) => {
-    const slider = document.getElementById(control.slider);
-    const numInput = document.getElementById(control.num);
-    const valOutput = control.val ? document.getElementById(control.val) : null;
+    const slider = $(control.slider);
+    const numInput = $(control.num);
+    const valOutput = control.val ? $(control.val) : null;
 
     console.log(`Control ${control.param}:`, { slider, numInput, valOutput });
 
@@ -5650,14 +5569,14 @@ function initLogoSync() {
 
     function updateValue(value, source) {
       console.log(`updateValue called from ${source}:`, value, 'for', control.param);
-      
+
       // Преобразуем значение с учетом ограничений
       let numValue = Number(value);
       if (isNaN(numValue)) {
         console.warn(`Invalid value for ${control.param}:`, value);
         numValue = control.min;
       }
-      
+
       numValue = clamp(Math.round(numValue), control.min, control.max);
       console.log(`Normalized value for ${control.param}:`, numValue);
 
@@ -5686,16 +5605,16 @@ function initLogoSync() {
       if (state.settings.logo[control.param] !== numValue) {
         state.settings.logo[control.param] = numValue;
         console.log(`Updated state for ${control.param} to:`, numValue);
-        
+
         // Очищаем кэш плиток
         if (window.clearTileBlobCache) {
           console.log('Clearing tile cache');
           window.clearTileBlobCache();
         }
-        
+
         // Обновляем логотип
         updateLogoIfNeeded();
-        
+
         // Сохраняем состояние
         saveState(true);
         console.log(`Saved state for ${control.param}`);
@@ -5708,13 +5627,13 @@ function initLogoSync() {
     if (slider) {
       // Удаляем старый обработчик, если есть
       slider.removeEventListener("input", slider._logoHandler);
-      
+
       // Создаем новый обработчик
-      slider._logoHandler = function() {
+      slider._logoHandler = function () {
         console.log(`Slider ${control.param} changed:`, this.value);
         updateValue(this.value, 'slider');
       };
-      
+
       slider.addEventListener("input", slider._logoHandler);
       console.log(`Added handler for slider ${control.slider}`);
     }
@@ -5723,29 +5642,29 @@ function initLogoSync() {
     if (numInput && numInput.tagName === "INPUT") {
       // Удаляем старый обработчик, если есть
       numInput.removeEventListener("input", numInput._logoHandler);
-      
+
       // Создаем новый обработчик
-      numInput._logoHandler = function() {
+      numInput._logoHandler = function () {
         console.log(`Number input ${control.param} changed:`, this.value);
         updateValue(this.value, 'number-input');
       };
-      
+
       numInput.addEventListener("input", numInput._logoHandler);
       console.log(`Added handler for number input ${control.num}`);
     }
   });
 
   console.log('Logo sync initialization complete.');
-  
+
   // Инициализируем значения при первом запуске
   syncInitialValues();
 }
 
 function syncInitialValues() {
   console.log('Syncing initial logo values...');
-  
+
   const lg = state.settings.logo || {};
-  
+
   // Синхронизируем все значения из состояния в UI
   if (logoTileSize && lg.tileSize !== undefined) {
     logoTileSize.value = lg.tileSize;
@@ -5753,7 +5672,7 @@ function syncInitialValues() {
   if (logoTileSizeNum && lg.tileSize !== undefined) {
     logoTileSizeNum.value = lg.tileSize;
   }
-  
+
   if (logoHorizontalGap && lg.horizontalGap !== undefined) {
     logoHorizontalGap.value = lg.horizontalGap;
   }
@@ -5763,7 +5682,7 @@ function syncInitialValues() {
   if (logoHorizontalGapVal && lg.horizontalGap !== undefined) {
     logoHorizontalGapVal.textContent = `${lg.horizontalGap}px`;
   }
-  
+
   if (logoVerticalGap && lg.verticalGap !== undefined) {
     logoVerticalGap.value = lg.verticalGap;
   }
@@ -5773,7 +5692,7 @@ function syncInitialValues() {
   if (logoVerticalGapVal && lg.verticalGap !== undefined) {
     logoVerticalGapVal.textContent = `${lg.verticalGap}px`;
   }
-  
+
   if (logoRotation && lg.rotation !== undefined) {
     logoRotation.value = lg.rotation;
   }
@@ -5783,7 +5702,7 @@ function syncInitialValues() {
   if (logoRotationVal && lg.rotation !== undefined) {
     logoRotationVal.textContent = `${lg.rotation}°`;
   }
-  
+
   if (logoOpacity && lg.opacity !== undefined) {
     logoOpacity.value = lg.opacity;
   }
@@ -5793,21 +5712,21 @@ function syncInitialValues() {
   if (logoOpacityVal && lg.opacity !== undefined) {
     logoOpacityVal.textContent = `${lg.opacity}%`;
   }
-  
+
   if (logoTileOffsetX && lg.tileOffsetX !== undefined) {
     logoTileOffsetX.value = lg.tileOffsetX;
   }
   if (logoTileOffsetXNum && lg.tileOffsetX !== undefined) {
     logoTileOffsetXNum.value = lg.tileOffsetX;
   }
-  
+
   if (logoTileOffsetY && lg.tileOffsetY !== undefined) {
     logoTileOffsetY.value = lg.tileOffsetY;
   }
   if (logoTileOffsetYNum && lg.tileOffsetY !== undefined) {
     logoTileOffsetYNum.value = lg.tileOffsetY;
   }
-  
+
   console.log('Initial logo values synced.');
 }
 
@@ -5816,16 +5735,16 @@ let logoUpdateDebounceTimer;
 
 function updateLogoAndSave() {
   console.log("Обновление логотипа...");
-  
+
   // Принудительно пересоздаем логотип
   applyLogo();
-  
+
   // Синхронизируем предпросмотр
   syncLogoPreview();
-  
+
   // Сохраняем состояние
   scheduleAutoSave("logo updated");
-  
+
   // Перерисовываем если нужно
   setTimeout(() => {
     markGeometryDirty();
@@ -5853,10 +5772,10 @@ function syncLogoLayoutFromState() {
   if (logoLayout) {
     const layoutValue = lg.layout || "center";
     logoLayout.value = layoutValue;
-    
+
     // Добавляем обработчик изменения, если его еще нет
     if (!logoLayout.hasLayoutChangeHandler) {
-      logoLayout.addEventListener('change', function() {
+      logoLayout.addEventListener('change', function () {
         state.settings.logo.layout = this.value;
         updateLogoAndSave();
         console.log("Режим вотермарки изменен на:", this.value);
@@ -5868,31 +5787,31 @@ function syncLogoLayoutFromState() {
   // 3. Прозрачность - полная синхронизация всех связанных элементов
   if (logoOpacity) {
     const opacityValue = clamp(Math.round(Number(lg.opacity ?? 12)), 0, 100);
-    
+
     // Обновляем все элементы UI
     logoOpacity.value = String(opacityValue);
     if (logoOpacityVal) logoOpacityVal.textContent = `${opacityValue}%`;
     if (logoOpacityNum && logoOpacityNum.tagName === "INPUT") {
       logoOpacityNum.value = String(opacityValue);
     }
-    
+
     // Синхронизируем состояние
     if (state.settings.logo.opacity !== opacityValue) {
       state.settings.logo.opacity = opacityValue;
     }
-    
+
     // Добавляем обработчик изменения прозрачности
     if (!logoOpacity.hasOpacityChangeHandler) {
-      logoOpacity.addEventListener('input', function() {
+      logoOpacity.addEventListener('input', function () {
         const value = clamp(Math.round(Number(this.value)), 0, 100);
         state.settings.logo.opacity = value;
-        
+
         // Обновляем связанные элементы
         if (logoOpacityVal) logoOpacityVal.textContent = `${value}%`;
         if (logoOpacityNum && logoOpacityNum.tagName === "INPUT") {
           logoOpacityNum.value = String(value);
         }
-        
+
         updateLogoAndSave();
       });
       logoOpacity.hasOpacityChangeHandler = true;
@@ -5903,22 +5822,22 @@ function syncLogoLayoutFromState() {
   if (logoRecolor) {
     const isRecolor = !!lg.recolor;
     logoRecolor.checked = isRecolor;
-    
+
     // Показываем/скрываем блок выбора цвета
     if (logoColorWrap) {
       logoColorWrap.style.display = isRecolor ? "block" : "none";
     }
-    
+
     // Добавляем обработчик изменения режима перекрашивания
     if (!logoRecolor.hasRecolorChangeHandler) {
-      logoRecolor.addEventListener('change', function() {
+      logoRecolor.addEventListener('change', function () {
         state.settings.logo.recolor = this.checked;
-        
+
         // Показываем/скрываем блок выбора цвета
         if (logoColorWrap) {
           logoColorWrap.style.display = this.checked ? "block" : "none";
         }
-        
+
         updateLogoAndSave();
         console.log("Режим перекрашивания изменен:", this.checked);
       });
@@ -5929,7 +5848,7 @@ function syncLogoLayoutFromState() {
   // 5. Цвет для перекрашивания
   if (logoColor) {
     const colorValue = lg.color || "#0ea5e9";
-    
+
     // Валидация hex-цвета
     if (/^#[0-9A-F]{6}$/i.test(colorValue)) {
       logoColor.value = colorValue;
@@ -5938,10 +5857,10 @@ function syncLogoLayoutFromState() {
       state.settings.logo.color = "#0ea5e9";
       logoColor.value = "#0ea5e9";
     }
-    
+
     // Добавляем обработчик изменения цвета
     if (!logoColor.hasColorChangeHandler) {
-      logoColor.addEventListener('change', function() {
+      logoColor.addEventListener('change', function () {
         state.settings.logo.color = this.value;
         updateLogoAndSave();
         console.log("Цвет логотипа изменен:", this.value);
@@ -5953,41 +5872,41 @@ function syncLogoLayoutFromState() {
   // 6. Размер плитки - синхронизация слайдера и числового поля (теперь в процентах)
   if (logoTileSize || logoTileSizeNum) {
     const tileSizeValue = clamp(Math.round(Number(lg.tileSize ?? 100)), 0, 1000);
-    
+
     if (logoTileSize) logoTileSize.value = String(tileSizeValue);
     if (logoTileSizeNum && logoTileSizeNum.tagName === "INPUT") {
       logoTileSizeNum.value = String(tileSizeValue);
     }
-    
+
     // Обновляем состояние
     if (state.settings.logo.tileSize !== tileSizeValue) {
       state.settings.logo.tileSize = tileSizeValue;
     }
-    
+
     // Добавляем обработчик изменения размера плитки
     if (logoTileSize && !logoTileSize.hasTileSizeChangeHandler) {
-      logoTileSize.addEventListener('input', function() {
+      logoTileSize.addEventListener('input', function () {
         const value = clamp(Math.round(Number(this.value)), 0, 1000);
         state.settings.logo.tileSize = value;
-        
+
         if (logoTileSizeNum && logoTileSizeNum.tagName === "INPUT") {
           logoTileSizeNum.value = String(value);
         }
-        
+
         updateLogoAndSave();
       });
       logoTileSize.hasTileSizeChangeHandler = true;
     }
-    
+
     if (logoTileSizeNum && logoTileSizeNum.tagName === "INPUT" && !logoTileSizeNum.hasTileSizeNumChangeHandler) {
-      logoTileSizeNum.addEventListener('input', function() {
+      logoTileSizeNum.addEventListener('input', function () {
         const value = clamp(Math.round(Number(this.value)), 0, 1000);
         state.settings.logo.tileSize = value;
-        
+
         if (logoTileSize) {
           logoTileSize.value = String(value);
         }
-        
+
         updateLogoAndSave();
       });
       logoTileSizeNum.hasTileSizeNumChangeHandler = true;
@@ -5997,7 +5916,7 @@ function syncLogoLayoutFromState() {
   // 7. Горизонтальный зазор - синхронизация всех элементов
   if (logoHorizontalGap || logoHorizontalGapNum || logoHorizontalGapVal) {
     const gapValue = clamp(Math.round(Number(lg.horizontalGap ?? 180)), 0, 800);
-    
+
     if (logoHorizontalGap) logoHorizontalGap.value = String(gapValue);
     if (logoHorizontalGapNum && logoHorizontalGapNum.tagName === "INPUT") {
       logoHorizontalGapNum.value = String(gapValue);
@@ -6005,42 +5924,42 @@ function syncLogoLayoutFromState() {
     if (logoHorizontalGapVal) {
       logoHorizontalGapVal.textContent = `${gapValue}px`;
     }
-    
+
     // Синхронизируем состояние
     if (state.settings.logo.horizontalGap !== gapValue) {
       state.settings.logo.horizontalGap = gapValue;
     }
-    
+
     // Добавляем обработчик изменения горизонтального зазора
     if (logoHorizontalGap && !logoHorizontalGap.hasHorizontalGapChangeHandler) {
-      logoHorizontalGap.addEventListener('input', function() {
+      logoHorizontalGap.addEventListener('input', function () {
         const value = clamp(Math.round(Number(this.value)), 0, 800);
         state.settings.logo.horizontalGap = value;
-        
+
         if (logoHorizontalGapNum && logoHorizontalGapNum.tagName === "INPUT") {
           logoHorizontalGapNum.value = String(value);
         }
         if (logoHorizontalGapVal) {
           logoHorizontalGapVal.textContent = `${value}px`;
         }
-        
+
         updateLogoAndSave();
       });
       logoHorizontalGap.hasHorizontalGapChangeHandler = true;
     }
-    
+
     if (logoHorizontalGapNum && logoHorizontalGapNum.tagName === "INPUT" && !logoHorizontalGapNum.hasHorizontalGapNumChangeHandler) {
-      logoHorizontalGapNum.addEventListener('input', function() {
+      logoHorizontalGapNum.addEventListener('input', function () {
         const value = clamp(Math.round(Number(this.value)), 0, 800);
         state.settings.logo.horizontalGap = value;
-        
+
         if (logoHorizontalGap) {
           logoHorizontalGap.value = String(value);
         }
         if (logoHorizontalGapVal) {
           logoHorizontalGapVal.textContent = `${value}px`;
         }
-        
+
         updateLogoAndSave();
       });
       logoHorizontalGapNum.hasHorizontalGapNumChangeHandler = true;
@@ -6050,7 +5969,7 @@ function syncLogoLayoutFromState() {
   // 8. Вертикальный зазор - синхронизация всех элементов
   if (logoVerticalGap || logoVerticalGapNum || logoVerticalGapVal) {
     const gapValue = clamp(Math.round(Number(lg.verticalGap ?? 180)), 0, 800);
-    
+
     if (logoVerticalGap) logoVerticalGap.value = String(gapValue);
     if (logoVerticalGapNum && logoVerticalGapNum.tagName === "INPUT") {
       logoVerticalGapNum.value = String(gapValue);
@@ -6058,42 +5977,42 @@ function syncLogoLayoutFromState() {
     if (logoVerticalGapVal) {
       logoVerticalGapVal.textContent = `${gapValue}px`;
     }
-    
+
     // Синхронизируем состояние
     if (state.settings.logo.verticalGap !== gapValue) {
       state.settings.logo.verticalGap = gapValue;
     }
-    
+
     // Добавляем обработчик изменения вертикального зазора
     if (logoVerticalGap && !logoVerticalGap.hasVerticalGapChangeHandler) {
-      logoVerticalGap.addEventListener('input', function() {
+      logoVerticalGap.addEventListener('input', function () {
         const value = clamp(Math.round(Number(this.value)), 0, 800);
         state.settings.logo.verticalGap = value;
-        
+
         if (logoVerticalGapNum && logoVerticalGapNum.tagName === "INPUT") {
           logoVerticalGapNum.value = String(value);
         }
         if (logoVerticalGapVal) {
           logoVerticalGapVal.textContent = `${value}px`;
         }
-        
+
         updateLogoAndSave();
       });
       logoVerticalGap.hasVerticalGapChangeHandler = true;
     }
-    
+
     if (logoVerticalGapNum && logoVerticalGapNum.tagName === "INPUT" && !logoVerticalGapNum.hasVerticalGapNumChangeHandler) {
-      logoVerticalGapNum.addEventListener('input', function() {
+      logoVerticalGapNum.addEventListener('input', function () {
         const value = clamp(Math.round(Number(this.value)), 0, 800);
         state.settings.logo.verticalGap = value;
-        
+
         if (logoVerticalGap) {
           logoVerticalGap.value = String(value);
         }
         if (logoVerticalGapVal) {
           logoVerticalGapVal.textContent = `${value}px`;
         }
-        
+
         updateLogoAndSave();
       });
       logoVerticalGapNum.hasVerticalGapNumChangeHandler = true;
@@ -6103,7 +6022,7 @@ function syncLogoLayoutFromState() {
   // 9. Поворот - синхронизация всех элементов
   if (logoRotation || logoRotationNum || logoRotationVal) {
     const rotationValue = clamp(Math.round(Number(lg.rotation ?? 0)), -180, 180);
-    
+
     if (logoRotation) logoRotation.value = String(rotationValue);
     if (logoRotationNum && logoRotationNum.tagName === "INPUT") {
       logoRotationNum.value = String(rotationValue);
@@ -6111,42 +6030,42 @@ function syncLogoLayoutFromState() {
     if (logoRotationVal) {
       logoRotationVal.textContent = `${rotationValue}°`;
     }
-    
+
     // Синхронизируем состояние
     if (state.settings.logo.rotation !== rotationValue) {
       state.settings.logo.rotation = rotationValue;
     }
-    
+
     // Добавляем обработчик изменения поворота
     if (logoRotation && !logoRotation.hasRotationChangeHandler) {
-      logoRotation.addEventListener('input', function() {
+      logoRotation.addEventListener('input', function () {
         const value = clamp(Math.round(Number(this.value)), -180, 180);
         state.settings.logo.rotation = value;
-        
+
         if (logoRotationNum && logoRotationNum.tagName === "INPUT") {
           logoRotationNum.value = String(value);
         }
         if (logoRotationVal) {
           logoRotationVal.textContent = `${value}°`;
         }
-        
+
         updateLogoAndSave();
       });
       logoRotation.hasRotationChangeHandler = true;
     }
-    
+
     if (logoRotationNum && logoRotationNum.tagName === "INPUT" && !logoRotationNum.hasRotationNumChangeHandler) {
-      logoRotationNum.addEventListener('input', function() {
+      logoRotationNum.addEventListener('input', function () {
         const value = clamp(Math.round(Number(this.value)), -180, 180);
         state.settings.logo.rotation = value;
-        
+
         if (logoRotation) {
           logoRotation.value = String(value);
         }
         if (logoRotationVal) {
           logoRotationVal.textContent = `${value}°`;
         }
-        
+
         updateLogoAndSave();
       });
       logoRotationNum.hasRotationNumChangeHandler = true;
@@ -6156,41 +6075,41 @@ function syncLogoLayoutFromState() {
   // 10. Смещение по X - синхронизация слайдера и числового поля
   if (logoTileOffsetX || logoTileOffsetXNum) {
     const offsetValue = clamp(Math.round(Number(lg.tileOffsetX ?? 0)), -2000, 2000);
-    
+
     if (logoTileOffsetX) logoTileOffsetX.value = String(offsetValue);
     if (logoTileOffsetXNum && logoTileOffsetXNum.tagName === "INPUT") {
       logoTileOffsetXNum.value = String(offsetValue);
     }
-    
+
     // Синхронизируем состояние
     if (state.settings.logo.tileOffsetX !== offsetValue) {
       state.settings.logo.tileOffsetX = offsetValue;
     }
-    
+
     // Добавляем обработчик изменения смещения X
     if (logoTileOffsetX && !logoTileOffsetX.hasTileOffsetXChangeHandler) {
-      logoTileOffsetX.addEventListener('input', function() {
+      logoTileOffsetX.addEventListener('input', function () {
         const value = clamp(Math.round(Number(this.value)), -2000, 2000);
         state.settings.logo.tileOffsetX = value;
-        
+
         if (logoTileOffsetXNum && logoTileOffsetXNum.tagName === "INPUT") {
           logoTileOffsetXNum.value = String(value);
         }
-        
+
         updateLogoAndSave();
       });
       logoTileOffsetX.hasTileOffsetXChangeHandler = true;
     }
-    
+
     if (logoTileOffsetXNum && logoTileOffsetXNum.tagName === "INPUT" && !logoTileOffsetXNum.hasTileOffsetXNumChangeHandler) {
-      logoTileOffsetXNum.addEventListener('input', function() {
+      logoTileOffsetXNum.addEventListener('input', function () {
         const value = clamp(Math.round(Number(this.value)), -2000, 2000);
         state.settings.logo.tileOffsetX = value;
-        
+
         if (logoTileOffsetX) {
           logoTileOffsetX.value = String(value);
         }
-        
+
         updateLogoAndSave();
       });
       logoTileOffsetXNum.hasTileOffsetXNumChangeHandler = true;
@@ -6200,41 +6119,41 @@ function syncLogoLayoutFromState() {
   // 11. Смещение по Y - синхронизация слайдера и числового поля
   if (logoTileOffsetY || logoTileOffsetYNum) {
     const offsetValue = clamp(Math.round(Number(lg.tileOffsetY ?? 0)), -2000, 2000);
-    
+
     if (logoTileOffsetY) logoTileOffsetY.value = String(offsetValue);
     if (logoTileOffsetYNum && logoTileOffsetYNum.tagName === "INPUT") {
       logoTileOffsetYNum.value = String(offsetValue);
     }
-    
+
     // Синхронизируем состояние
     if (state.settings.logo.tileOffsetY !== offsetValue) {
       state.settings.logo.tileOffsetY = offsetValue;
     }
-    
+
     // Добавляем обработчик изменения смещения Y
     if (logoTileOffsetY && !logoTileOffsetY.hasTileOffsetYChangeHandler) {
-      logoTileOffsetY.addEventListener('input', function() {
+      logoTileOffsetY.addEventListener('input', function () {
         const value = clamp(Math.round(Number(this.value)), -2000, 2000);
         state.settings.logo.tileOffsetY = value;
-        
+
         if (logoTileOffsetYNum && logoTileOffsetYNum.tagName === "INPUT") {
           logoTileOffsetYNum.value = String(value);
         }
-        
+
         updateLogoAndSave();
       });
       logoTileOffsetY.hasTileOffsetYChangeHandler = true;
     }
-    
+
     if (logoTileOffsetYNum && logoTileOffsetYNum.tagName === "INPUT" && !logoTileOffsetYNum.hasTileOffsetYNumChangeHandler) {
-      logoTileOffsetYNum.addEventListener('input', function() {
+      logoTileOffsetYNum.addEventListener('input', function () {
         const value = clamp(Math.round(Number(this.value)), -2000, 2000);
         state.settings.logo.tileOffsetY = value;
-        
+
         if (logoTileOffsetY) {
           logoTileOffsetY.value = String(value);
         }
-        
+
         updateLogoAndSave();
       });
       logoTileOffsetYNum.hasTileOffsetYNumChangeHandler = true;
@@ -6245,10 +6164,10 @@ function syncLogoLayoutFromState() {
   if (logoEnabled) {
     const isEnabled = !!lg.enabled;
     logoEnabled.checked = isEnabled;
-    
+
     // Добавляем обработчик изменения состояния включения
     if (!logoEnabled.hasEnabledChangeHandler) {
-      logoEnabled.addEventListener('change', function() {
+      logoEnabled.addEventListener('change', function () {
         state.settings.logo.enabled = this.checked;
         updateLogoAndSave();
         console.log("Логотип включен:", this.checked);
@@ -6258,7 +6177,7 @@ function syncLogoLayoutFromState() {
   }
 
   // 13. Обновляем UI загрузки файла
-  const logoUploadWrap = document.getElementById("logoUploadWrap");
+  const logoUploadWrap = $("logoUploadWrap");
   if (logoUploadWrap) {
     const currentVariant = Number(logoVariant?.value || lg.variant || 1);
     logoUploadWrap.style.display = currentVariant === 3 ? "block" : "none";
@@ -6274,34 +6193,34 @@ function syncLogoLayoutFromState() {
 // Вспомогательная функция для обновления списка вариантов логотипа
 function updateLogoVariantOptions() {
   const lg = state.settings.logo || {};
-  const logoVariant = document.getElementById('logoVariant');
-  
+  const logoVariant = $('logoVariant');
+
   if (!logoVariant) {
     console.warn("Элемент logoVariant не найден");
     return;
   }
-  
+
   // Сохраняем текущее выбранное значение
   const currentValue = logoVariant.value;
   const scrollTop = logoVariant.scrollTop;
-  
+
   // Очищаем список
   logoVariant.innerHTML = '';
-  
+
   // Определяем доступные варианты
   const variants = [
-    { 
-      value: '1', 
+    {
+      value: '1',
       label: 'Логотип 1',
       description: 'Основной логотип'
     },
-    { 
-      value: '2', 
+    {
+      value: '2',
       label: 'Логотип 2',
       description: 'Альтернативный логотип'
     }
   ];
-  
+
   // Добавляем вариант для загруженного файла, если он есть
   const hasUploadedFile = !!lg.uploadedFileData;
   if (hasUploadedFile) {
@@ -6312,79 +6231,79 @@ function updateLogoVariantOptions() {
       isCustom: true
     });
   }
-  
+
   // Создаем элементы списка
   variants.forEach(variant => {
     const option = document.createElement('option');
     option.value = variant.value;
     option.textContent = variant.label;
-    
+
     // Добавляем подсказку
     if (variant.description) {
       option.title = variant.description;
     }
-    
+
     // Если вариант 3, но файл не загружен, делаем его недоступным
     if (variant.value === '3' && !hasUploadedFile) {
       option.disabled = true;
       option.textContent += ' (не загружен)';
     }
-    
+
     logoVariant.appendChild(option);
   });
-  
+
   // Восстанавливаем выбранное значение или выбираем корректный вариант
   let targetValue = currentValue;
-  
+
   // Если выбран вариант 3, но файл не загружен, переключаем на вариант 1
   if (currentValue === '3' && !hasUploadedFile) {
     targetValue = '1';
     state.settings.logo.variant = 1;
     console.log("Вариант 3 выбран, но файл не загружен. Переключено на вариант 1.");
   }
-  
+
   // Если целевого значения нет в списке (например, было выбрано 3, но его убрали)
   const optionExists = Array.from(logoVariant.options).some(opt => opt.value === targetValue);
   if (!optionExists && logoVariant.options.length > 0) {
     targetValue = logoVariant.options[0].value;
   }
-  
+
   // Устанавливаем значение
   logoVariant.value = targetValue;
-  
+
   // Восстанавливаем позицию прокрутки
   if (logoVariant.value === currentValue) {
     logoVariant.scrollTop = scrollTop;
   }
-  
+
   // Добавляем обработчик изменения, если его еще нет
   if (!logoVariant.hasLogoChangeHandler) {
-    logoVariant.addEventListener('change', function() {
+    logoVariant.addEventListener('change', function () {
       const newVariant = Number(this.value);
       state.settings.logo.variant = newVariant;
-      
+
       // Обновляем видимость блока загрузки файла
-      const logoUploadWrap = document.getElementById("logoUploadWrap");
+      const logoUploadWrap = $("logoUploadWrap");
       if (logoUploadWrap) {
         logoUploadWrap.style.display = newVariant === 3 ? "block" : "none";
       }
-      
+
       // Сохраняем изменения
       updateLogoAndSave();
       console.log(`Вариант логотипа изменен на: ${newVariant}`);
     });
-    
+
     logoVariant.hasLogoChangeHandler = true;
   }
-  
+
   console.log("Logo variant options updated. Current variant:", targetValue);
 }
 
 function resetDirDetailsMode() {
-  const details = document.getElementById("dirDetails");
-  const summary = document.getElementById("dirDetailsSummary");
-  const createMode = document.getElementById("dirCreateMode");
-  const editMode = document.getElementById("dirEditMode");
+  const details = $("dirDetails");
+  const summary = $("dirDetailsSummary");
+  const createMode = $("dirCreateMode");
+  const editMode = $("dirEditMode");
 
   summary.textContent = "➕ Создать новое направление";
   createMode.style.display = "block";
@@ -6412,25 +6331,25 @@ function bootstrapCore() {
 
   // Инициализация логотипа - ПЕРЕД applyTheme()
   ensureLogoLayer();
-  
+
   // Применяем тему
   applyTheme();
-  
+
   // Настраиваем обработчики числовых полей логотипа
   setupLogoNumberInputs();
-  
+
   // Инициализация слайдеров
   initLogoSync();
-  
+
   // Синхронизируем начальные значения
   syncInitialValues();
-  
+
   // Принудительное обновление логотипа
   setTimeout(() => {
     applyLogo();
     console.log("Логотип инициализирован");
   }, 100);
-  
+
   // Применяем тему и рендерим
   renderAll();
 
@@ -6445,7 +6364,7 @@ function bootstrapCore() {
 // Добавляем CSS-стили для экспорта
 function addExportStyles() {
   if (document.querySelector('#export-styles')) return;
-  
+
   const style = document.createElement('style');
   style.id = 'export-styles';
   style.textContent = `
@@ -6494,98 +6413,15 @@ function initLogoEventHandlers() {
 }
 
 // Обновленная функция waitForResources с улучшенной обработкой изображений
-async function waitForResources(element, timeout = 2000, checkInterval = 100) {
-  const startTime = Date.now();
-  const resources = [];
-
-  // Ждем загрузки обычных изображений
-  const images = element.querySelectorAll("img");
-  images.forEach((img) => {
-    if (!img.complete) {
-      resources.push(
-        new Promise((resolve) => {
-          img.onload = resolve;
-          img.onerror = resolve;
-        }),
-      );
-    }
-  });
-
-  // Ждем загрузки фоновых изображений и масок
-  const elementsWithBg = element.querySelectorAll('[style*="background"], [style*="mask"]');
-  elementsWithBg.forEach((el) => {
-    const style = getComputedStyle(el);
-    const bg = style.backgroundImage;
-    const mask = style.maskImage || style.webkitMaskImage;
-    
-    if (bg && bg !== "none" && !bg.includes("linear-gradient") && !bg.includes("radial-gradient")) {
-      resources.push(new Promise((resolve) => {
-        const img = new Image();
-        img.onload = resolve;
-        img.onerror = resolve;
-        
-        // Извлекаем URL из background-image
-        const urlMatch = bg.match(/url\(["']?(.*?)["']?\)/);
-        if (urlMatch && urlMatch[1]) {
-          img.src = urlMatch[1];
-        } else {
-          resolve();
-        }
-      }));
-    }
-    
-    if (mask && mask !== "none") {
-      resources.push(new Promise((resolve) => {
-        const img = new Image();
-        img.onload = resolve;
-        img.onerror = resolve;
-        
-        // Извлекаем URL из mask-image
-        const urlMatch = mask.match(/url\(["']?(.*?)["']?\)/);
-        if (urlMatch && urlMatch[1]) {
-          img.src = urlMatch[1];
-        } else {
-          resolve();
-        }
-      }));
-    }
-  });
-
-  // Ждем загрузки шрифтов
-  if (document.fonts && document.fonts.ready) {
-    resources.push(document.fonts.ready);
-  }
-
-  // Ожидаем загрузки всех ресурсов с таймаутом
-  try {
-    await Promise.race([
-      Promise.allSettled(resources),
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Таймаут загрузки ресурсов")), timeout)
-      )
-    ]);
-  } catch (e) {
-    console.warn("Не все ресурсы загрузились:", e.message);
-  }
-
-  // Даем браузеру время на отрисовку
-  await new Promise((resolve) => requestAnimationFrame(resolve));
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  
-  // Проверяем, не истекло ли время
-  if (Date.now() - startTime > timeout) {
-    console.warn("Время ожидания ресурсов истекло");
-  }
-}
 
 function bootstrap() {
   if (isAuthorized()) {
     authorized = true;
 
-    const appRoot = document.getElementById("appRoot");
+    const appRoot = $("appRoot");
     if (appRoot) appRoot.style.display = "";
 
-    const gate = document.getElementById("authGate");
+    const gate = $("authGate");
     if (gate) gate.remove();
 
     bootstrapCore();
@@ -6631,103 +6467,6 @@ try {
   `;
 }
 
-const EXPORT_PRESETS = [
-  { id: "vk_square", name: "VK пост 1:1 (1080×1080)", w: 1080, h: 1080 },
-  { id: "vk_wide", name: "VK обложка 1.91:1 (1200×630)", w: 1200, h: 630 },
-  { id: "tg_16_9", name: "Telegram 16:9 (1280×720)", w: 1280, h: 720 },
-  { id: "tg_square", name: "Telegram 1:1 (1080×1080)", w: 1080, h: 1080 },
-  { id: "a4_portrait", name: "A4 портрет (2480×3508)", w: 2480, h: 3508 },
-  { id: "a4_land", name: "A4 альбом (3508×2480)", w: 3508, h: 2480 },
-  { id: "auto", name: "Auto (по размеру расписания)", w: 0, h: 0 },
-];
-
-function getExportPresetById(id) {
-  return EXPORT_PRESETS.find((p) => p.id === id) || EXPORT_PRESETS[0];
-}
-
-async function ensureFontsLoaded(timeoutMs = 2500, variantsSet = null) {
-  try {
-    if (document.fonts) {
-      if (variantsSet && variantsSet.size && document.fonts.load) {
-        const loads = [];
-        for (const key of variantsSet) {
-          const [fam, weight, style] = key.split("||");
-
-          loads.push(document.fonts.load(`${style} ${weight} 16px "${fam}"`));
-        }
-        await Promise.allSettled(loads);
-      }
-
-      if (document.fonts.ready) {
-        await Promise.race([
-          document.fonts.ready,
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("fonts timeout")), timeoutMs),
-          ),
-        ]);
-      }
-    }
-  } catch (_) {}
-
-  await new Promise((r) =>
-    requestAnimationFrame(() => requestAnimationFrame(r)),
-  );
-}
-
-function pickBestFontUrlFromSrc(src) {
-  const urls = [];
-  const re = /url\(([^)]+)\)/g;
-  let m;
-  while ((m = re.exec(src || ""))) {
-    const raw = m[1].trim().replace(/^["']|["']$/g, "");
-    if (!raw || raw.startsWith("data:")) continue;
-    urls.push(raw);
-  }
-  const score = (u) => {
-    const p = u.split("?")[0].toLowerCase();
-    if (p.endsWith(".woff2")) return 4;
-    if (p.endsWith(".woff")) return 3;
-    if (p.endsWith(".ttf")) return 2;
-    if (p.endsWith(".otf")) return 1;
-    return 0;
-  };
-  urls.sort((a, b) => score(b) - score(a));
-  return urls[0] || null;
-}
-
-function guessMimeByUrl(u) {
-  const p = (u || "").split("?")[0].toLowerCase();
-  if (p.endsWith(".woff2")) return "font/woff2";
-  if (p.endsWith(".woff")) return "font/woff";
-  if (p.endsWith(".ttf")) return "font/ttf";
-  if (p.endsWith(".otf")) return "font/otf";
-  return "application/octet-stream";
-}
-
-function guessFormatByUrl(u) {
-  const p = (u || "").split("?")[0].toLowerCase();
-  if (p.endsWith(".woff2")) return "woff2";
-  if (p.endsWith(".woff")) return "woff";
-  if (p.endsWith(".ttf")) return "truetype";
-  if (p.endsWith(".otf")) return "opentype";
-  return "woff2";
-}
-
-async function fetchAsDataUrl(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Font fetch failed: ${res.status}`);
-  const buf = await res.arrayBuffer();
-  const bytes = new Uint8Array(buf);
-
-  let bin = "";
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-
-  const mime = guessMimeByUrl(url);
-  return `data:${mime};base64,${btoa(bin)}`;
-}
 
 function matchWeight(ruleWeight, wantedWeight) {
   const s = String(ruleWeight || "").trim();
@@ -6742,482 +6481,15 @@ function matchWeight(ruleWeight, wantedWeight) {
   return wantedWeight >= Math.min(a, b) && wantedWeight <= Math.max(a, b);
 }
 
-function absolutizeCssUrls(cssText, baseHref) {
-  return String(cssText || "").replace(/url\(([^)]+)\)/g, (m, p1) => {
-    const raw = String(p1)
-      .trim()
-      .replace(/^["']|["']$/g, "");
-    if (!raw) return m;
-    if (/^(data:|blob:|https?:)/i.test(raw)) return m;
-    const abs = new URL(raw, baseHref).href;
-    return `url("${abs}")`;
-  });
-}
-
-async function buildFontFaceCssForVariants(
-  variantsSet,
-  { embedData = false } = {},
-) {
-  let css = "";
-  if (!variantsSet || !variantsSet.size) return css;
-
-  const wanted = Array.from(variantsSet).map((k) => {
-    const [fam, weight, style] = k.split("||");
-    return {
-      fam,
-      weight: parseInt(weight, 10) || 1000,
-      style: (style || "normal").toLowerCase(),
-    };
-  });
-
-  for (const sheet of Array.from(document.styleSheets)) {
-    const baseHref = sheet.href || document.baseURI;
-
-    let rules;
-    try {
-      rules = sheet.cssRules;
-    } catch (_) {
-      continue;
-    }
-
-    for (const rule of Array.from(rules)) {
-      if (rule.type !== CSSRule.FONT_FACE_RULE) continue;
-
-      const fam = _firstFontFamily(rule.style.getPropertyValue("font-family"));
-      const style = (
-        rule.style.getPropertyValue("font-style") || "normal"
-      ).toLowerCase();
-      const ruleWeight = rule.style.getPropertyValue("font-weight") || "1000";
-
-      const matched = wanted.some((w) => {
-        if (w.fam !== fam) return false;
-        if (w.style !== style) return false;
-        return matchWeight(ruleWeight, w.weight);
-      });
-
-      if (!matched) continue;
-
-      css += absolutizeCssUrls(rule.cssText, baseHref) + "\n";
-    }
-  }
-
-  void embedData;
-
-  return css;
-}
-
-function getThemeBgCssColor() {
-  const cs = getComputedStyle(document.documentElement);
-  let bg = (cs.getPropertyValue("--bg") || "").trim();
-  if (!bg) return "#ffffff";
-  if (bg.startsWith("#")) return bg;
-  return `#${bg}`;
-}
-
-function resolveExportBackground(expBg) {
-  if (expBg === "transparent") {
-    if (expFormat.value === "jpeg") return "#ffffff";
-    return null;
-  }
-  if (expBg === "white") return "#ffffff";
-  return getThemeBgCssColor();
-}
-
-
-async function generateWatermarkSVG(state, width, height, metrics = null) {
-    const lg = state.settings.logo || {};
-    if (!lg.enabled) return "";
-    
-    const variant = getLogoVariant();
-    const layout = lg.layout || "center";
-    const opacity = (lg.opacity || 12) / 100;
-    const rotation = lg.rotation || 0;
-    
-    if (layout === "center") {
-        return generateCenteredLogoSVG(lg, variant, width, height, opacity, rotation, metrics);
-    } else if (layout === "tile" || layout === "diagonal") {
-        return generateTilePatternSVG(lg, variant, width, height, opacity, rotation, metrics);
-    }
-    
-    return "";
-}
-
-
-function generateCenteredLogoSVG(lg, variant, width, height, opacity, rotation, metrics = null) {
-    // Рассчитываем размер в пикселях на основе процентов
-    const tileSizePercent = clamp(Number(lg.tileSize || 30), 0, 100);
-    const tileSizePixels = calculateTileSizeInPixels(tileSizePercent, metrics || {}, "center");
-    
-    const tileSize = Math.max(20, tileSizePixels);
-    const halfSize = tileSize / 2;
-    
-    // Получаем границы области контента
-    const timeColWidth = metrics?.timeColWidth || 76;
-    const dayHeadHeight = metrics?.dayHeadHeight || 42;
-    const contentWidth = metrics?.contentWidth || (width - timeColWidth);
-    const contentHeight = metrics?.contentHeight || (height - dayHeadHeight);
-    
-    // Центр области контента (исключая колонку времени и заголовки)
-    const centerX = timeColWidth + contentWidth / 2;
-    const centerY = dayHeadHeight + contentHeight / 2;
-    
-    // Границы области контента
-    const leftBoundary = timeColWidth;
-    const rightBoundary = timeColWidth + contentWidth;
-    const topBoundary = dayHeadHeight;
-    const bottomBoundary = dayHeadHeight + contentHeight;
-    
-    // Начальная позиция
-    let finalLeft = centerX - halfSize;
-    let finalTop = centerY - halfSize;
-    let finalSize = tileSize;
-    
-    // Корректируем позицию, если логотип выходит за границы
-    if (finalLeft < leftBoundary) finalLeft = leftBoundary;
-    if (finalLeft + finalSize > rightBoundary) finalLeft = rightBoundary - finalSize;
-    if (finalTop < topBoundary) finalTop = topBoundary;
-    if (finalTop + finalSize > bottomBoundary) finalTop = bottomBoundary - finalSize;
-    
-    // Если логотип не помещается, уменьшаем его
-    if (rightBoundary - leftBoundary < finalSize) {
-        finalSize = rightBoundary - leftBoundary;
-        finalLeft = leftBoundary;
-    }
-    if (bottomBoundary - topBoundary < finalSize) {
-        finalSize = Math.min(finalSize, bottomBoundary - topBoundary);
-        finalTop = topBoundary;
-    }
-    
-    const finalCenterX = finalLeft + finalSize / 2;
-    const finalCenterY = finalTop + finalSize / 2;
-    const color = lg.recolor ? (lg.color || "#0ea5e9") : "#000000";
-    
-    // Создаём clipPath для ограничения области контента
-    return `
-<defs>
-<clipPath id="contentClip">
-<rect x="${timeColWidth}" y="${dayHeadHeight}" width="${contentWidth}" height="${contentHeight}"/>
-</clipPath>
-</defs>
-<g clip-path="url(#contentClip)" opacity="${opacity}" transform="rotate(${rotation || 0}, ${finalCenterX}, ${finalCenterY})">
-${variant === 1 ? 
-    `<circle cx="${finalCenterX}" cy="${finalCenterY}" r="${finalSize/2}" fill="${color}" stroke="none"/>` : 
- variant === 2 ? 
-    `<rect x="${finalLeft}" y="${finalTop}" width="${finalSize}" height="${finalSize}" fill="${color}" stroke="none"/>` : 
- variant === 3 && lg.uploadedFileData ? 
-    `<image href="${lg.uploadedFileData}" x="${finalLeft}" y="${finalTop}" width="${finalSize}" height="${finalSize}" preserveAspectRatio="xMidYMid meet"/>` : ''}
-</g>`;
-}
-
-function generateTilePatternSVG(lg, variant, width, height, opacity, rotation, metrics = null) {
-    const tileSize = lg.tileSize || 140;
-    const hGap = lg.horizontalGap || 180;
-    const vGap = lg.verticalGap || 180;
-    const layout = lg.layout || "tile";
-    const tileOffsetX = lg.tileOffsetX || 0;
-    const tileOffsetY = lg.tileOffsetY || 0;
-    
-    // Получаем границы области контента
-    const timeColWidth = metrics?.timeColWidth || 76;
-    const dayHeadHeight = metrics?.dayHeadHeight || 42;
-    const contentWidth = metrics?.contentWidth || (width - timeColWidth);
-    const contentHeight = metrics?.contentHeight || (height - dayHeadHeight);
-    
-    const angle = Math.abs(rotation) % 180;
-    const rad = (angle * Math.PI) / 180;
-    const sin = Math.abs(Math.sin(rad));
-    const cos = Math.abs(Math.cos(rad));
-    const requiredSize = tileSize * (sin + cos);
-    
-    let patternSVG = '';
-    
-    if (layout === "diagonal") {
-        const cellW = Math.ceil(requiredSize) + hGap;
-        const cellH = Math.ceil(requiredSize) + vGap;
-        patternSVG = `
-<defs>
-<clipPath id="contentClip">
-<rect x="${timeColWidth}" y="${dayHeadHeight}" width="${contentWidth}" height="${contentHeight}"/>
-</clipPath>
-<pattern id="tilePattern" patternUnits="userSpaceOnUse" width="${cellW * 2}" height="${cellH * 2}">
-${generateLogoImageSVG(lg, variant, cellW/2, cellH/2, tileSize, rotation)}
-${generateLogoImageSVG(lg, variant, cellW * 1.5, cellH * 1.5, tileSize, rotation)}
-</pattern>
-</defs>
-<g clip-path="url(#contentClip)">
-<rect x="${timeColWidth}" y="${dayHeadHeight}" width="${contentWidth}" height="${contentHeight}" 
-fill="url(#tilePattern)" opacity="${opacity}" 
-transform="translate(${tileOffsetX}, ${tileOffsetY})"/>
-</g>`;
-    } else if (layout === "tile") {
-        const cellW = Math.ceil(requiredSize) + hGap;
-        const cellH = Math.ceil(requiredSize) + vGap;
-        patternSVG = `
-<defs>
-<clipPath id="contentClip">
-<rect x="${timeColWidth}" y="${dayHeadHeight}" width="${contentWidth}" height="${contentHeight}"/>
-</clipPath>
-<pattern id="tilePattern" patternUnits="userSpaceOnUse" width="${cellW}" height="${cellH}" 
-x="${tileOffsetX}" y="${tileOffsetY}">
-<g transform="rotate(${rotation}, ${cellW/2}, ${cellH/2})">
-${generateLogoImageSVG(lg, variant, (cellW - tileSize)/2, (cellH - tileSize)/2, tileSize, 0)}
-</g>
-</pattern>
-</defs>
-<g clip-path="url(#contentClip)">
-<rect x="${timeColWidth}" y="${dayHeadHeight}" width="${contentWidth}" height="${contentHeight}" 
-fill="url(#tilePattern)" opacity="${opacity}"/>
-</g>`;
-    }
-    
-    return patternSVG;
-}
-
-function generateLogoImageSVG(lg, variant, x, y, size, rotation = 0) {
-  const color = lg.recolor ? (lg.color || "#0ea5e9") : "#000000";
-  
-  if (variant === 1) {
-    return `<g transform="translate(${x}, ${y}) rotate(${rotation}, ${size/2}, ${size/2})">
-              <circle cx="${size/2}" cy="${size/2}" r="${size/2}" fill="${color}" stroke="none"/>
-            </g>`;
-  } else if (variant === 2) {
-    return `<g transform="translate(${x}, ${y}) rotate(${rotation}, ${size/2}, ${size/2})">
-              <rect width="${size}" height="${size}" fill="${color}" stroke="none"/>
-            </g>`;
-  } else if (variant === 3 && lg.uploadedFileData) {
-    return `<g transform="translate(${x}, ${y}) rotate(${rotation}, ${size/2}, ${size/2})">
-              <image href="${lg.uploadedFileData}" 
-                    width="${size}" height="${size}"
-                    preserveAspectRatio="xMidYMid meet"/>
-            </g>`;
-  }
-  
-  return '';
-}
-
-function removeInteractiveElements(element) {
-  const selectors = [
-    ".grab",
-    ".day-actions",
-    "button",
-    '[draggable="true"]',
-    ".empty-slot",
-  ];
-
-  selectors.forEach((selector) => {
-    element.querySelectorAll(selector).forEach((el) => {
-      el.style.display = "none";
-      el.style.visibility = "hidden";
-      el.style.opacity = "0";
-      el.style.pointerEvents = "none";
-    });
-  });
-}
-
-async function fallbackCapture(element, background) {
-  console.warn("Используем fallback захват");
-
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-
-  const width = element.scrollWidth;
-  const height = element.scrollHeight;
-
-  canvas.width = width;
-  canvas.height = height;
-
-  if (background) {
-    ctx.fillStyle = background;
-    ctx.fillRect(0, 0, width, height);
-  }
-
-  ctx.fillStyle = "#333";
-  ctx.font = "12px Arial";
-  ctx.fillText("Экспорт не удался, попробуйте снова", 10, 20);
-
-  return canvas;
-}
-
-async function captureScheduleCanvas({
-  compact = false,
-  background = null,
-} = {}) {
-  if (typeof window.html2canvas !== "function") {
-    toast(
-      "WARN",
-      "Экспорт",
-      "html2canvas не найден. Проверьте подключение библиотеки.",
-      3000,
-    );
-    return null;
-  }
-  
-  const loadingToast = toast("INFO", "Экспорт", "Подготовка к экспорту...", 0);
-  
-  // Получаем метрики из оригинального документа ДО создания клона
-  const originalMetrics = getOriginalScheduleMetrics();
-  console.log('Original metrics for export:', originalMetrics);
-  
-  // Создаем клон с логотипом
-  const { clone, cleanup } = makeExportClone({ compact });
-  if (!clone) {
-    toast("ERR", "Экспорт", "Не удалось создать клон для экспорта", 3000);
-    return null;
-  }
-  
-  try {
-    // Удаляем интерактивные элементы
-    removeInteractiveElements(clone);
-    
-    // Скрываем скроллбары и устанавливаем фиксированные размеры
-    clone.style.overflow = 'hidden';
-    const scheduleEl = clone.querySelector('.schedule');
-    if (scheduleEl) {
-      scheduleEl.style.overflow = 'hidden';
-    }
-    
-    // Получаем настройки логотипа
-    const lg = state.settings.logo;
-    
-    // Обновляем логотип в клоне для ВСЕХ режимов
-    if (lg.enabled) {
-      // Для центрированного режима нужно создать специальный SVG
-      if (lg.layout === "center") {
-        await applyCenteredLogoToClone(clone, lg, originalMetrics);
-      } else {
-        // Для остальных режимов используем существующий подход
-        await applyTileLogoToClone(clone, lg, originalMetrics);
-      }
-    } else {
-      // Скрываем логотип, если он отключен
-      const logoLayer = clone.querySelector("#logoLayer");
-      const logoMark = clone.querySelector("#logoMark");
-      if (logoLayer && logoMark) {
-        logoLayer.style.display = "none";
-        logoMark.style.display = "none";
-      }
-    }
-    
-    const headEls = Array.from(clone.querySelectorAll(".cell.head"));
-    headEls.forEach((el) => {
-      el.style.position = "static";
-      el.style.top = "auto";
-      el.style.zIndex = "auto";
-    });
-    
-    const changed = hideEmptyTimeRows(clone, true, false);
-    
-    // Ждем загрузки всех ресурсов
-    await waitForResources(clone, 3000);
-    
-    // Получаем метрики для установки точных размеров
-    const w = Math.max(100, Math.ceil(originalMetrics.scheduleWidth || 1));
-    const h = Math.max(100, Math.ceil(originalMetrics.scheduleHeight || 1));
-    
-    clone.style.width = `${w}px`;
-    clone.style.height = `${h}px`;
-    clone.style.overflow = "hidden";
-    
-    // Обновляем стили для экспорта
-    clone.style.boxSizing = "border-box";
-    clone.style.display = "block";
-    
-    // Обновляем размеры расписания внутри клона
-    if (scheduleEl) {
-      scheduleEl.style.width = `${w}px`;
-      scheduleEl.style.height = `${h}px`;
-      scheduleEl.style.overflow = "hidden";
-    }
-    
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    
-    const html2canvasOptions = {
-      backgroundColor: background,
-      scale: 2,
-      useCORS: true,
-      allowTaint: true,
-      logging: false,
-      width: w,
-      height: h,
-      x: 0,
-      y: 0,
-      scrollX: 0,
-      scrollY: 0,
-      imageTimeout: 5000,
-      removeContainer: true,
-      onclone: function (clonedDoc) {
-        // В клонированном документе также показываем логотип
-        if (lg.enabled) {
-          const clonedLogoLayer = clonedDoc.querySelector("#logoLayer");
-          const clonedLogoMark = clonedDoc.querySelector("#logoMark");
-          if (clonedLogoLayer && clonedLogoMark) {
-            // Применяем логотип с учетом оригинальных метрик
-            if (lg.layout === "center") {
-              applyCenteredLogoToClonedDoc(clonedDoc, lg, originalMetrics);
-            } else {
-              applyLogoToClonedDoc(clonedDoc, lg, originalMetrics);
-            }
-          }
-        }
-        
-        // Удаляем интерактивные элементы
-        removeInteractiveElements(clonedDoc);
-        
-        // Скрываем скроллбары в клонированном документе
-        const clonedSchedule = clonedDoc.querySelector('.schedule');
-        if (clonedSchedule) {
-          clonedSchedule.style.overflow = 'hidden';
-        }
-        
-        const exportModeEls = clonedDoc.querySelectorAll('.export-mode');
-        exportModeEls.forEach(el => {
-          el.style.overflow = 'hidden';
-        });
-      },
-    };
-    
-    const capturePromise = window.html2canvas(clone, html2canvasOptions);
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(
-        () => reject(new Error("Таймаут захвата canvas (10 секунд)")),
-        10000,
-      ),
-    );
-    
-    const canvas = await Promise.race([capturePromise, timeoutPromise]);
-    
-    if (loadingToast && loadingToast.remove) loadingToast.remove();
-    toast("OK", "Экспорт", "Изображение готово", 2000);
-    return canvas;
-  } catch (e) {
-    console.error("Ошибка захвата canvas:", e);
-    try {
-      const fallbackCanvas = await fallbackCapture(clone, background);
-      toast("WARN", "Экспорт", "Использован упрощённый экспорт", 3000);
-      return fallbackCanvas;
-    } catch (fallbackError) {
-      console.error("Fallback также не удался:", fallbackError);
-      toast(
-        "ERR",
-        "Экспорт",
-        e?.message || "Ошибка при создании изображения",
-        3000,
-      );
-      return null;
-    }
-  } finally {
-    cleanup();
-  }
-}
 
 function updateLogoCSSVariables() {
   const style = document.documentElement.style;
-  
+
   // Получаем реальные размеры из CSS
   const computedStyle = getComputedStyle(document.documentElement);
   const timeColWidth = computedStyle.getPropertyValue('--timeCol') || '76px';
   const dayHeadHeight = '42px'; // Фиксированная высота заголовков из CSS
-  
+
   // Устанавливаем CSS переменные для логотипа
   style.setProperty('--time-col-width', timeColWidth);
   style.setProperty('--day-head-height', dayHeadHeight);
@@ -7227,579 +6499,6 @@ function updateLogoCSSVariables() {
 document.addEventListener('DOMContentLoaded', updateLogoCSSVariables);
 window.addEventListener('resize', updateLogoCSSVariables);
 
-async function applyCenteredLogoToClone(clone, lg, metrics) {
-  const logoLayer = clone.querySelector("#logoLayer");
-  const logoMark = clone.querySelector("#logoMark");
-  if (!logoLayer || !logoMark) {
-    console.warn('Logo layer or mark not found in clone');
-    return;
-  }
-  
-  const variant = getLogoVariant();
-  const tileSize = Math.max(100, Math.min(1000, Number(lg.tileSize) || 140));
-  const halfSize = tileSize / 2;
-  
-  // Рассчитываем центр области контента с учетом метрик
-  const centerX = metrics.timeColWidth + metrics.contentWidth / 2;
-  const centerY = metrics.dayHeadHeight + metrics.contentHeight / 2;
-  
-  // Ограничиваем границы области контента
-  const leftBoundary = metrics.timeColWidth;
-  const rightBoundary = metrics.timeColWidth + metrics.contentWidth;
-  const topBoundary = metrics.dayHeadHeight;
-  const bottomBoundary = metrics.dayHeadHeight + metrics.contentHeight;
-  
-  // Рассчитываем начальную позицию
-  let left = centerX - halfSize;
-  let top = centerY - halfSize;
-  let finalTileSize = tileSize;
-  
-  // Проверяем и корректируем, если логотип выходит за границы
-  if (left < leftBoundary) {
-    left = leftBoundary;
-  }
-  if (left + finalTileSize > rightBoundary) {
-    left = rightBoundary - finalTileSize;
-  }
-  if (top < topBoundary) {
-    top = topBoundary;
-  }
-  if (top + finalTileSize > bottomBoundary) {
-    top = bottomBoundary - finalTileSize;
-  }
-  
-  // Если после корректировки логотип все еще не помещается, уменьшаем его размер
-  if (rightBoundary - leftBoundary < finalTileSize) {
-    finalTileSize = rightBoundary - leftBoundary;
-    left = leftBoundary;
-  }
-  if (bottomBoundary - topBoundary < finalTileSize) {
-    finalTileSize = Math.min(finalTileSize, bottomBoundary - topBoundary);
-    top = topBoundary;
-  }
-  
-  console.log('Centered logo positioning in clone:', {
-    centerX, centerY,
-    leftBoundary, rightBoundary, topBoundary, bottomBoundary,
-    left, top, finalTileSize
-  });
-  
-  // Устанавливаем границы контейнера для логотипа, чтобы он не выходил за область контента
-  const logoContainer = document.createElement('div');
-  logoContainer.className = 'logo-container';
-  logoContainer.style.cssText = `
-    position: absolute;
-    top: ${metrics.dayHeadHeight}px;
-    left: ${metrics.timeColWidth}px;
-    width: ${metrics.contentWidth}px;
-    height: ${metrics.contentHeight}px;
-    overflow: hidden;
-    pointer-events: none;
-    z-index: 0;
-  `;
-  
-  // Очищаем старый слой логотипа
-  logoLayer.innerHTML = '';
-  
-  // Перемещаем логотип в контейнер
-  logoLayer.appendChild(logoContainer);
-  logoContainer.appendChild(logoMark);
-  
-  // Обновляем стили логотипа
-  logoLayer.style.cssText = `
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: 0;
-    overflow: visible;
-    display: block;
-  `;
-  
-  // Сбрасываем и устанавливаем стили логотипа
-  const relativeLeft = left - metrics.timeColWidth;
-  const relativeTop = top - metrics.dayHeadHeight;
-  
-  logoMark.style.cssText = `
-    position: absolute;
-    pointer-events: none;
-    z-index: 0;
-    opacity: ${(lg.opacity || 12) / 100};
-    width: ${finalTileSize}px;
-    height: ${finalTileSize}px;
-    left: ${relativeLeft}px;
-    top: ${relativeTop}px;
-    transform: rotate(${lg.rotation || 0}deg);
-  `;
-  
-  const src = getLogoDataUrl(variant, lg.recolor ? lg.color : null);
-  
-  if (lg.recolor && variant === 3) {
-    logoMark.style.backgroundColor = lg.color || "#0ea5e9";
-    logoMark.style.webkitMaskImage = `url(${src})`;
-    logoMark.style.maskImage = `url(${src})`;
-    logoMark.style.webkitMaskRepeat = 'no-repeat';
-    logoMark.style.maskRepeat = 'no-repeat';
-    logoMark.style.webkitMaskPosition = 'center';
-    logoMark.style.maskPosition = 'center';
-    logoMark.style.webkitMaskSize = 'contain';
-    logoMark.style.maskSize = 'contain';
-    logoMark.style.backgroundImage = 'none';
-  } else {
-    logoMark.style.backgroundImage = `url(${src})`;
-    logoMark.style.backgroundRepeat = 'no-repeat';
-    logoMark.style.backgroundPosition = 'center';
-    logoMark.style.backgroundSize = 'contain';
-  }
-  
-  // Устанавливаем CSS переменные для метрик
-  clone.style.setProperty('--time-col-width', `${metrics.timeColWidth}px`);
-  clone.style.setProperty('--day-head-height', `${metrics.dayHeadHeight}px`);
-  clone.style.setProperty('--content-width', `${metrics.contentWidth}px`);
-  clone.style.setProperty('--content-height', `${metrics.contentHeight}px`);
-  
-  // Добавляем атрибут data-wm
-  logoLayer.setAttribute('data-wm', 'center');
-  
-  // Принудительно показываем
-  logoLayer.style.display = 'block';
-  logoMark.style.display = 'block';
-  
-  // Добавляем CSS для границ
-  const styleEl = document.createElement('style');
-  styleEl.textContent = `
-    .logo-container {
-      position: absolute;
-      top: var(--day-head-height, 42px);
-      left: var(--time-col-width, 76px);
-      width: var(--content-width, 100%);
-      height: var(--content-height, 100%);
-      overflow: hidden;
-      pointer-events: none;
-      z-index: 0;
-    }
-    .logo-image {
-      position: absolute;
-      pointer-events: none;
-      z-index: 0;
-    }
-    /* Гарантируем, что заголовки и колонка времени закрывают логотип */
-    .cell.head, .cell.time {
-      background-color: var(--gridHead) !important;
-      position: relative !important;
-      z-index: 0 !important;
-    }
-    /* Убедимся, что область контента отрезает логотип */
-    .schedule-wrap {
-      position: relative;
-      overflow: hidden;
-    }
-  `;
-  
-  if (!clone.querySelector('#logo-styles')) {
-    styleEl.id = 'logo-styles';
-    clone.appendChild(styleEl);
-  }
-}
-
-
-// Вспомогательная функция для применения логотипа в клонированном документе
-function applyLogoToClonedDoc(clonedDoc, lg, metrics = null) {
-  const clonedLogoLayer = clonedDoc.querySelector("#logoLayer");
-  const clonedLogoMark = clonedDoc.querySelector("#logoMark");
-  if (!clonedLogoLayer || !clonedLogoMark) return;
-  
-  const variant = getLogoVariant();
-  const layout = lg.layout || "center";
-  
-  // Если метрики не переданы, получаем из клонированного документа
-  if (!metrics) {
-    metrics = getScheduleMetrics(clonedDoc);
-  }
-  
-  // Показываем слой логотипа
-  clonedLogoLayer.style.cssText = `
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: 1;
-    overflow: hidden;
-    display: block;
-  `;
-  
-  // Сбрасываем стили
-  clonedLogoMark.style.cssText = `
-    position: absolute;
-    pointer-events: none;
-    z-index: 1;
-    opacity: ${(lg.opacity || 12) / 100};
-  `;
-  
-  if (layout === "center") {
-    // Центральный режим
-    const tileSize = Math.max(100, Math.min(1000, Number(lg.tileSize) || 140));
-    
-    // Рассчитываем центр области контента
-    const centerX = metrics.timeColWidth + metrics.contentWidth / 2;
-    const centerY = metrics.dayHeadHeight + metrics.contentHeight / 2;
-    
-    clonedLogoMark.style.cssText += `
-      width: ${tileSize}px;
-      height: ${tileSize}px;
-      left: ${centerX - tileSize / 2}px;
-      top: ${centerY - tileSize / 2}px;
-      transform: rotate(${lg.rotation || 0}deg);
-    `;
-    
-    const src = getLogoDataUrl(variant, lg.recolor ? lg.color : null);
-    
-    if (lg.recolor && variant === 3) {
-      clonedLogoMark.style.backgroundColor = lg.color || "#0ea5e9";
-      clonedLogoMark.style.webkitMaskImage = `url(${src})`;
-      clonedLogoMark.style.maskImage = `url(${src})`;
-      clonedLogoMark.style.webkitMaskRepeat = 'no-repeat';
-      clonedLogoMark.style.maskRepeat = 'no-repeat';
-      clonedLogoMark.style.webkitMaskPosition = 'center';
-      clonedLogoMark.style.maskPosition = 'center';
-      clonedLogoMark.style.webkitMaskSize = 'contain';
-      clonedLogoMark.style.maskSize = 'contain';
-    } else {
-      clonedLogoMark.style.backgroundImage = `url(${src})`;
-      clonedLogoMark.style.backgroundRepeat = 'no-repeat';
-      clonedLogoMark.style.backgroundPosition = 'center';
-      clonedLogoMark.style.backgroundSize = 'contain';
-    }
-  } else if (layout === "tile" || layout === "diagonal") {
-    // Плиточные режимы
-    const tileSize = Math.max(20, Math.min(1000, Number(lg.tileSize) || 140));
-    const horizontalGap = Number(lg.horizontalGap || 180);
-    const verticalGap = Number(lg.verticalGap || 180);
-    
-    // Позиционируем только в области контента
-    clonedLogoMark.style.cssText += `
-      left: ${metrics.timeColWidth}px;
-      top: ${metrics.dayHeadHeight}px;
-      width: ${metrics.contentWidth}px;
-      height: ${metrics.contentHeight}px;
-    `;
-    
-    // Получаем data URL для плитки
-    const src = window.getTileSrc(
-      variant,
-      tileSize,
-      horizontalGap,
-      verticalGap,
-      lg.rotation || 0,
-      layout,
-      lg.recolor ? lg.color : null
-    );
-    
-    if (lg.recolor && variant === 3) {
-      clonedLogoMark.style.backgroundColor = lg.color || "#0ea5e9";
-      clonedLogoMark.style.webkitMaskImage = `url(${src})`;
-      clonedLogoMark.style.maskImage = `url(${src})`;
-      clonedLogoMark.style.webkitMaskRepeat = 'repeat';
-      clonedLogoMark.style.maskRepeat = 'repeat';
-    } else {
-      clonedLogoMark.style.backgroundImage = `url(${src})`;
-      clonedLogoMark.style.backgroundRepeat = 'repeat';
-    }
-    
-    // Размер паттерна
-    if (layout === "diagonal") {
-      clonedLogoMark.style.backgroundSize = `${(tileSize + horizontalGap) * 2}px ${(tileSize + verticalGap) * 2}px`;
-      if (lg.recolor && variant === 3) {
-        clonedLogoMark.style.webkitMaskSize = `${(tileSize + horizontalGap) * 2}px ${(tileSize + verticalGap) * 2}px`;
-        clonedLogoMark.style.maskSize = `${(tileSize + horizontalGap) * 2}px ${(tileSize + verticalGap) * 2}px`;
-      }
-    } else {
-      clonedLogoMark.style.backgroundSize = `${tileSize + horizontalGap}px ${tileSize + verticalGap}px`;
-      if (lg.recolor && variant === 3) {
-        clonedLogoMark.style.webkitMaskSize = `${tileSize + horizontalGap}px ${tileSize + verticalGap}px`;
-        clonedLogoMark.style.maskSize = `${tileSize + horizontalGap}px ${tileSize + verticalGap}px`;
-      }
-    }
-    
-    // Смещение
-    const offsetX = Number(lg.tileOffsetX || 0);
-    const offsetY = Number(lg.tileOffsetY || 0);
-    clonedLogoMark.style.backgroundPosition = `${offsetX}px ${offsetY}px`;
-    
-    if (lg.recolor && variant === 3) {
-      clonedLogoMark.style.webkitMaskPosition = `${offsetX}px ${offsetY}px`;
-      clonedLogoMark.style.maskPosition = `${offsetX}px ${offsetY}px`;
-    }
-  }
-  
-  // Принудительно показываем
-  clonedLogoLayer.style.display = 'block';
-  clonedLogoMark.style.display = 'block';
-}
-
-// Новая вспомогательная функция для применения плиточного логотипа к клону
-async function applyTileLogoToClone(clone, lg, metrics) {
-  const logoLayer = clone.querySelector("#logoLayer");
-  const logoMark = clone.querySelector("#logoMark");
-  if (!logoLayer || !logoMark) return;
-  
-  const variant = getLogoVariant();
-  const layout = lg.layout || "center";
-  
-  // Показываем слой логотипа
-  logoLayer.style.cssText = `
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: 1;
-    overflow: hidden;
-    display: block;
-  `;
-  
-  // Сбрасываем стили
-  logoMark.style.cssText = '';
-  logoMark.style.cssText = `
-    position: absolute;
-    pointer-events: none;
-    z-index: 1;
-    opacity: ${(lg.opacity || 12) / 100};
-  `;
-  
-  if (layout === "center") {
-    // Центральный режим
-    const tileSize = Math.max(100, Math.min(1000, Number(lg.tileSize) || 140));
-    
-    // Рассчитываем центр области контента
-    const centerX = metrics.timeColWidth + metrics.contentWidth / 2;
-    const centerY = metrics.dayHeadHeight + metrics.contentHeight / 2;
-    
-    logoMark.style.cssText += `
-      width: ${tileSize}px;
-      height: ${tileSize}px;
-      left: ${centerX - tileSize / 2}px;
-      top: ${centerY - tileSize / 2}px;
-      transform: rotate(${lg.rotation || 0}deg);
-    `;
-    
-    const src = getLogoDataUrl(variant, lg.recolor ? lg.color : null);
-    applyLogoStyle(logoMark, src, lg.recolor && variant === 3 ? lg.color : null, false);
-  } else if (layout === "tile" || layout === "diagonal") {
-    // Плиточные режимы
-    const tileSize = Math.max(20, Math.min(1000, Number(lg.tileSize) || 140));
-    const horizontalGap = Number(lg.horizontalGap || 180);
-    const verticalGap = Number(lg.verticalGap || 180);
-    
-    // Позиционируем только в области контента
-    logoMark.style.cssText += `
-      left: ${metrics.timeColWidth}px;
-      top: ${metrics.dayHeadHeight}px;
-      width: ${metrics.contentWidth}px;
-      height: ${metrics.contentHeight}px;
-    `;
-    
-    // Получаем data URL для плитки
-    const src = window.getTileSrc(
-      variant,
-      tileSize,
-      horizontalGap,
-      verticalGap,
-      lg.rotation || 0,
-      layout,
-      lg.recolor ? lg.color : null
-    );
-    
-    if (lg.recolor && variant === 3) {
-      logoMark.style.backgroundColor = lg.color || "#0ea5e9";
-      logoMark.style.webkitMaskImage = `url(${src})`;
-      logoMark.style.maskImage = `url(${src})`;
-      logoMark.style.webkitMaskRepeat = 'repeat';
-      logoMark.style.maskRepeat = 'repeat';
-      
-      // Размер паттерна
-      if (layout === "diagonal") {
-        logoMark.style.webkitMaskSize = `${(tileSize + horizontalGap) * 2}px ${(tileSize + verticalGap) * 2}px`;
-        logoMark.style.maskSize = `${(tileSize + horizontalGap) * 2}px ${(tileSize + verticalGap) * 2}px`;
-      } else {
-        logoMark.style.webkitMaskSize = `${tileSize + horizontalGap}px ${tileSize + verticalGap}px`;
-        logoMark.style.maskSize = `${tileSize + horizontalGap}px ${tileSize + verticalGap}px`;
-      }
-      
-      // Смещение
-      const offsetX = Number(lg.tileOffsetX || 0);
-      const offsetY = Number(lg.tileOffsetY || 0);
-      logoMark.style.webkitMaskPosition = `${offsetX}px ${offsetY}px`;
-      logoMark.style.maskPosition = `${offsetX}px ${offsetY}px`;
-    } else {
-      logoMark.style.backgroundImage = `url(${src})`;
-      logoMark.style.backgroundRepeat = 'repeat';
-      
-      // Размер паттерна
-      if (layout === "diagonal") {
-        logoMark.style.backgroundSize = `${(tileSize + horizontalGap) * 2}px ${(tileSize + verticalGap) * 2}px`;
-      } else {
-        logoMark.style.backgroundSize = `${tileSize + horizontalGap}px ${tileSize + verticalGap}px`;
-      }
-      
-      // Смещение
-      const offsetX = Number(lg.tileOffsetX || 0);
-      const offsetY = Number(lg.tileOffsetY || 0);
-      logoMark.style.backgroundPosition = `${offsetX}px ${offsetY}px`;
-    }
-  }
-  
-  // Принудительно показываем
-  logoLayer.style.display = 'block';
-  logoMark.style.display = 'block';
-}
-
-let lastPreview = null;
-
-function makeExportClone({ compact = false } = {}) {
-  const node = document.querySelector(".schedule-wrap");
-  if (!node) return { clone: null, cleanup: () => {} };
-  
-  const wrap = document.createElement("div");
-  wrap.style.cssText = `
-    position: fixed;
-    left: -9999px;
-    top: -9999px;
-    width: auto;
-    height: auto;
-    overflow: visible;
-    pointer-events: none;
-    z-index: -1;
-    opacity: 1;
-  `;
-  wrap.setAttribute("aria-hidden", "true");
-  
-  // Глубокое клонирование с сохранением стилей
-  const clone = node.cloneNode(true);
-  
-  // Копируем инлайн-стили
-  const originalStyle = window.getComputedStyle(node);
-  clone.style.cssText = originalStyle.cssText;
-  clone.classList.add("export-mode");
-  if (compact) clone.classList.add("compact-export");
-  
-  // Устанавливаем позиционирование
-  clone.style.position = "static";
-  clone.style.left = "";
-  clone.style.top = "";
-  clone.style.right = "";
-  clone.style.bottom = "";
-  
-  // Получаем реальные размеры из оригинального элемента
-  const scheduleEl = node.querySelector('.schedule');
-  let contentWidth = node.scrollWidth || node.offsetWidth;
-  let contentHeight = node.scrollHeight || node.offsetHeight;
-  
-  // Если есть schedule элемент, используем его размеры
-  if (scheduleEl) {
-    contentWidth = Math.max(contentWidth, scheduleEl.scrollWidth || scheduleEl.offsetWidth);
-    contentHeight = Math.max(contentHeight, scheduleEl.scrollHeight || scheduleEl.offsetHeight);
-  }
-  
-  // Добавляем отступы для безопасности
-  contentWidth = Math.max(contentWidth, 100);
-  contentHeight = Math.max(contentHeight, 100);
-  
-  clone.style.width = `${contentWidth}px`;
-  clone.style.height = `${contentHeight}px`;
-  clone.style.minWidth = `${contentWidth}px`;
-  clone.style.minHeight = `${contentHeight}px`;
-  clone.style.maxWidth = "none";
-  clone.style.maxHeight = "none";
-  clone.style.overflow = "visible";
-  clone.style.margin = "0";
-  clone.style.transform = "none";
-  clone.style.boxSizing = "border-box";
-  
-  wrap.appendChild(clone);
-  document.body.appendChild(wrap);
-  
-  return {
-    clone,
-    cleanup: () => {
-      if (wrap.parentNode) {
-        wrap.remove();
-      }
-    },
-  };
-}
-
-function getOriginalScheduleMetrics() {
-  const schedule = document.querySelector('.schedule');
-  if (!schedule) {
-    const computedStyle = getComputedStyle(document.documentElement);
-    const timeColWidth = parseFloat(computedStyle.getPropertyValue('--timeCol')) || 76;
-    const dayHeadHeight = 42;
-    
-    const scheduleWrap = document.querySelector('.schedule-wrap');
-    let scheduleWidth = 0;
-    let scheduleHeight = 0;
-    
-    if (scheduleWrap) {
-      scheduleWidth = scheduleWrap.scrollWidth || scheduleWrap.offsetWidth;
-      scheduleHeight = scheduleWrap.scrollHeight || scheduleWrap.offsetHeight;
-    }
-    
-    const contentWidth = Math.max(0, scheduleWidth - timeColWidth);
-    const contentHeight = Math.max(0, scheduleHeight - dayHeadHeight);
-    
-    return {
-      timeColWidth,
-      dayHeadHeight,
-      scheduleWidth,
-      scheduleHeight,
-      contentWidth,
-      contentHeight
-    };
-  }
-  
-  // Ищем колонку времени
-  let timeColWidth = 76;
-  const timeCell = schedule.querySelector('.cell.time');
-  if (timeCell) {
-    const rect = timeCell.getBoundingClientRect();
-    timeColWidth = rect.width;
-  } else {
-    const computedStyle = getComputedStyle(schedule);
-    const cssWidth = parseFloat(computedStyle.getPropertyValue('--timeCol')) || 76;
-    timeColWidth = cssWidth;
-  }
-  
-  // Ищем заголовок дня
-  let dayHeadHeight = 42;
-  const headCell = schedule.querySelector('.cell.head');
-  if (headCell) {
-    const rect = headCell.getBoundingClientRect();
-    dayHeadHeight = rect.height;
-  }
-  
-  // Полная ширина и высота расписания
-  let scheduleWidth = schedule.scrollWidth || schedule.offsetWidth;
-  let scheduleHeight = schedule.scrollHeight || schedule.offsetHeight;
-  
-  // Ширина и высота области контента (без заголовков)
-  const contentWidth = Math.max(0, scheduleWidth - timeColWidth);
-  const contentHeight = Math.max(0, scheduleHeight - dayHeadHeight);
-  
-  return {
-    timeColWidth,
-    dayHeadHeight,
-    scheduleWidth,
-    scheduleHeight,
-    contentWidth,
-    contentHeight
-  };
-}
 
 function openExportModal() {
   expPreset.innerHTML = "";
@@ -7847,28 +6546,20 @@ function syncExportModalUI() {
   }
 }
 
-function getExportOptsFromUI() {
-  const preset = getExportPresetById(expPreset.value);
-  const fmt = expFormat.value;
-  const imageFormat = fmt === "jpeg" ? "image/jpeg" : "image/png";
-  const quality =
-    fmt === "jpeg"
-      ? Math.min(1, Math.max(0.6, Number(expQuality.value || 92) / 100))
-      : 1.0;
 
-  const background =
-    fmt === "svg" ? null : resolveExportBackground(expBg.value);
 
-  const compact = state.settings.display.cellView === "compact";
+// Шрифты
 
-  return {
-    preset,
-    fmt,
-    imageFormat,
-    quality,
-    background,
-    compact,
-  };
+function absolutizeCssUrls(cssText, baseHref) {
+  return String(cssText || "").replace(/url\(([^)]+)\)/g, (m, p1) => {
+    const raw = String(p1)
+      .trim()
+      .replace(/^["']|["']$/g, "");
+    if (!raw) return m;
+    if (/^(data:|blob:|https?:)/i.test(raw)) return m;
+    const abs = new URL(raw, baseHref).href;
+    return `url("${abs}")`;
+  });
 }
 
 function _firstFontFamily(fontFamily) {
@@ -7876,21 +6567,9 @@ function _firstFontFamily(fontFamily) {
   return first.replace(/^["']|["']$/g, "");
 }
 
-function isGenericFamily(fam) {
-  const f = (fam || "").trim().toLowerCase();
-  return (
-    !f ||
-    f === "serif" ||
-    f === "sans-serif" ||
-    f === "monospace" ||
-    f === "system-ui" ||
-    f === "ui-sans-serif" ||
-    f === "ui-serif" ||
-    f === "ui-monospace" ||
-    f === "emoji" ||
-    f === "math" ||
-    f === "fangsong"
-  );
+function isGenericFamily(family) {
+  const generic = ['serif', 'sans-serif', 'monospace', 'cursive', 'fantasy', 'system-ui'];
+  return generic.includes(family.toLowerCase());
 }
 
 function normalizeFontWeight(w) {
@@ -7907,7 +6586,7 @@ function normalizeFontWeight(w) {
 function collectUsedFontVariantsFromDom(rootEl) {
   const set = new Set();
   if (!rootEl) return set;
-
+  
   const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       return node.nodeValue && node.nodeValue.trim()
@@ -7915,174 +6594,1234 @@ function collectUsedFontVariantsFromDom(rootEl) {
         : NodeFilter.FILTER_REJECT;
     },
   });
-
+  
   let node;
   while ((node = walker.nextNode())) {
     const el = node.parentElement;
     if (!el) continue;
-
+    
     const cs = getComputedStyle(el);
     const fam = _firstFontFamily(cs.fontFamily);
     if (!fam || isGenericFamily(fam)) continue;
-
+    
     const weight = normalizeFontWeight(cs.fontWeight);
     const style = (cs.fontStyle || "normal").toLowerCase();
-
+    
     set.add(`${fam}||${weight}||${style}`);
   }
-
+  
   return set;
 }
 
+async function ensureFontsLoaded(timeoutMs = 2500, variantsSet = null) {
+  try {
+    if (document.fonts) {
+      if (variantsSet && variantsSet.size && document.fonts.load) {
+        const loads = [];
+        for (const key of variantsSet) {
+          const [fam, weight, style] = key.split("||");
+          loads.push(document.fonts.load(`${style} ${weight} 16px "${fam}"`));
+        }
+        await Promise.allSettled(loads);
+      }
+      
+      if (document.fonts.ready) {
+        await Promise.race([
+          document.fonts.ready,
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("fonts timeout")), timeoutMs),
+          ),
+        ]);
+      }
+    }
+  } catch (_) {}
+  
+  await new Promise((r) =>
+    requestAnimationFrame(() => requestAnimationFrame(r)),
+  );
+}
+
+async function buildFontFaceCssForVariants(variantsSet, { embedData = false } = {}) {
+  let css = "";
+  if (!variantsSet || !variantsSet.size) return css;
+  
+  const wanted = Array.from(variantsSet).map((k) => {
+    const [fam, weight, style] = k.split("||");
+    return {
+      fam,
+      weight: parseInt(weight, 10) || 1000,
+      style: (style || "normal").toLowerCase(),
+    };
+  });
+  
+  for (const sheet of Array.from(document.styleSheets)) {
+    const baseHref = sheet.href || document.baseURI;
+    
+    let rules;
+    try {
+      rules = sheet.cssRules;
+    } catch (_) {
+      continue;
+    }
+    
+    for (const rule of Array.from(rules)) {
+      if (rule.type !== CSSRule.FONT_FACE_RULE) continue;
+      
+      const fam = _firstFontFamily(rule.style.getPropertyValue("font-family"));
+      const style = (rule.style.getPropertyValue("font-style") || "normal").toLowerCase();
+      const ruleWeight = rule.style.getPropertyValue("font-weight") || "1000";
+      
+      const matched = wanted.some((w) => {
+        if (w.fam !== fam) return false;
+        if (w.style !== style) return false;
+        return matchWeight(ruleWeight, w.weight);
+      });
+      
+      if (!matched) continue;
+      
+      css += absolutizeCssUrls(rule.cssText, baseHref) + "\n";
+    }
+  }
+  
+  void embedData;
+  return css;
+}
+
+// Выгрузка изображения
+
 async function buildExportPreview() {
   const opts = getExportOptsFromUI();
-
+  
   toast("OK", "Экспорт", "Генерация предпросмотра…");
+  
+  try {
+    const exportResult = await executeExport(opts);
+    if (!exportResult) return;
+    
+    const { dataUrl } = exportResult;
+    expPreviewImg.src = dataUrl;
+    lastPreview = { dataUrl, ...opts };
+    
+    toast("OK", "Экспорт", "Предпросмотр готов.");
+  } catch (error) {
+    console.error("Export error:", error);
+    toast("ERR", "Экспорт", error?.message || "Ошибка экспорта");
+  }
+}
 
-  if (opts.fmt === "svg") {
-    if (
-      typeof htmlToImage === "undefined" ||
-      typeof htmlToImage.toSvg !== "function"
-    ) {
-      toast("WARN", "SVG", "html-to-image не найден (проверь подключение).");
-      return;
+async function executeExport(opts) {
+  const { fmt } = opts;
+  
+  if (fmt === "svg") {
+    return await exportToSvg(opts);
+  } else {
+    return await exportToCanvas(opts);
+  }
+}
+
+async function prepareDomForExport({ compact = false, format = 'canvas' } = {}) {
+  // Принудительно обновляем метрики
+  const metrics = getExportMetrics(true);
+  const { clone, cleanup } = makeExportClone({ compact });
+
+  if (!clone) {
+    throw new Error("Не удалось создать клон расписания");
+  }
+
+  // 1. Удаляем интерактивные элементы
+  removeInteractiveElements(clone);
+
+  // 2. Применяем стили к событиям (важно: устанавливает прямые стили!)
+  applyCssVariablesToEvents(clone);
+
+  // 3. Скрываем пустые строки
+  const hiddenRows = hideEmptyTimeRows(clone, {
+    respectFilters: false,
+    keepNowRow: false
+  });
+
+  // 4. Фиксируем шапку
+  const headEls = Array.from(clone.querySelectorAll(".cell.head"));
+  headEls.forEach(el => {
+    el.style.position = "static";
+    el.style.top = "auto";
+    el.style.zIndex = "auto";
+  });
+
+  // 5. Создаем элементы логотипа (пока без стилей)
+  const lg = state.settings.logo;
+  let logoLayer = clone.querySelector("#logoLayer");
+  let logoMark = clone.querySelector("#logoMark");
+
+  if (lg.enabled) {
+    if (!logoLayer) {
+      logoLayer = document.createElement('div');
+      logoLayer.id = 'logoLayer';
+      clone.querySelector('.schedule-wrap')?.prepend(logoLayer);
+    }
+    if (!logoMark) {
+      logoMark = document.createElement('div');
+      logoMark.id = 'logoMark';
+      logoLayer.appendChild(logoMark);
+    }
+    // Стили будут установлены позже в applyLogoToExport
+  }
+
+  // 6. Даем браузеру пересчитать layout
+  await new Promise(r => requestAnimationFrame(r));
+  await new Promise(r => setTimeout(r, 50));
+
+  // 7. Измеряем размеры
+  const scheduleEl = clone.querySelector('.schedule');
+  let width, height;
+
+  if (scheduleEl) {
+    const rect = scheduleEl.getBoundingClientRect();
+    width = Math.max(100, Math.ceil(rect.width || scheduleEl.scrollWidth || 800));
+    height = Math.max(100, Math.ceil(rect.height || scheduleEl.scrollHeight || 600));
+
+    // Устанавливаем размеры НА КОНТЕЙНЕР (.schedule-wrap)
+    clone.style.width = `${width}px`;
+    clone.style.height = `${height}px`;
+    clone.style.overflow = "visible";
+
+    // Расписание растягивается на контейнер
+    scheduleEl.style.width = '100%';
+    scheduleEl.style.height = '100%';
+    scheduleEl.style.position = 'relative'; // Для позиционирования логотипа
+  } else {
+    width = Math.max(100, Math.ceil(metrics.scheduleWidth || 800));
+    height = Math.max(100, Math.ceil(metrics.scheduleHeight || 600));
+    clone.style.width = `${width}px`;
+    clone.style.height = `${height}px`;
+  }
+
+  // 8. Применяем логотип ПОСЛЕ измерений, устанавливая прямые стили
+  if (lg.enabled) {
+    await applyLogoToExport(clone, lg, metrics, format);
+  }
+
+  return {
+    clone,
+    cleanup,
+    metrics,
+    hiddenRows,
+    width,
+    height
+  };
+}
+
+async function exportToSvg(opts) {
+  if (typeof htmlToImage === "undefined" || typeof htmlToImage.toSvg !== "function") {
+    toast("WARN", "SVG", "html-to-image не найден (проверь подключение).");
+    return null;
+  }
+
+  // 1. Принудительно обновляем рендер перед экспортом
+  await new Promise(resolve => {
+    renderAll();
+    setTimeout(resolve, 100); // Даем время на перерисовку
+  });
+
+  // 2. Получаем подготовленный DOM
+  const prepared = await prepareDomForExport({
+    compact: opts.compact,
+    format: 'svg'
+  });
+
+  if (!prepared) {
+    toast("ERR", "SVG", "Не удалось подготовить DOM для экспорта");
+    return null;
+  }
+
+  const { clone, cleanup, width, height } = prepared;
+
+  try {
+    // 3. Проверяем, что расписание видно
+    const scheduleEl = clone.querySelector('.schedule');
+    if (!scheduleEl) {
+      console.error('Расписание не найдено в клоне для SVG экспорта');
+      toast("ERR", "SVG", "Расписание не найдено");
+      throw new Error("Расписание не найдено");
     }
 
-    const { clone, cleanup } = makeExportClone({ compact: opts.compact });
-    if (!clone) {
-      toast("ERR", "SVG", "Не найден .schedule-wrap");
-      return;
-    }
+    // 4. Повторно применяем стили ко всем событиям в КЛОНЕЕ перед генерацией SVG
+    // Это критически важно для html-to-image.toSvg
+    applyCssVariablesToEventsForExport(clone); // <-- Вызов обновленной функции
 
-    const uiEls = Array.from(
-      clone.querySelectorAll(".grab, .day-actions, button, .empty-slot"),
+    // 5. Собираем используемые шрифты
+    const usedFonts = collectUsedFontVariantsFromDom(clone);
+
+    // 6. Загружаем шрифты
+    await ensureFontsLoaded(2500, usedFonts);
+
+    // 7. Ждем перерисовки
+    await new Promise((r) =>
+      requestAnimationFrame(() => requestAnimationFrame(r))
     );
 
-    const uiPrevDisplay = uiEls.map((el) => el.style.display);
-    const uiPrevVis = uiEls.map((el) => el.style.visibility);
-
-    uiEls.forEach((el) => {
-      el.style.display = "none";
-      el.style.visibility = "hidden";
+    // 8. Собираем CSS для встраивания шрифтов
+    const fontEmbedCSS = await buildFontFaceCssForVariants(usedFonts, {
+      embedData: false,
     });
 
-    const headEls = Array.from(clone.querySelectorAll(".cell.head"));
-    const headPrevPos = headEls.map((el) => el.style.position);
-    const headPrevTop = headEls.map((el) => el.style.top);
-    const headPrevZ = headEls.map((el) => el.style.zIndex);
+    // 9. Получаем цвет фона из темы
+    const bgColor = getThemeBgCssColor() || "#ffffff";
 
-    let changed = [];
+    console.log(`SVG экспорт: размеры ${width}x${height}, фон ${bgColor}`);
 
-    try {
-      changed = hideEmptyTimeRows(clone);
-
-      headEls.forEach((el) => {
-        el.style.position = "static";
-        el.style.top = "auto";
-        el.style.zIndex = "auto";
-      });
-
-      const bgColor = getThemeBgCssColor() || "#ffffff";
-
-      const scheduleEl = clone.querySelector(".schedule") || clone;
-
-      const usedVariants = collectUsedFontVariantsFromDom(scheduleEl);
-
-      await ensureFontsLoaded(2500, usedVariants);
-
-      await new Promise((r) =>
-        requestAnimationFrame(() => requestAnimationFrame(r)),
-      );
-
-      const w = Math.max(
-        1,
-        Math.ceil(scheduleEl.scrollWidth || scheduleEl.offsetWidth || 1),
-      );
-      const h = Math.max(
-        1,
-        Math.ceil(scheduleEl.scrollHeight || scheduleEl.offsetHeight || 1),
-      );
-
-      clone.style.width = `${w}px`;
-      clone.style.height = `${h}px`;
-
-      const fontEmbedCSS = await buildFontFaceCssForVariants(usedVariants, {
-        embedData: false,
-      });
-
-      const dataUrl = await htmlToImage.toSvg(clone, {
-        backgroundColor: bgColor,
-        width: w,
-        height: h,
-        pixelRatio: 1,
-        cacheBust: true,
-        quality: 1.0,
-        fontEmbedCSS,
-      });
-
-      expPreviewImg.src = dataUrl;
-      lastPreview = { dataUrl, ...opts };
-
-      toast("OK", "Экспорт", "Предпросмотр SVG готов.");
-    } catch (e) {
-      console.error("SVG preview error:", e);
-      toast("ERR", "SVG", e?.message || "Ошибка предпросмотра SVG");
-    } finally {
-      uiEls.forEach((el, i) => {
-        el.style.display = uiPrevDisplay[i] || "";
-        el.style.visibility = uiPrevVis[i] || "";
-      });
-
-      headEls.forEach((el, i) => {
-        el.style.position = headPrevPos[i] || "";
-        el.style.top = headPrevTop[i] || "";
-        el.style.zIndex = headPrevZ[i] || "";
-      });
-
-      for (let i = changed.length - 1; i >= 0; i--) {
-        const { el, prevDisplay } = changed[i];
-        el.style.display = prevDisplay;
+    // 10. Генерируем SVG
+    const dataUrl = await htmlToImage.toSvg(clone, {
+      backgroundColor: bgColor,
+      width: width,
+      height: height,
+      pixelRatio: 1,
+      cacheBust: true,
+      quality: 1.0,
+      fontEmbedCSS: fontEmbedCSS,
+      style: {
+        // Гарантируем, что все элементы видны
+        visibility: 'visible',
+        opacity: '1'
       }
+    });
 
-      cleanup();
+    toast("OK", "SVG", "SVG предпросмотр готов.");
+    return { dataUrl };
+  } catch (e) {
+    console.error("SVG export error:", e);
+    toast("ERR", "SVG", e?.message || "Ошибка генерации SVG");
+    throw new Error(e?.message || "Ошибка генерации SVG");
+  } finally {
+    cleanup();
+  }
+}
+
+async function exportToCanvas(opts) {
+  if (typeof window.html2canvas !== "function") {
+    toast("WARN", "Экспорт", "html2canvas не найден. Проверьте подключение библиотеки.");
+    return null;
+  }
+
+  // 1. Принудительно обновляем рендер перед экспортом
+  await new Promise(resolve => {
+    renderAll();
+    setTimeout(resolve, 100); // Даем время на перерисовку
+  });
+
+  // 2. Получаем подготовленный DOM
+  const prepared = await prepareDomForExport({
+    compact: opts.compact,
+    format: 'canvas'
+  });
+
+  if (!prepared) {
+    toast("ERR", "Экспорт", "Не удалось подготовить DOM для экспорта");
+    return null;
+  }
+
+  const { clone, cleanup, width, height } = prepared;
+
+  try {
+    // 3. Убедимся, что все ресурсы загружены
+    await waitForResources(clone, 3000);
+
+    // 4. Проверяем, что расписание видно в клоне
+    const scheduleEl = clone.querySelector('.schedule');
+    if (!scheduleEl) {
+      console.error('Расписание не найдено в клоне для экспорта');
+      toast("ERR", "Экспорт", "Расписание не найдено");
+      throw new Error("Расписание не найдено в клоне");
     }
 
-    return;
-  }
+    // 5. Подсчитываем видимые события для отладки
+    const visibleEvents = clone.querySelectorAll('.event:not(.dim)').length;
+    const allEvents = clone.querySelectorAll('.event').length;
+    console.log(`Экспорт: ${visibleEvents}/${allEvents} событий видимы`);
 
-  const baseCanvas = await captureScheduleCanvas({
-    compact: opts.compact,
-    background: opts.background,
-  });
-  if (!baseCanvas) {
-    toast("ERR", "Экспорт", "Не удалось создать изображение (canvas).");
-    return;
-  }
+    // 6. Создаем опции для html2canvas
+    const html2canvasOptions = {
+      backgroundColor: opts.background,
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      logging: false,
+      width: width,
+      height: height,
+      x: 0,
+      y: 0,
+      scrollX: 0,
+      scrollY: 0,
+      imageTimeout: 5000,
+      removeContainer: true,
+      onclone: async (clonedDoc) => { // onclone теперь асинхронный
+        // Критически важно повторно применить стили к событиям в клоне html2canvas, УЧИТЫВАЯ --eventAlpha
+        applyCssVariablesToEventsForExport(clonedDoc); // <-- Вызов обновленной функции
 
-  let outCanvas = baseCanvas;
+        // Критически важно повторно применить стили логотипа в клоне html2canvas
+        const lg = state.settings.logo;
+        if (lg.enabled) {
+          const clonedLogoLayer = clonedDoc.querySelector("#logoLayer");
+          const clonedLogoMark = clonedDoc.querySelector("#logoMark");
+          if (clonedLogoLayer && clonedLogoMark) {
+            try {
+              const metrics = getExportMetrics(); // Получаем метрики для клона
+              clonedLogoLayer.style.position = 'absolute';
+              clonedLogoLayer.style.top = '0';
+              clonedLogoLayer.style.left = '0';
+              clonedLogoLayer.style.width = '100%';
+              clonedLogoLayer.style.height = '100%';
+              clonedLogoLayer.style.pointerEvents = 'none';
+              clonedLogoLayer.style.zIndex = '0'; // <-- КРИТИЧЕСКИ: Под расписанием
+              clonedLogoLayer.style.overflow = 'hidden';
+              clonedLogoLayer.style.display = 'block';
+              clonedLogoLayer.style.backgroundColor = lg.bg || 'transparent';
+              if (lg.url) {
+                 clonedLogoLayer.style.backgroundImage = `url("${lg.url}")`;
+                 clonedLogoLayer.style.backgroundRepeat = lg.repeat || 'no-repeat';
+                 clonedLogoLayer.style.backgroundPosition = lg.pos || 'center';
+                 clonedLogoLayer.style.backgroundSize = lg.size || 'contain';
+              } else {
+                 clonedLogoLayer.style.backgroundImage = 'none';
+              }
 
-  if (opts.preset.id !== "auto") {
-    const p = opts.preset;
-    const target = {
-      ...p,
-      ...(opts.rotate && p.w && p.h ? { w: p.h, h: p.w } : null),
-      rotate: !!opts.rotate,
+              clonedLogoMark.style.position = 'absolute';
+              clonedLogoMark.style.pointerEvents = 'none';
+              clonedLogoMark.style.zIndex = '0'; // <-- КРИТИЧЕСКИ: Под расписанием
+              clonedLogoMark.style.opacity = (lg.opacity || 12) / 100; // <-- КРИТИЧЕСКИ: Применяем opacity
+              clonedLogoMark.style.display = 'block';
+
+              const clonedSchedule = clonedDoc.querySelector('.schedule');
+              if (clonedSchedule) {
+                clonedSchedule.style.position = 'relative';
+                clonedSchedule.style.zIndex = '1'; // Над логотипом
+              }
+            } catch (error) {
+              console.warn('Ошибка применения логотипа в onclone:', error);
+            }
+          }
+        }
+      },
     };
-    outCanvas = createFinalCanvas(baseCanvas, target);
-  } else if (opts.rotate) {
-    outCanvas = baseCanvas;
+
+    // 7. Захватываем canvas с таймаутом
+    const capturePromise = window.html2canvas(clone, html2canvasOptions);
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Таймаут захвата canvas (10 секунд)")), 10000)
+    );
+
+    const canvas = await Promise.race([capturePromise, timeoutPromise]);
+
+    toast("OK", "Экспорт", "Изображение готово");
+
+    let finalCanvas = canvas;
+
+    // 8. Применяем пресет если нужно
+    if (opts.preset.id !== "auto") {
+      const p = opts.preset;
+      const target = {
+        w: p.w,
+        h: p.h,
+        rotate: false // Поворот не используется
+      };
+      finalCanvas = createFinalCanvas(canvas, target);
+    }
+
+    // 9. Конвертируем в dataURL с учетом качества
+    const dataUrl = finalCanvas.toDataURL(opts.imageFormat, opts.quality);
+    return { dataUrl };
+
+  } catch (e) {
+    console.error("Canvas export error:", e);
+
+    // Fallback: пробуем упрощенный захват
+    try {
+      console.log("Пробуем fallback capture...");
+      const fallbackCanvas = await fallbackCapture(clone, opts.background);
+      toast("WARN", "Экспорт", "Использован упрощённый экспорт");
+
+      let finalCanvas = fallbackCanvas;
+      if (opts.preset.id !== "auto") {
+        const p = opts.preset;
+        finalCanvas = createFinalCanvas(fallbackCanvas, {
+          w: p.w,
+          h: p.h,
+          rotate: false
+        });
+      }
+
+      const dataUrl = finalCanvas.toDataURL(opts.imageFormat, opts.quality);
+      return { dataUrl };
+    } catch (fallbackError) {
+      console.error("Fallback также не удался:", fallbackError);
+      toast("ERR", "Экспорт", e?.message || "Ошибка при создании изображения");
+      throw new Error("Ошибка при создании изображения");
+    }
+  } finally {
+    // 10. Всегда очищаем
+    cleanup();
+  }
+}
+
+function getExportOptsFromUI() {
+  const preset = getExportPresetById(expPreset.value);
+  const fmt = expFormat.value;
+  const imageFormat = fmt === "jpeg" ? "image/jpeg" : "image/png";
+  const quality = fmt === "jpeg"
+    ? Math.min(1, Math.max(0.6, Number(expQuality.value || 92) / 100))
+    : 1.0;
+
+  const background = fmt === "svg" ? null : resolveExportBackground(expBg.value);
+  const compact = state.settings.display.cellView === "compact";
+
+  return { preset, fmt, imageFormat, quality, background, compact };
+}
+
+function makeExportClone({ compact = false } = {}) {
+  const node = document.querySelector(".schedule-wrap");
+  if (!node) return { clone: null, cleanup: () => {} };
+
+  // Обёртка вне экрана
+  const wrap = document.createElement("div");
+  wrap.style.cssText = `
+    position: fixed;
+    left: -9999px;
+    top: -9999px;
+    width: max-content;
+    height: max-content;
+    overflow: visible;
+    pointer-events: none;
+    z-index: -1;
+    opacity: 1;
+    visibility: visible;
+  `;
+  wrap.setAttribute("aria-hidden", "true");
+  wrap.setAttribute("data-export-clone", "true");
+
+  // Клонируем с глубоким копированием
+  const clone = node.cloneNode(true);
+  clone.classList.add("export-mode");
+  if (compact) clone.classList.add("compact-export");
+
+  // Сбрасываем ТОЛЬКО позиционирование, НЕ сетку!
+  // Удаляем !important, чтобы не переопределять важные стили ниже
+  clone.style.position = 'static';
+  clone.style.left = 'auto';
+  clone.style.top = 'auto';
+  clone.style.right = 'auto';
+  clone.style.bottom = 'auto';
+  clone.style.transform = 'none';
+  clone.style.margin = '0';
+  clone.style.display = 'block'; // Важно для .schedule-wrap
+
+  // 🔑 КРИТИЧЕСКИ ВАЖНО: сохранить структуру сетки .schedule
+  const scheduleEl = clone.querySelector('.schedule');
+  if (scheduleEl) {
+    const origSchedule = document.querySelector('.schedule');
+    if (origSchedule) {
+      const cs = getComputedStyle(origSchedule);
+      scheduleEl.style.display = 'grid';
+      scheduleEl.style.gridTemplateColumns = cs.gridTemplateColumns; // ← КОПИРУЕМ СЕТКУ!
+      scheduleEl.style.width = 'max-content';
+      scheduleEl.style.minWidth = '100%';
+    }
+
+    // Принудительно показываем все элементы
+    // ВАЖНО: Установка visibility/opacity после сброса display из clone.style
+    scheduleEl.querySelectorAll('.cell, .slot, .event').forEach(el => {
+      el.style.display = 'block'; // Убедиться, что отображается
+      el.style.visibility = 'visible';
+      el.classList.remove('dim');
+      el.style.opacity = '1';
+    });
   }
 
-  const dataUrl = outCanvas.toDataURL(opts.imageFormat, opts.quality);
-  expPreviewImg.src = dataUrl;
+  wrap.appendChild(clone);
+  document.body.appendChild(wrap);
 
-  lastPreview = { dataUrl, ...opts };
-  toast("OK", "Экспорт", "Предпросмотр готов.");
+  return {
+    clone,
+    cleanup: () => {
+      if (wrap.parentNode) wrap.remove();
+    },
+  };
+}
+
+function getExportMetrics(force = false) {
+  const now = Date.now();
+  if (!force && cachedMetrics && (now - metricsTimestamp) < METRICS_CACHE_TIME) {
+    return cachedMetrics;
+  }
+  
+  const scheduleWrap = document.querySelector('.schedule-wrap');
+  if (!scheduleWrap) {
+    cachedMetrics = {
+      scheduleWidth: 800,
+      scheduleHeight: 600,
+      contentWidth: 700,
+      contentHeight: 550,
+      timeColWidth: 76,
+      dayHeadHeight: 42
+    };
+    metricsTimestamp = now;
+    return cachedMetrics;
+  }
+  
+  // Принудительно показываем все для измерений
+  scheduleWrap.style.display = '';
+  scheduleWrap.style.visibility = 'visible';
+  
+  const schedule = scheduleWrap.querySelector('.schedule');
+  if (!schedule) {
+    cachedMetrics = {
+      scheduleWidth: scheduleWrap.offsetWidth,
+      scheduleHeight: scheduleWrap.offsetHeight,
+      contentWidth: scheduleWrap.offsetWidth - 76,
+      contentHeight: scheduleWrap.offsetHeight - 42,
+      timeColWidth: 76,
+      dayHeadHeight: 42
+    };
+    metricsTimestamp = now;
+    return cachedMetrics;
+  }
+  
+  // Измеряем после пересчета layout
+  setTimeout(() => {}, 0);
+  
+  const rect = schedule.getBoundingClientRect();
+  const timeCell = schedule.querySelector('.cell.time');
+  const headCell = schedule.querySelector('.cell.head');
+  
+  cachedMetrics = {
+    scheduleWidth: Math.max(100, rect.width || schedule.offsetWidth || 800),
+    scheduleHeight: Math.max(100, rect.height || schedule.offsetHeight || 600),
+    contentWidth: Math.max(100, (rect.width || 800) - (timeCell?.offsetWidth || 76)),
+    contentHeight: Math.max(100, (rect.height || 600) - (headCell?.offsetHeight || 42)),
+    timeColWidth: timeCell?.offsetWidth || 76,
+    dayHeadHeight: headCell?.offsetHeight || 42
+  };
+  
+  metricsTimestamp = now;
+  return cachedMetrics;
+}
+
+function removeInteractiveElements(element) {
+  const selectors = [
+    ".grab",
+    ".day-actions",
+    "button",
+    '[draggable="true"]',
+    ".empty-slot",
+  ];
+  
+  selectors.forEach((selector) => {
+    element.querySelectorAll(selector).forEach((el) => {
+      el.style.display = "none";
+      el.style.visibility = "hidden";
+      el.style.pointerEvents = "none";
+    });
+  });
+}
+
+function hideEmptyTimeRows(rootEl, options = {}) {
+  const { respectFilters = true, keepNowRow = true } = options;
+  const scheduleEl = rootEl.querySelector(".schedule");
+  if (!scheduleEl) return [];
+  
+  if (scheduleEl.classList.contains("compact-mode")) return [];
+  
+  const { step } = getBounds();
+  const slots = buildSlots();
+  if (!slots.length || !step) return [];
+  
+  const allCells = Array.from(scheduleEl.children);
+  if (!allCells.length) return [];
+  
+  const COLS = scheduleEl.querySelectorAll(".cell.head").length || 8;
+  const headerCount = COLS;
+  
+  const events = respectFilters && typeof memoizedEventVisible === "function"
+    ? state.events.filter(memoizedEventVisible)
+    : state.events;
+  
+  const base = slots[0];
+  const diff = new Array(slots.length + 1).fill(0);
+  
+  for (const ev of events) {
+    const evStart = ev && Number(ev.startMin);
+    const evEnd = evStart + Number(ev.durationMin);
+    
+    if (!Number.isFinite(evStart) || !Number.isFinite(evEnd) || evEnd <= evStart)
+      continue;
+    
+    let first = Math.floor((evStart - base) / step);
+    let last = Math.floor((evEnd - 1 - base) / step);
+    
+    if (last < 0 || first >= slots.length) continue;
+    
+    first = Math.max(0, first);
+    last = Math.min(slots.length - 1, last);
+    
+    diff[first] += 1;
+    diff[last + 1] -= 1;
+  }
+  
+  const has = new Array(slots.length).fill(false);
+  let run = 0;
+  for (let i = 0; i < slots.length; i++) {
+    run += diff[i];
+    has[i] = run > 0;
+  }
+  
+  const changed = [];
+  const hideCell = (el) => {
+    const prevDisplay = el.style.display;
+    if (prevDisplay === "none") return;
+    changed.push({ el, prevDisplay });
+    el.style.display = "none";
+  };
+  
+  for (let slotIndex = 0; slotIndex < slots.length; slotIndex++) {
+    if (has[slotIndex]) continue;
+    
+    const rowStartIndex = headerCount + slotIndex * COLS;
+    const timeCell = allCells[rowStartIndex];
+    
+    if (keepNowRow && timeCell && timeCell.classList.contains("now"))
+      continue;
+    
+    for (let i = 0; i < COLS; i++) {
+      const cell = allCells[rowStartIndex + i];
+      if (cell) hideCell(cell);
+    }
+  }
+  
+  return changed;
+}
+
+async function applyLogoToExport(element, lg, metrics, format = 'canvas') {
+  let logoLayer = element.querySelector("#logoLayer");
+  let logoMark = element.querySelector("#logoMark");
+
+  if (!logoLayer || !logoMark) {
+    console.warn('Элементы логотипа не найдены в DOM для экспорта.');
+    return;
+  }
+
+  // Устанавливаем ВСЕ стили напрямую, чтобы html2canvas/html-to-image их увидел
+  // ЛОГОТИП ПОД расписанием (ключевое!)
+  logoLayer.style.position = 'absolute';
+  logoLayer.style.top = '0';
+  logoLayer.style.left = '0';
+  logoLayer.style.width = '100%';
+  logoLayer.style.height = '100%';
+  logoLayer.style.pointerEvents = 'none';
+  logoLayer.style.zIndex = '0'; // <-- КРИТИЧЕСКИ: Под расписанием
+  logoLayer.style.overflow = 'hidden';
+  logoLayer.style.display = 'block';
+
+  // Применяем фоновые стили напрямую
+  logoLayer.style.backgroundColor = lg.bg || 'transparent';
+  if (lg.url) {
+     logoLayer.style.backgroundImage = `url("${lg.url}")`;
+     logoLayer.style.backgroundRepeat = lg.repeat || 'no-repeat';
+     logoLayer.style.backgroundPosition = lg.pos || 'center';
+     logoLayer.style.backgroundSize = lg.size || 'contain';
+  } else {
+     logoLayer.style.backgroundImage = 'none';
+  }
+
+  logoMark.style.position = 'absolute';
+  logoMark.style.pointerEvents = 'none';
+  logoMark.style.zIndex = '0'; // <-- КРИТИЧЕСКИ: Под расписанием
+  logoMark.style.opacity = (lg.opacity || 12) / 100;
+  logoMark.style.display = 'block';
+
+  // Расписание НАД логотипом
+  const scheduleEl = element.querySelector('.schedule');
+  if (scheduleEl) {
+    scheduleEl.style.position = 'relative';
+    scheduleEl.style.zIndex = '1'; // Над логотипом
+  }
+
+  // Применяем содержимое логотипа (центральный, тайловый и т.д.)
+  try {
+    const variant = getLogoVariant();
+    const layout = lg.layout || "center";
+    const opacity = (lg.opacity || 12) / 100;
+
+    if (layout === "center") {
+      await applyCenteredLogo(logoMark, lg, metrics, variant, opacity);
+    } else if (layout === "tile" || layout === "diagonal") {
+      await applyTiledLogo(logoMark, lg, metrics, variant, opacity, layout);
+    }
+  } catch (error) {
+    console.error('Ошибка применения логотипа:', error);
+    logoLayer.style.display = 'none';
+    logoMark.style.display = 'none';
+  }
+}
+
+async function applyCenteredLogo(logoMark, lg, metrics, variant, opacity) {
+  const tileSize = Math.max(100, Math.min(1000, Number(lg.tileSize) || 140));
+  const halfSize = tileSize / 2;
+  
+  const centerX = metrics.timeColWidth + metrics.contentWidth / 2;
+  const centerY = metrics.dayHeadHeight + metrics.contentHeight / 2;
+  
+  const leftBoundary = metrics.timeColWidth;
+  const rightBoundary = metrics.timeColWidth + metrics.contentWidth;
+  const topBoundary = metrics.dayHeadHeight;
+  const bottomBoundary = metrics.dayHeadHeight + metrics.contentHeight;
+  
+  let left = centerX - halfSize;
+  let top = centerY - halfSize;
+  let finalTileSize = tileSize;
+  
+  if (left < leftBoundary) left = leftBoundary;
+  if (left + finalTileSize > rightBoundary) left = rightBoundary - finalTileSize;
+  if (top < topBoundary) top = topBoundary;
+  if (top + finalTileSize > bottomBoundary) top = bottomBoundary - finalTileSize;
+  
+  if (rightBoundary - leftBoundary < finalTileSize) {
+    finalTileSize = rightBoundary - leftBoundary;
+    left = leftBoundary;
+  }
+  if (bottomBoundary - topBoundary < finalTileSize) {
+    finalTileSize = Math.min(finalTileSize, bottomBoundary - topBoundary);
+    top = topBoundary;
+  }
+  
+  logoMark.style.cssText = `
+    position: absolute;
+    pointer-events: none;
+    z-index: 1;
+    opacity: ${opacity};
+    width: ${finalTileSize}px;
+    height: ${finalTileSize}px;
+    left: ${left}px;
+    top: ${top}px;
+    transform: rotate(${lg.rotation || 0}deg);
+  `;
+  
+  const src = getLogoDataUrl(variant, lg.recolor ? lg.color : null, lg.opacity);
+  applyLogoStyle(logoMark, src, lg.recolor && variant === 3 ? lg.color : null, opacity, false);
+}
+
+async function applyTiledLogo(logoMark, lg, metrics, variant, opacity, layout) {
+  const tileSize = Math.max(20, Math.min(1000, Number(lg.tileSize) || 140));
+  const horizontalGap = Number(lg.horizontalGap || 180);
+  const verticalGap = Number(lg.verticalGap || 180);
+  const offsetX = Number(lg.tileOffsetX || 0);
+  const offsetY = Number(lg.tileOffsetY || 0);
+  
+  logoMark.style.cssText = `
+    position: absolute;
+    pointer-events: none;
+    z-index: 1;
+    opacity: ${opacity};
+    left: ${metrics.timeColWidth}px;
+    top: ${metrics.dayHeadHeight}px;
+    width: ${metrics.contentWidth}px;
+    height: ${metrics.contentHeight}px;
+  `;
+  
+  const src = window.getTileSrc?.(
+    variant,
+    tileSize,
+    horizontalGap,
+    verticalGap,
+    lg.rotation || 0,
+    layout,
+    lg.recolor ? lg.color : null,
+    lg.opacity
+  ) || getLogoDataUrl(variant, lg.recolor ? lg.color : null, lg.opacity);
+  
+  if (lg.recolor && variant === 3) {
+    logoMark.style.backgroundColor = lg.color || "#0ea5e9";
+    logoMark.style.webkitMaskImage = `url(${src})`;
+    logoMark.style.maskImage = `url(${src})`;
+    logoMark.style.webkitMaskRepeat = 'repeat';
+    logoMark.style.maskRepeat = 'repeat';
+    
+    const patternSize = layout === "diagonal" 
+      ? `${(tileSize + horizontalGap) * 2}px ${(tileSize + verticalGap) * 2}px`
+      : `${tileSize + horizontalGap}px ${tileSize + verticalGap}px`;
+    
+    logoMark.style.webkitMaskSize = patternSize;
+    logoMark.style.maskSize = patternSize;
+    logoMark.style.webkitMaskPosition = `${offsetX}px ${offsetY}px`;
+    logoMark.style.maskPosition = `${offsetX}px ${offsetY}px`;
+  } else {
+    logoMark.style.backgroundImage = `url(${src})`;
+    logoMark.style.backgroundRepeat = 'repeat';
+    
+    const patternSize = layout === "diagonal"
+      ? `${(tileSize + horizontalGap) * 2}px ${(tileSize + verticalGap) * 2}px`
+      : `${tileSize + horizontalGap}px ${tileSize + verticalGap}px`;
+    
+    logoMark.style.backgroundSize = patternSize;
+    logoMark.style.backgroundPosition = `${offsetX}px ${offsetY}px`;
+  }
+}
+
+function applyLogoToClonedDoc(logoLayer, logoMark, lg, metrics) {
+  if (!logoLayer || !logoMark) return;
+  
+  const variant = getLogoVariant();
+  const layout = lg.layout || "center";
+  const opacity = (lg.opacity || 12) / 100;
+  
+  logoLayer.style.cssText = `
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+    overflow: hidden;
+    display: block;
+  `;
+  
+  logoMark.style.cssText = `
+    position: absolute;
+    pointer-events: none;
+    z-index: 1;
+    opacity: ${opacity};
+  `;
+  
+  if (layout === "center") {
+    const tileSize = Math.max(100, Math.min(1000, Number(lg.tileSize) || 140));
+    const centerX = metrics.timeColWidth + metrics.contentWidth / 2;
+    const centerY = metrics.dayHeadHeight + metrics.contentHeight / 2;
+    
+    logoMark.style.cssText += `
+      width: ${tileSize}px;
+      height: ${tileSize}px;
+      left: ${centerX - tileSize / 2}px;
+      top: ${centerY - tileSize / 2}px;
+      transform: rotate(${lg.rotation || 0}deg);
+    `;
+    
+    const src = getLogoDataUrl(variant, lg.recolor ? lg.color : null, lg.opacity);
+    
+    if (lg.recolor && variant === 3) {
+      logoMark.style.backgroundColor = lg.color || "#0ea5e9";
+      logoMark.style.webkitMaskImage = `url(${src})`;
+      logoMark.style.maskImage = `url(${src})`;
+      logoMark.style.webkitMaskRepeat = 'no-repeat';
+      logoMark.style.maskRepeat = 'no-repeat';
+      logoMark.style.webkitMaskPosition = 'center';
+      logoMark.style.maskPosition = 'center';
+      logoMark.style.webkitMaskSize = 'contain';
+      logoMark.style.maskSize = 'contain';
+    } else {
+      logoMark.style.backgroundImage = `url(${src})`;
+      logoMark.style.backgroundRepeat = 'no-repeat';
+      logoMark.style.backgroundPosition = 'center';
+      logoMark.style.backgroundSize = 'contain';
+    }
+  } else if (layout === "tile" || layout === "diagonal") {
+    const tileSize = Math.max(20, Math.min(1000, Number(lg.tileSize) || 140));
+    const horizontalGap = Number(lg.horizontalGap || 180);
+    const verticalGap = Number(lg.verticalGap || 180);
+    const offsetX = Number(lg.tileOffsetX || 0);
+    const offsetY = Number(lg.tileOffsetY || 0);
+    
+    logoMark.style.cssText += `
+      left: ${metrics.timeColWidth}px;
+      top: ${metrics.dayHeadHeight}px;
+      width: ${metrics.contentWidth}px;
+      height: ${metrics.contentHeight}px;
+    `;
+    
+    const src = window.getTileSrc?.(
+      variant,
+      tileSize,
+      horizontalGap,
+      verticalGap,
+      lg.rotation || 0,
+      layout,
+      lg.recolor ? lg.color : null,
+      lg.opacity
+    ) || getLogoDataUrl(variant, lg.recolor ? lg.color : null, lg.opacity);
+    
+    if (lg.recolor && variant === 3) {
+      logoMark.style.backgroundColor = lg.color || "#0ea5e9";
+      logoMark.style.webkitMaskImage = `url(${src})`;
+      logoMark.style.maskImage = `url(${src})`;
+      logoMark.style.webkitMaskRepeat = 'repeat';
+      logoMark.style.maskRepeat = 'repeat';
+      
+      const patternSize = layout === "diagonal"
+        ? `${(tileSize + horizontalGap) * 2}px ${(tileSize + verticalGap) * 2}px`
+        : `${tileSize + horizontalGap}px ${tileSize + verticalGap}px`;
+      
+      logoMark.style.webkitMaskSize = patternSize;
+      logoMark.style.maskSize = patternSize;
+      logoMark.style.webkitMaskPosition = `${offsetX}px ${offsetY}px`;
+      logoMark.style.maskPosition = `${offsetX}px ${offsetY}px`;
+    } else {
+      logoMark.style.backgroundImage = `url(${src})`;
+      logoMark.style.backgroundRepeat = 'repeat';
+      
+      const patternSize = layout === "diagonal"
+        ? `${(tileSize + horizontalGap) * 2}px ${(tileSize + verticalGap) * 2}px`
+        : `${tileSize + horizontalGap}px ${tileSize + verticalGap}px`;
+      
+      logoMark.style.backgroundSize = patternSize;
+      logoMark.style.backgroundPosition = `${offsetX}px ${offsetY}px`;
+    }
+  }
+  
+  logoLayer.style.display = 'block';
+  logoMark.style.display = 'block';
+}
+
+function getLogoVariant() {
+  const variant = state.settings.logo?.variant;
+  if (variant === 3 && !state.settings.logo.uploadedFileData) {
+    return 1;
+  }
+  return clamp(Math.round(Number(variant ?? 1)), 1, 3);
+}
+
+window.getLogoDataUrl = function getLogoDataUrl(variant, recolorColor = null, opacity = 100) {
+  variant = Number(variant);
+  
+  if (variant === 3) {
+    const fileData = state.settings.logo?.uploadedFileData;
+    if (fileData && fileData.startsWith("data:")) {
+      if (recolorColor || opacity < 100) {
+        const base64 = fileData.split(',')[1];
+        let svgText = atob(base64);
+        
+        if (recolorColor && fileData.includes("image/svg+xml")) {
+          svgText = svgText.replace(/(fill|stroke)="[^"]*"/g, `$1="${recolorColor}"`);
+        }
+        
+        if (opacity < 100) {
+          const opacityValue = opacity / 100;
+          const svgStart = svgText.indexOf('<svg');
+          if (svgStart !== -1) {
+            const svgEnd = svgText.indexOf('>', svgStart);
+            const svgTag = svgText.substring(svgStart, svgEnd + 1);
+            
+            if (svgTag.includes('style="')) {
+              svgText = svgText.replace(/style="([^"]*)"/, `style="$1;opacity:${opacityValue}"`);
+            } else {
+              svgText = svgText.replace(svgTag, svgTag.replace('>', ` style="opacity:${opacityValue}">`));
+            }
+          }
+        }
+        
+        return `data:image/svg+xml;base64,${btoa(svgText)}`;
+      }
+      return fileData;
+    }
+    variant = 1;
+  }
+  
+  let svgString;
+  if (variant === 1) {
+    svgString = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="currentColor"/></svg>';
+  } else if (variant === 2) {
+    svgString = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="10" y="10" width="80" height="80" rx="15" fill="currentColor"/></svg>';
+  } else {
+    svgString = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="currentColor"/></svg>';
+  }
+  
+  if (recolorColor && (variant === 1 || variant === 2)) {
+    svgString = svgString.replace(/fill="currentColor"/g, `fill="${recolorColor}"`);
+  }
+  
+  if (opacity < 100 && (variant === 1 || variant === 2)) {
+    const opacityValue = opacity / 100;
+    if (variant === 1) {
+      svgString = svgString.replace('<circle ', `<circle style="opacity:${opacityValue}" `);
+    } else if (variant === 2) {
+      svgString = svgString.replace('<rect ', `<rect style="opacity:${opacityValue}" `);
+    }
+  }
+  
+  const base64 = btoa(unescape(encodeURIComponent(svgString)));
+  return `data:image/svg+xml;base64,${base64}`;
+};
+
+function applyLogoStyle(element, src, recolorColor = null, opacity = 1, isTile = false) {
+  element.style.opacity = opacity;
+  
+  if (recolorColor && src) {
+    element.style.backgroundColor = recolorColor;
+    element.style.webkitMaskImage = `url(${src})`;
+    element.style.maskImage = `url(${src})`;
+    element.style.webkitMaskRepeat = isTile ? 'repeat' : 'no-repeat';
+    element.style.maskRepeat = isTile ? 'repeat' : 'no-repeat';
+    element.style.webkitMaskPosition = 'center';
+    element.style.maskPosition = 'center';
+    element.style.webkitMaskSize = isTile ? 'contain' : 'contain';
+    element.style.maskSize = isTile ? 'contain' : 'contain';
+    element.style.backgroundImage = 'none';
+  } else if (src) {
+    element.style.backgroundImage = `url(${src})`;
+    element.style.backgroundRepeat = isTile ? 'repeat' : 'no-repeat';
+    element.style.backgroundPosition = 'center';
+    element.style.backgroundSize = 'contain';
+  }
+}
+
+async function waitForResources(element, timeout = 2000) {
+  const startTime = Date.now();
+  const resources = [];
+  
+  const images = element.querySelectorAll("img");
+  images.forEach((img) => {
+    if (!img.complete) {
+      resources.push(
+        new Promise((resolve) => {
+          img.onload = resolve;
+          img.onerror = resolve;
+        })
+      );
+    }
+  });
+  
+  const elementsWithBg = element.querySelectorAll('[style*="background"], [style*="mask"]');
+  elementsWithBg.forEach((el) => {
+    const style = getComputedStyle(el);
+    const bg = style.backgroundImage;
+    const mask = style.maskImage || style.webkitMaskImage;
+    
+    if (bg && bg !== "none" && !bg.includes("gradient")) {
+      resources.push(new Promise((resolve) => {
+        const img = new Image();
+        img.onload = resolve;
+        img.onerror = resolve;
+        const urlMatch = bg.match(/url\(["']?(.*?)["']?\)/);
+        if (urlMatch && urlMatch[1]) img.src = urlMatch[1];
+        else resolve();
+      }));
+    }
+    
+    if (mask && mask !== "none") {
+      resources.push(new Promise((resolve) => {
+        const img = new Image();
+        img.onload = resolve;
+        img.onerror = resolve;
+        const urlMatch = mask.match(/url\(["']?(.*?)["']?\)/);
+        if (urlMatch && urlMatch[1]) img.src = urlMatch[1];
+        else resolve();
+      }));
+    }
+  });
+  
+  if (document.fonts && document.fonts.ready) {
+    resources.push(document.fonts.ready);
+  }
+  
+  try {
+    await Promise.race([
+      Promise.allSettled(resources),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Таймаут загрузки ресурсов")), timeout)
+      )
+    ]);
+  } catch (e) {
+    console.warn("Не все ресурсы загрузились:", e.message);
+  }
+  
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+}
+
+async function fallbackCapture(element, background = null) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  
+  // Получаем реальные размеры элемента
+  const rect = element.getBoundingClientRect();
+  const width = Math.max(100, rect.width || element.offsetWidth || 800);
+  const height = Math.max(100, rect.height || element.offsetHeight || 600);
+  
+  canvas.width = width;
+  canvas.height = height;
+  
+  // Заливаем фон
+  if (background) {
+    ctx.fillStyle = background;
+  } else {
+    ctx.fillStyle = '#ffffff';
+  }
+  ctx.fillRect(0, 0, width, height);
+  
+  // Рисуем простой текст с информацией об ошибке
+  ctx.fillStyle = '#000000';
+  ctx.font = '16px Arial';
+  ctx.fillText("Упрощенный предпросмотр экспорта", 20, 30);
+  
+  // Добавляем информацию о количестве событий
+  const eventCount = element.querySelectorAll('.event').length;
+  ctx.fillText(`Событий в расписании: ${eventCount}`, 20, 60);
+  
+  // Добавляем текущую дату
+  const now = new Date();
+  ctx.fillText(`Дата экспорта: ${now.toLocaleDateString()}`, 20, 90);
+  
+  return canvas;
+}
+
+function createFinalCanvas(sourceCanvas, fmt) {
+  const final = document.createElement("canvas");
+  final.width = fmt.w;
+  final.height = fmt.h;
+  
+  const ctx = final.getContext("2d");
+  
+  const srcW = sourceCanvas.width;
+  const srcH = sourceCanvas.height;
+  
+  const scale = Math.min(fmt.w / srcW, fmt.h / srcH);
+  const dw = srcW * scale;
+  const dh = srcH * scale;
+  const x = (fmt.w - dw) / 2;
+  const y = (fmt.h - dh) / 2;
+  
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  
+  // Просто масштабируем без поворота
+  ctx.drawImage(sourceCanvas, x, y, dw, dh);
+  
+  ctx.restore();
+  return final;
+}
+
+function getExportPresetById(id) {
+  return EXPORT_PRESETS.find((p) => p.id === id) || EXPORT_PRESETS[0];
+}
+
+function resolveExportBackground(expBg) {
+  if (expBg === "transparent") {
+    return expFormat.value === "jpeg" ? "#ffffff" : null;
+  }
+  if (expBg === "white") return "#ffffff";
+  return getThemeBgCssColor();
+}
+
+function getThemeBgCssColor() {
+  const cs = getComputedStyle(document.documentElement);
+  let bg = (cs.getPropertyValue("--bg") || "").trim();
+  if (!bg) return "#ffffff";
+  if (bg.startsWith("#")) return bg;
+  return `#${bg}`;
 }
 
 async function downloadFromExportModal() {
   const opts = getExportOptsFromUI();
-
+  
+  // Определяем, нужно ли перестраивать изображение
   const needsRebuild =
     !lastPreview ||
     lastPreview.fmt !== opts.fmt ||
@@ -8091,159 +7830,301 @@ async function downloadFromExportModal() {
     lastPreview.quality !== opts.quality ||
     lastPreview.background !== opts.background ||
     lastPreview.compact !== opts.compact;
-
-  if (needsRebuild) {
-    await buildExportPreview();
-  }
-  if (!lastPreview?.dataUrl) return;
-
-  const a = document.createElement("a");
-  const stamp = new Date().toISOString().slice(0, 10);
-
-  if (opts.fmt === "svg") {
-    a.download = `schedule-${opts.preset.id}-${stamp}.svg`;
+  
+  try {
+    // Если нужно перестроить или нет предпросмотра
+    if (needsRebuild || !lastPreview?.dataUrl) {
+      toast("OK", "Экспорт", "Подготовка файла для скачивания…");
+      const exportResult = await executeExport(opts);
+      
+      if (!exportResult) {
+        toast("ERR", "Экспорт", "Не удалось подготовить файл для скачивания");
+        return;
+      }
+      
+      // Сохраняем результат в lastPreview
+      lastPreview = { dataUrl: exportResult.dataUrl, ...opts };
+    }
+    
+    // Проверяем, что данные для скачивания есть
+    if (!lastPreview?.dataUrl) {
+      toast("ERR", "Скачивание", "Нет данных для скачивания");
+      return;
+    }
+    
+    // Создаем элемент для скачивания
+    const a = document.createElement("a");
+    const stamp = new Date().toISOString().slice(0, 10);
+    const timestamp = new Date().toISOString().slice(11, 19).replace(/:/g, '-');
+    
+    // Генерируем имя файла в зависимости от формата
+    if (opts.fmt === "svg") {
+      const fileName = `schedule-${opts.preset.id}-${stamp}_${timestamp}.svg`;
+      a.download = fileName;
+      a.href = lastPreview.dataUrl;
+      a.click();
+      toast("OK", "SVG", `Файл "${fileName}" скачан.`);
+      return;
+    }
+    
+    // Для форматов изображений
+    const ext = opts.imageFormat === "image/jpeg" ? "jpg" : "png";
+    const fileName = `schedule-${opts.preset.id}-${stamp}_${timestamp}.${ext}`;
+    a.download = fileName;
     a.href = lastPreview.dataUrl;
     a.click();
-    toast("OK", "SVG", "Скачано.");
-    return;
+    
+    toast("OK", "Экспорт", `Файл "${fileName}" скачан.`);
+    
+  } catch (error) {
+    console.error("Download error:", error);
+    toast("ERR", "Скачивание", error?.message || "Ошибка при скачивании файла");
   }
-
-  const ext = opts.imageFormat === "image/jpeg" ? "jpg" : "png";
-  a.download = `schedule-${opts.preset.id}-${stamp}.${ext}`;
-  a.href = lastPreview.dataUrl;
-  a.click();
-
-  toast("OK", "Экспорт", "Файл скачан.");
 }
 
-function hideEmptyTimeRows(
-  rootEl,
-  { respectFilters = true, keepNowRow = true } = {},
-) {
-  const scheduleEl = rootEl.querySelector(".schedule");
-  if (!scheduleEl) return [];
-
-  if (scheduleEl.classList.contains("compact-mode")) return [];
-
-  const { step } = getBounds();
-  const slots = buildSlots();
-  if (!slots.length || !step) return [];
-
-  const allCells = Array.from(scheduleEl.children);
-  if (!allCells.length) return [];
-
-  const COLS = scheduleEl.querySelectorAll(".cell.head").length || 8;
-  const headerCount = COLS;
-
-  const events =
-    respectFilters && typeof memoizedEventVisible === "function"
-      ? state.events.filter(memoizedEventVisible)
-      : state.events;
-
-  const base = slots[0];
-  const diff = new Array(slots.length + 1).fill(0);
-
-  for (const ev of events) {
-    const evStart = ev && Number(ev.startMin);
-    const evEnd = evStart + Number(ev.durationMin);
-
-    if (
-      !Number.isFinite(evStart) ||
-      !Number.isFinite(evEnd) ||
-      evEnd <= evStart
-    )
-      continue;
-
-    let first = Math.floor((evStart - base) / step);
-    let last = Math.floor((evEnd - 1 - base) / step);
-
-    if (last < 0 || first >= slots.length) continue;
-
-    first = Math.max(0, first);
-    last = Math.min(slots.length - 1, last);
-
-    diff[first] += 1;
-    diff[last + 1] -= 1;
+function setupExportDownloadButton() {
+  const downloadBtn = document.querySelector('#btnExpDownload');
+  if (downloadBtn) {
+    downloadBtn.addEventListener('click', downloadFromExportModal);
   }
 
-  const has = new Array(slots.length).fill(false);
-  let run = 0;
-  for (let i = 0; i < slots.length; i++) {
-    run += diff[i];
-    has[i] = run > 0;
-  }
 
-  const changed = [];
-  const hideCell = (el) => {
-    const prevDisplay = el.style.display;
-    if (prevDisplay === "none") return;
-    changed.push({ el, prevDisplay });
-    el.style.display = "none";
-  };
+function rotateCanvas90CW(sourceCanvas) {
+  const out = document.createElement("canvas");
+  out.width = sourceCanvas.height;
+  out.height = sourceCanvas.width;
 
-  for (let slotIndex = 0; slotIndex < slots.length; slotIndex++) {
-    if (has[slotIndex]) continue;
-
-    const rowStartIndex = headerCount + slotIndex * COLS;
-
-    const timeCell = allCells[rowStartIndex];
-    if (
-      keepNowRow &&
-      timeCell &&
-      timeCell.classList &&
-      timeCell.classList.contains("now")
-    )
-      continue;
-
-    for (let i = 0; i < COLS; i++) {
-      const cell = allCells[rowStartIndex + i];
-      if (cell) hideCell(cell);
-    }
-  }
-
-  return changed;
-}
-
-function createFinalCanvas(sourceCanvas, fmt) {
-  const final = document.createElement("canvas");
-  final.width = fmt.w;
-  final.height = fmt.h;
-
-  const ctx = final.getContext("2d");
-
-  const rotate = !!fmt.rotate;
-
-  const srcW = rotate ? sourceCanvas.height : sourceCanvas.width;
-  const srcH = rotate ? sourceCanvas.width : sourceCanvas.height;
-
-  const scale = Math.min(fmt.w / srcW, fmt.h / srcH);
-  const dw = srcW * scale;
-  const dh = srcH * scale;
-  const x = (fmt.w - dw) / 2;
-  const y = (fmt.h - dh) / 2;
-
-  ctx.save();
+  const ctx = out.getContext("2d");
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
 
-  if (!rotate) {
-    ctx.drawImage(sourceCanvas, x, y, dw, dh);
-  } else {
-    ctx.translate(fmt.w, 0);
-    ctx.rotate(Math.PI / 2);
+  ctx.translate(out.width, 0);
+  ctx.rotate(Math.PI / 2);
+  ctx.drawImage(sourceCanvas, 0, 0);
 
-    ctx.drawImage(sourceCanvas, x, y, dw, dh);
+  return out;
+}}
+
+window.downloadFromExportModal = downloadFromExportModal;
+window.setupExportDownloadButton = setupExportDownloadButton;
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', setupExportDownloadButton);
+} else {
+  setupExportDownloadButton();
+}
+
+function applyCssVariablesToEvents(clone) {
+  const eventEls = clone.querySelectorAll(".event");
+  
+  eventEls.forEach((el) => {
+    // Показываем событие
+    el.style.display = 'block';
+    el.style.visibility = 'visible';
+    el.classList.remove('dim');
+    el.style.opacity = '1';
+    
+    // Копируем вычисленные стили из оригинала
+    const originalId = el.dataset.eid;
+    if (!originalId) return;
+    
+    const original = document.querySelector(`.event[data-eid="${originalId}"]`);
+    if (!original) return;
+    
+    const cs = getComputedStyle(original);
+    
+    // 🔑 УБРАТЬ !important из переменных (ломает тему!)
+    const evBg = cs.getPropertyValue("--ev-bg").trim();
+    const evText = cs.getPropertyValue("--ev-text").trim();
+    
+    if (evBg) {
+      el.style.backgroundColor = evBg;
+      el.style.setProperty("--ev-bg", evBg); // ← БЕЗ !important
+    }
+    
+    if (evText) {
+      el.style.color = evText;
+      el.style.setProperty("--ev-text", evText); // ← БЕЗ !important
+    }
+    
+    // Копируем остальные стили
+    const borderColor = cs.borderColor;
+    if (borderColor && borderColor !== "rgba(0, 0, 0, 0)") {
+      el.style.borderColor = borderColor;
+      el.style.borderStyle = cs.borderStyle || "solid";
+      el.style.borderWidth = cs.borderWidth || "1px";
+    }
+    
+    const boxShadow = cs.boxShadow;
+    if (boxShadow && boxShadow !== "none") {
+      el.style.boxShadow = boxShadow;
+    }
+  });
+}
+
+function applyCssVariablesToEventsForExport(targetElement) {
+  const eventEls = targetElement.querySelectorAll(".event");
+
+  // Получаем значение --eventAlpha из вычисленных стилей root или state
+  // const computedRoot = getComputedStyle(document.documentElement);
+  // const eventOpacity = parseFloat(computedRoot.getPropertyValue('--eventAlpha')) || 1.0;
+  // Лучше использовать значение из state, так как оно точнее
+  const eventOpacity = state.settings.theme.alpha.event / 100; // Преобразуем в 0.0 - 1.0
+
+  eventEls.forEach((el) => {
+    // Находим оригинальный элемент в документе для получения вычисленных стилей
+    // Это важно, потому что мы хотим получить РЕАЛЬНЫЙ цвет фона и РЕАЛЬНУЮ прозрачность
+    const originalId = el.dataset.eid;
+    if (!originalId) return;
+
+    const original = document.querySelector(`.event[data-eid="${originalId}"]`);
+    if (!original) return;
+
+    const cs = getComputedStyle(original);
+    let bgColor = cs.backgroundColor; // Это будет вычисленный цвет, например, rgba(255, 0, 0, 0.8)
+    // const elementOpacity = cs.opacity; // opacity самого элемента (обычно 1, если не dim)
+    // Мы используем глобальный eventOpacity из state, а не opacity элемента,
+    // так как opacity элемента в CSS задается через --eventAlpha
+
+    // console.log(`Event ${originalId}: bgColor = ${bgColor}, cs.opacity = ${cs.opacity}, eventOpacity = ${eventOpacity}`);
+
+    // --- Логика обработки bgColor с учетом eventOpacity ---
+    let finalBackgroundColor = bgColor;
+
+    // Проверяем, является ли bgColor прозрачным
+    if (bgColor === 'transparent' || bgColor === 'rgba(0, 0, 0, 0)') {
+      // Если изначально прозрачный, оставляем так
+      finalBackgroundColor = 'rgba(0, 0, 0, 0)';
+    } else {
+       // bgColor - это строка типа rgb(r, g, b) или rgba(r, g, b, a)
+       // Нужно получить базовый цвет и применить к нему eventOpacity
+       const parsedColor = parseRgba(bgColor);
+       if (parsedColor) {
+         // Устанавливаем цвет с новой альфой: (исходная_альфа * eventOpacity)
+         // Для rgb(r,g,b) исходная_альфа = 1
+         const baseAlpha = parsedColor.a; // Это 1.0 для rgb, или значение a для rgba
+         const finalAlpha = baseAlpha * eventOpacity;
+         finalBackgroundColor = `rgba(${parsedColor.r}, ${parsedColor.g}, ${parsedColor.b}, ${finalAlpha})`;
+       } else {
+         // Если не удалось распарсить, используем bgColor как есть.
+         // Это может быть именованный цвет ('red'), который html2canvas/svg может обработать.
+         // Но это менее надежно. Лучше парсить.
+         console.warn(`[Export] Не удалось распарсить цвет фона события: ${bgColor}. Используем как есть.`);
+         // Fallback: если парсер не сработал, и opacity < 1, то результат может быть непредсказуем.
+         // Но мы всё равно устанавливаем opacity ниже.
+         finalBackgroundColor = bgColor;
+       }
+    }
+    // --- Конец логики обработки bgColor ---
+
+    // КРИТИЧЕСКИ: Устанавливаем прямые стили
+    if (finalBackgroundColor) {
+      el.style.backgroundColor = finalBackgroundColor; // <-- Устанавливаем цвет с альфой
+    }
+
+    // Устанавливаем opacity в 1, чтобы не было двойного эффекта от CSS opacity,
+    // если библиотека его учитывает отдельно от backgroundColor.
+    // Важно: backgroundColor с rgba() должен быть приоритетнее.
+    el.style.opacity = "1";
+
+    // Убираем затемнение
+    el.classList.remove("dim");
+    // el.style.opacity = "1"; // Уже установлено выше
+  });
+}
+
+function parseRgba(colorString) {
+  if (!colorString) return null;
+
+  // Регулярное выражение для rgb(r, g, b)
+  const rgbMatch = colorString.match(/^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i);
+  if (rgbMatch) {
+    const r = parseInt(rgbMatch[1], 10);
+    const g = parseInt(rgbMatch[2], 10);
+    const b = parseInt(rgbMatch[3], 10);
+    // Проверка на корректность значений
+    if (isNaN(r) || isNaN(g) || isNaN(b) || r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255) {
+      return null;
+    }
+    return { r, g, b, a: 1.0 }; // Устанавливаем a=1, потому что в rgb() нет альфы
   }
 
-  ctx.restore();
-  return final;
+  // Регулярное выражение для rgba(r, g, b, a)
+  const rgbaMatch = colorString.match(/^rgba\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(0|1|0?\.\d+)\s*\)$/i);
+  if (rgbaMatch) {
+    const r = parseInt(rgbaMatch[1], 10);
+    const g = parseInt(rgbaMatch[2], 10);
+    const b = parseInt(rgbaMatch[3], 10);
+    const a = parseFloat(rgbaMatch[4]); // Это может быть 0.5, 0.8 и т.д.
+    // Проверка на корректность значений
+    if (isNaN(r) || isNaN(g) || isNaN(b) || isNaN(a) || r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255 || a < 0 || a > 1) {
+      return null;
+    }
+    return { r, g, b, a };
+  }
+
+  return null;
 }
+
+function parseRgbaOrHex(colorString) {
+  // Регулярное выражение для rgb(r, g, b)
+  const rgbMatch = colorString.match(/^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i);
+  if (rgbMatch) {
+    return {
+      r: parseInt(rgbMatch[1], 10),
+      g: parseInt(rgbMatch[2], 10),
+      b: parseInt(rgbMatch[3], 10),
+      a: 1.0 // Устанавливаем a=1, потому что в rgb() нет альфы
+    };
+  }
+
+  // Регулярное выражение для rgba(r, g, b, a)
+  const rgbaMatch = colorString.match(/^rgba\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(0|1|0?\.\d+)\s*\)$/i);
+  if (rgbaMatch) {
+    return {
+      r: parseInt(rgbaMatch[1], 10),
+      g: parseInt(rgbaMatch[2], 10),
+      b: parseInt(rgbaMatch[3], 10),
+      a: parseFloat(rgbaMatch[4])
+    };
+  }
+
+  // Регулярное выражение для HEX (#RGB or #RRGGBB)
+  const hexMatch = colorString.match(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/);
+  if (hexMatch) {
+    let hex = hexMatch[1];
+    // Expand shorthand form (e.g. "03F") to full form (e.g. "0033FF")
+    if (hex.length === 3) {
+      hex = hex.split('').map(char => char + char).join('');
+    }
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+    return {
+      r: r,
+      g: g,
+      b: b,
+      a: 1.0 // HEX не содержит альфы
+    };
+  }
+
+  // Регулярное выражение для HEXA (#RGBA or #RRGGBBAA) - если поддерживается
+  // Это нестандарт, но встречается
+  // const hexaMatch = colorString.match(/^#([A-Fa-f0-9]{8}|[A-Fa-f0-9]{4})$/);
+  // if (hexaMatch) { ... }
+
+  return null;
+}
+
+// Конец выгрузки
+
+
 
 function updateCharCounter() {
   const maxLength = MAX_NAME_CHARS;
   const currentLength = evName.value.length;
 
-  let counter = document.getElementById("evNameCounter");
+  let counter = $("evNameCounter");
   if (!counter) {
     counter = document.createElement("div");
     counter.id = "evNameCounter";
