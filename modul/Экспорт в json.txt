@@ -1,0 +1,1785 @@
+// Ты программист с 30 летним стажем в веб разработке и архетектуре.
+// Мне нужен класс для работы с настройками json
+
+function exportJson() {
+  const blob = new Blob([JSON.stringify(state, null, 2)], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `schedule_${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast("OK", "Экспорт JSON", "Файл скачан.");
+}
+
+function importJson(file) {
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const parsed = JSON.parse(r.result);
+
+      if (!confirm("Импортировать данные? Текущие данные будут заменены."))
+        return;
+      pushHistory("Импорт JSON");
+      state = parsed;
+      state.version = 13;
+      hardenState();
+      saveState();
+      renderAll();
+      toast("OK", "Импорт выполнен", "Данные загружены.");
+    } catch (e) {
+      toast("ERR", "Импорт не удался", e.message || "Проверьте формат JSON.");
+    }
+  };
+  r.readAsText(file);
+}
+
+function updateUndoRedoButtons() {
+  $("btnUndo").disabled = history.length === 0;
+  $("btnRedo").disabled = future.length === 0;
+}
+
+function saveSettings() {
+  const issues = [];
+
+  // Валидация времени
+  const startStr = setStart.value;
+  const endStr = setEnd.value;
+  const defaultDuration = Number(setDefaultDur.value);
+
+  const startMin = parseHHMM(startStr);
+  const endMin = parseHHMM(endStr);
+
+  if (startMin == null || endMin == null)
+    issues.push("Проверьте время начала/конца.");
+  if (startMin != null && endMin != null && endMin <= startMin)
+    issues.push("Конец дня должен быть позже начала.");
+  if (!defaultDuration || defaultDuration < 1)
+    issues.push("Длительность по умолчанию должна быть >= 1.");
+
+  // Валидация шрифтов
+  let lh = Number(fontLineHeight.value);
+  if (!Number.isFinite(lh)) {
+    lh = 1.12;
+    issues.push("Line-height: некорректное число.");
+  }
+  lh = clamp(lh, 1.0, 1.8);
+
+  const t1 = Number(fontTitle1.value),
+    t2 = Number(fontTitle2.value);
+  const m1 = Number(fontMeta1.value),
+    m2 = Number(fontMeta2.value);
+
+  if (t2 > t1)
+    issues.push(
+      "Размер названия для 2 занятий должен быть <= размера для 1 занятия.",
+    );
+
+  // Если есть ошибки - показываем их
+  if (issues.length) {
+    settingsWarn.style.display = "block";
+    settingsWarn.textContent = issues.join(" ");
+    return;
+  }
+
+  // Обработка изменения временных параметров (удаление событий вне диапазона)
+  const oldStart = state.settings.schedule.start;
+  const oldEnd = state.settings.schedule.end;
+  const timeParamsChanged = oldStart !== startStr || oldEnd !== endStr;
+  let removed = 0;
+
+  if (timeParamsChanged) {
+    const before = state.events.length;
+    const { start, end, step } = getBounds();
+    const startBound = start;
+    const endBound = end;
+
+    state.events = state.events.filter((ev) => {
+      if (ev.startMin < startBound || ev.startMin >= endBound) return false;
+      const ss = slotStartFor(ev.startMin);
+      const se = ss + step;
+      if (ev.startMin + ev.durationMin > se) return false;
+      return true;
+    });
+
+    removed = before - state.events.length;
+  }
+
+  // ========== НОВЫЙ БЛОК НАСТРОЕК ЛОГОТИПА ==========
+  // Теперь логотип управляется через LogoManager, поэтому мы просто сохраняем настройки
+  // А обновление логотипа происходит автоматически через LogoManager
+  
+  // Убедимся, что объект logo существует
+  if (!state.settings.logo) {
+    state.settings.logo = {};
+  }
+  
+  // Основные настройки логотипа (простые чекбоксы и селекты)
+  if (logoEnabled) state.settings.logo.enabled = !!logoEnabled.checked;
+  if (logoRecolor) state.settings.logo.recolor = !!logoRecolor.checked;
+  if (logoColor) state.settings.logo.color = String(logoColor.value || LOGO_CONSTANTS.DEFAULT_COLOR).trim();
+  
+  // Вариант логотипа с защитой от некорректных значений
+  if (logoVariant) {
+    const variantValue = Number(logoVariant.value);
+    state.settings.logo.variant = clamp(variantValue, 1, 3);
+  }
+  
+  // Режим отображения
+  if (logoLayout) {
+    state.settings.logo.layout = String(logoLayout.value || LOGO_CONSTANTS.DEFAULT_LAYOUT);
+  }
+  
+  // Прозрачность (валидация через ControlSyncer)
+  if (logoOpacity) {
+    const opacityValue = clamp(Math.round(Number(logoOpacity.value || LOGO_CONSTANTS.DEFAULT_OPACITY)), 0, 100);
+    state.settings.logo.opacity = opacityValue;
+  }
+  
+  // Очистка кэша через новый менеджер
+  if (window.logoManager) {
+    window.logoManager.clearCache();
+  }
+
+  // ========== ОБНОВЛЕНИЕ ДРУГИХ НАСТРОЕК ==========
+  
+  // Тема
+  if (themeMode) state.settings.theme.mode = themeMode.value;
+  if (typeof collectThemeInputs === 'function') {
+    state.settings.theme.customTokens = collectThemeInputs();
+  }
+  
+  if (alphaToday) state.settings.theme.alpha.today = Number(alphaToday.value);
+  if (alphaNow) state.settings.theme.alpha.now = Number(alphaNow.value);
+  if (alphaEvent) state.settings.theme.alpha.event = Number(alphaEvent.value);
+  if (alphaShadow) state.settings.theme.alpha.shadow = Number(alphaShadow.value);
+
+  // Расписание
+  state.settings.schedule.start = startStr;
+  state.settings.schedule.end = endStr;
+  state.settings.schedule.defaultDuration = defaultDuration;
+  state.settings.schedule.maxPerCell = 2;
+
+  // Отображение
+  if (dispShowToday) state.settings.display.showTodayHighlight = dispShowToday.value === "yes";
+  
+  let dayWidthPx = Number(dispDayWidth.value);
+  if (!Number.isFinite(dayWidthPx) || dayWidthPx < 0) dayWidthPx = 0;
+  if (dayWidthPx > 0) dayWidthPx = clamp(Math.round(dayWidthPx), 120, 800);
+  state.settings.display.dayWidthPx = dayWidthPx;
+  
+  let cellPadPx = Number(dispCellPad.value);
+  if (!Number.isFinite(cellPadPx) || cellPadPx < 0) cellPadPx = 0;
+  cellPadPx = clamp(Math.round(cellPadPx), 0, 24);
+  state.settings.display.cellPadPx = cellPadPx;
+  
+  if (dispCellView) state.settings.display.cellView = dispCellView.value;
+  if (dispCardMode) state.settings.display.cardMode = dispCardMode.value;
+  if (dispShowNotes) state.settings.display.showNotes = dispShowNotes.value === "yes";
+  if (dispShowEmptyHint) state.settings.display.showEmptyHint = dispShowEmptyHint.value === "yes";
+
+  // Шрифты
+  const prev = state.settings.font || {};
+  const mainFam = fontFamily?.value || prev.family || "system";
+  const titleFam = fontTitleFamily?.value || prev.titleFamily || mainFam;
+  const metaFam = fontMetaFamily?.value || prev.metaFamily || mainFam;
+
+  if (fontPreset) state.settings.font.preset = fontPreset?.value || "custom";
+  if (fontQuickTightness) state.settings.font.tightness = fontQuickTightness?.value || "normal";
+  state.settings.font.family = mainFam;
+  state.settings.font.titleFamily = titleFam;
+  state.settings.font.metaFamily = metaFam;
+  state.settings.font.lineHeight = lh;
+  state.settings.font.titleSize1 = t1;
+  state.settings.font.titleSize2 = t2;
+  state.settings.font.metaSize1 = m1;
+  state.settings.font.metaSize2 = m2;
+  if (fontWeightTitle) state.settings.font.weightTitle = Number(fontWeightTitle.value);
+  if (fontWeightMeta) state.settings.font.weightMeta = Number(fontWeightMeta.value);
+
+  // Дополнительные настройки шрифтов
+  if (fontSampleText) {
+    const st = (fontSampleText.value || "").trim();
+    state.settings.font.sampleText = st || DEFAULT_STATE.settings.font.sampleText;
+  }
+
+  let letterSpacing = Number(fontLetterSpacing?.value);
+  if (!Number.isFinite(letterSpacing)) letterSpacing = 0;
+  letterSpacing = clamp(letterSpacing, -0.05, 0.2);
+  if (fontLetterSpacing) state.settings.font.letterSpacing = letterSpacing;
+
+  const textTransform = String(fontTextTransform?.value ?? "none");
+  if (fontTextTransform) state.settings.font.textTransform = textTransform;
+
+  let titleClamp = Number(fontTitleClamp?.value);
+  if (!Number.isFinite(titleClamp)) titleClamp = 3;
+  titleClamp = clamp(Math.round(titleClamp), 2, 4);
+  if (fontTitleClamp) state.settings.font.titleClamp = titleClamp;
+
+  let cardPadY = Number(fontCardPaddingY?.value);
+  if (!Number.isFinite(cardPadY)) cardPadY = 7;
+  cardPadY = clamp(Math.round(cardPadY), 2, 14);
+  if (fontCardPaddingY) state.settings.font.cardPadY = cardPadY;
+
+  let cardRadius = Number(fontCardRadius?.value);
+  if (!Number.isFinite(cardRadius)) cardRadius = 12;
+  cardRadius = clamp(Math.round(cardRadius), 0, 18);
+  if (fontCardRadius) state.settings.font.cardRadius = cardRadius;
+
+  // Сохранение и обновление интерфейса
+  pushHistory("Изменение настроек");
+  saveState();
+  closeSettings();
+  renderAll();
+
+  // Обновление логотипа через новый менеджер
+  if (window.logoManager) {
+    setTimeout(() => {
+      try {
+        window.logoManager.update();
+      } catch (error) {
+        console.error('Ошибка обновления логотипа:', error);
+      }
+    }, 50);
+  }
+
+  // Уведомления
+  if (removed > 0)
+    toast(
+      "WARN",
+      "Применено",
+      `Удалено занятий вне диапазона/слота: ${removed}.`,
+    );
+  else toast("OK", "", "Настройки сохранены.");
+}
+
+function openSettings() {
+  setActiveTab("schedule");
+  settingsWarn.style.display = "none";
+  settingsWarn.textContent = "";
+
+  // Расписание
+  const s = state.settings.schedule;
+  setStart.value = s.start;
+  setEnd.value = s.end;
+  setDefaultDur.value = String(s.defaultDuration);
+
+  // Отображение
+  const d = state.settings.display;
+  if (dispCellView) dispCellView.value = d.cellView;
+  if (dispCardMode) dispCardMode.value = d.cardMode;
+  if (dispShowNotes) dispShowNotes.value = d.showNotes ? "yes" : "no";
+  if (dispShowToday) dispShowToday.value = d.showTodayHighlight ? "yes" : "no";
+  if (dispDayWidth) dispDayWidth.value = String(d.dayWidthPx ?? 0);
+  if (dispCellPad) dispCellPad.value = String(d.cellPadPx ?? 6);
+  if (dispShowEmptyHint) dispShowEmptyHint.value = d.showEmptyHint ? "yes" : "no";
+
+  // Шрифты
+  const f = state.settings.font;
+  const presetVal = f && typeof f.preset === "string" && f.preset.trim() ? f.preset : "custom";
+  const tightnessVal = f && typeof f.tightness === "string" && f.tightness.trim() ? f.tightness : "normal";
+
+  if (fontPreset) fontPreset.value = presetVal;
+  if (fontQuickTightness) fontQuickTightness.value = tightnessVal;
+
+  // ========== НАСТРОЙКИ ЛОГОТИПА (через новую архитектуру) ==========
+  
+  // Используем LogoManager для синхронизации всех элементов управления логотипом
+  if (window.logoManager) {
+    try {
+      // Синхронизация простых элементов через EventManager
+      if (window.logoManager.eventManager) {
+        window.logoManager.eventManager.updateVariantDropdown();
+        window.logoManager.eventManager.updateCSSVariables();
+      }
+      
+      // Синхронизация слайдеров и числовых полей через ControlSyncer
+      if (window.logoManager.controlSyncer) {
+        window.logoManager.controlSyncer.syncAllControls();
+      }
+      
+      // Обновление предпросмотра
+      if (window.logoManager.preview) {
+        window.logoManager.syncPreview();
+      }
+    } catch (error) {
+      console.error('Ошибка синхронизации элементов логотипа:', error);
+    }
+  } else {
+    // Резервный код на случай, если LogoManager не инициализирован
+    const lg = state.settings.logo || {};
+    
+    // Простые поля
+    if (logoLayout) logoLayout.value = lg.layout || LOGO_CONSTANTS.DEFAULT_LAYOUT;
+    if (logoEnabled) logoEnabled.checked = !!lg.enabled;
+    if (logoRecolor) logoRecolor.checked = !!lg.recolor;
+    if (logoColor) logoColor.value = lg.color || LOGO_CONSTANTS.DEFAULT_COLOR;
+    if (logoOpacity) logoOpacity.value = String(lg.opacity || LOGO_CONSTANTS.DEFAULT_OPACITY);
+    if (logoOpacityVal) logoOpacityVal.textContent = `${logoOpacity.value}%`;
+    
+    // Показ/скрытие блока цвета
+    if (logoColorWrap) {
+      logoColorWrap.style.display = lg.recolor ? "block" : "none";
+    }
+
+    // Вариант логотипа с обновлением списка опций
+    if (logoVariant) {
+      const currentVariant = String(lg.variant || 1);
+      logoVariant.innerHTML = '';
+      
+      const option1 = document.createElement('option');
+      option1.value = '1';
+      option1.textContent = 'Логотип 1';
+      logoVariant.appendChild(option1);
+
+      const option2 = document.createElement('option');
+      option2.value = '2';
+      option2.textContent = 'Логотип 2';
+      logoVariant.appendChild(option2);
+
+      // Добавляем вариант для загруженного файла только если он есть
+      if (lg.uploadedFileData) {
+        const option3 = document.createElement('option');
+        option3.value = '3';
+        option3.textContent = 'Загруженный файл';
+        logoVariant.appendChild(option3);
+      }
+
+      logoVariant.value = currentVariant;
+      
+      // Показ/скрытие блока загрузки файла
+      const logoUploadWrap = $("logoUploadWrap");
+      if (logoUploadWrap) {
+        logoUploadWrap.style.display = currentVariant === '3' ? 'block' : 'none';
+      }
+    }
+  }
+
+  // Дополнительные настройки шрифтов
+  if (fontLetterSpacing) fontLetterSpacing.value = String(f.letterSpacing ?? 0);
+  if (fontTextTransform) fontTextTransform.value = f.textTransform || "none";
+  if (fontTitleClamp) fontTitleClamp.value = String(f.titleClamp ?? 3);
+  if (fontCardPaddingY) fontCardPaddingY.value = String(f.cardPadY ?? 7);
+  if (fontCardRadius) fontCardRadius.value = String(f.cardRadius ?? 12);
+
+  // Основные настройки шрифтов
+  const mainFam = f.family || "system";
+  const titleFam = f.titleFamily || mainFam;
+  const metaFam = f.metaFamily || mainFam;
+
+  if (pickerMain) pickerMain.setSelected(mainFam, true);
+  if (pickerTitle) pickerTitle.setSelected(titleFam, true);
+  if (pickerMeta) pickerMeta.setSelected(metaFam, true);
+
+  if (fontFamily) fontFamily.value = mainFam;
+  if (typeof fontTitleFamily !== "undefined" && fontTitleFamily)
+    fontTitleFamily.value = titleFam;
+  if (typeof fontMetaFamily !== "undefined" && fontMetaFamily)
+    fontMetaFamily.value = metaFam;
+
+  if (fontLineHeight) fontLineHeight.value = String(f.lineHeight ?? 1.12);
+  if (fontTitle1) fontTitle1.value = String(f.titleSize1 ?? 12);
+  if (fontTitle2) fontTitle2.value = String(f.titleSize2 ?? 10);
+  if (fontMeta1) fontMeta1.value = String(f.metaSize1 ?? 11);
+  if (fontMeta2) fontMeta2.value = String(f.metaSize2 ?? 9);
+  if (fontWeightTitle) fontWeightTitle.value = String(f.weightTitle ?? 900);
+  if (fontWeightMeta) fontWeightMeta.value = String(f.weightMeta ?? 600);
+
+  if (fontSampleText) fontSampleText.value = f.sampleText || "";
+
+  // Тема
+  const th = state.settings.theme;
+  if (themeMode) themeMode.value = th.mode;
+  
+  // Функции для темы (предполагается, что они существуют)
+  if (typeof syncLogoLayoutFromState === 'function') syncLogoLayoutFromState();
+  if (typeof renderThemePresetUI === 'function') renderThemePresetUI();
+  if (typeof fillThemeInputsFromState === 'function') fillThemeInputsFromState();
+
+  // Показ модального окна
+  settingsBackdrop.classList.add("show");
+}
+
+function undo() {
+  if (!history.length) return;
+  const last = history.pop();
+  future.push({
+    snapshot: deepCopy(state),
+    reason: last.reason,
+    ts: Date.now(),
+  });
+  state = deepCopy(last.snapshot);
+  hardenState();
+  saveState(true);
+  renderAll();
+  toast("OK", "Undo", last.reason || "Отменено");
+  updateUndoRedoButtons();
+}
+
+function redo() {
+  if (!future.length) return;
+  const next = future.pop();
+  history.push({
+    snapshot: deepCopy(state),
+    reason: next.reason,
+    ts: Date.now(),
+  });
+  state = deepCopy(next.snapshot);
+  hardenState();
+  saveState(true);
+  renderAll();
+  toast("OK", "Redo", next.reason || "Повторено");
+  updateUndoRedoButtons();
+}
+
+function hardenState() {
+  const defaultState =
+    typeof DEFAULT_STATE === "function" ? DEFAULT_STATE() : DEFAULT_STATE;
+
+  if (!state.settings) state.settings = deepCopy(defaultState.settings);
+  if (!state.settings.schedule)
+    state.settings.schedule = deepCopy(defaultState.settings.schedule);
+  if (!state.settings.font)
+    state.settings.font = deepCopy(defaultState.settings.font);
+  if (!state.settings.display)
+    state.settings.display = deepCopy(defaultState.settings.display);
+  if (!state.settings.theme)
+    state.settings.theme = deepCopy(defaultState.settings.theme);
+
+  const f = state.settings.font;
+
+  if (!state.settings.font.sampleText)
+    state.settings.font.sampleText = defaultState.settings.font.sampleText;
+
+  if (!state.settings.logo) {
+    state.settings.logo = deepCopy(defaultState.settings.logo);
+  }
+
+  const lg = state.settings.logo;
+
+  lg.enabled = !!lg.enabled;
+  lg.variant = clamp(Math.round(Number(lg.variant ?? 1)), 1, 3);
+  lg.opacity = clamp(Math.round(Number(lg.opacity ?? 12)), 0, 100);
+  lg.recolor = !!lg.recolor;
+  lg.color = typeof lg.color === "string" ? lg.color.trim() : "#0ea5e9";
+  lg.layout = (typeof lg.layout === "string" && lg.layout.trim()) || "center";
+
+  // ИЗМЕНЕНИЕ: Теперь tileSize - это процент (0-100) вместо пикселей
+  lg.tileSize = clamp(Math.round(Number(lg.tileSize ?? 30)), 0, 100);
+
+  if (
+    typeof lg.horizontalGap === "undefined" &&
+    typeof lg.tileGap !== "undefined"
+  ) {
+    lg.horizontalGap = lg.tileGap;
+  }
+  if (
+    typeof lg.verticalGap === "undefined" &&
+    typeof lg.tileGap !== "undefined"
+  ) {
+    lg.verticalGap = lg.tileGap;
+  }
+
+  lg.horizontalGap = clamp(Math.round(Number(lg.horizontalGap ?? 180)), 0, 800);
+  lg.verticalGap = clamp(Math.round(Number(lg.verticalGap ?? 180)), 0, 800);
+
+  lg.rotation = clamp(Math.round(Number(lg.rotation ?? 0)), -180, 180);
+
+  lg.tileOffsetX = clamp(Math.round(Number(lg.tileOffsetX ?? 0)), -2000, 2000);
+  lg.tileOffsetY = clamp(Math.round(Number(lg.tileOffsetY ?? 0)), -2000, 2000);
+
+  if (lg.uploadedFileData && typeof lg.uploadedFileData === "string") {
+    if (
+      !lg.uploadedFileData.startsWith("data:") &&
+      !lg.uploadedFileData.startsWith("blob:")
+    ) {
+      lg.uploadedFileData = null;
+    }
+  } else {
+    lg.uploadedFileData = null;
+  }
+
+  if (typeof lg.tileGap !== "undefined") {
+    delete lg.tileGap;
+  }
+
+  if (typeof f.preset !== "string" || !f.preset.trim()) f.preset = "custom";
+  if (typeof f.tightness !== "string" || !f.tightness.trim())
+    f.tightness = "normal";
+
+  const fallbackFamily =
+    (typeof f.family === "string" && f.family.trim()) ||
+    (typeof defaultState.settings.font.family === "string" &&
+      defaultState.settings.font.family.trim()) ||
+    "system";
+
+  if (!(typeof f.family === "string" && f.family.trim()))
+    f.family = fallbackFamily;
+  if (!(typeof f.titleFamily === "string" && f.titleFamily.trim()))
+    f.titleFamily = f.family;
+  if (!(typeof f.metaFamily === "string" && f.metaFamily.trim()))
+    f.metaFamily = f.family;
+
+  const sch = state.settings.schedule;
+  sch.slotHeight = clamp(
+    Math.round(
+      Number(sch.slotHeight) || defaultState.settings.schedule.slotHeight,
+    ),
+    48,
+    240,
+  );
+  sch.slotMinutes = clamp(
+    Math.round(
+      Number(sch.slotMinutes) || defaultState.settings.schedule.slotMinutes,
+    ),
+    1,
+    240,
+  );
+  sch.maxPerCell = 2;
+
+  if (!Array.isArray(state.events)) state.events = [];
+  if (!Array.isArray(state.directions))
+    state.directions = deepCopy(defaultState.directions);
+  if (!Array.isArray(state.coaches)) state.coaches = [];
+
+  state.events.forEach((ev) => {
+    if (!ev.id) ev.id = uid();
+    if (!ev.createdAt) ev.createdAt = Date.now();
+  });
+}
+
+// Доп функции не внедрять в класс, часто используются в коде
+
+function pushHistory(reason) {
+  history.push({ snapshot: deepCopy(state), reason, ts: Date.now() });
+  if (history.length > HISTORY_LIMIT) history.shift();
+  future = [];
+  updateUndoRedoButtons();
+  scheduleAutoSave(`history: ${reason}`);
+}
+
+function deepCopy(o) {
+  return JSON.parse(JSON.stringify(o));
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+
+
+
+const LOGO_URLS = {
+  1: "./src/Logo.svg",
+  2: "./src/Logo2.svg",
+  3: "uploaded"
+};
+const LOGO_SVG_STRINGS = {
+  1: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="currentColor"/></svg>',
+  2: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="10" y="10" width="80" height="80" rx="15" fill="currentColor"/></svg>',
+  3: null
+};
+const COLOR_SWATCHES = [
+  "#0f172a",
+  "#111827",
+  "#1f2937",
+  "#334155",
+  "#475569",
+  "#64748b",
+  "#94a3b8",
+  "#cbd5e1",
+  "#e2e8f0",
+  "#f1f5f9",
+  "#ef4444",
+  "#f97316",
+  "#f59e0b",
+  "#eab308",
+  "#22c55e",
+  "#14b8a6",
+  "#06b6d4",
+  "#0ea5e9",
+  "#6366f1",
+  "#a855f7",
+  "#ec4899",
+];
+const FONT_PRESETS = {
+  compact: {
+    lineHeight: 1.05,
+    titleClamp: 2,
+    letterSpacing: -0.01,
+    cardPadY: 5,
+    cardRadius: 10,
+    weightTitle: 900,
+    weightMeta: 600,
+  },
+  balanced: {
+    lineHeight: 1.12,
+    titleClamp: 3,
+    letterSpacing: 0.0,
+    cardPadY: 7,
+    cardRadius: 12,
+    weightTitle: 900,
+    weightMeta: 600,
+  },
+  spacious: {
+    lineHeight: 1.2,
+    titleClamp: 3,
+    letterSpacing: 0.02,
+    cardPadY: 9,
+    cardRadius: 14,
+    weightTitle: 800,
+    weightMeta: 600,
+  },
+  print: {
+    lineHeight: 1.18,
+    titleClamp: 3,
+    letterSpacing: 0.01,
+    cardPadY: 8,
+    cardRadius: 10,
+    weightTitle: 700,
+    weightMeta: 500,
+    textTransform: "none",
+  },
+};
+const EXPORT_PRESETS = [
+  { id: "vk_square", name: "VK пост 1:1 (1080×1080)", w: 1080, h: 1080 },
+  { id: "vk_wide", name: "VK обложка 1.91:1 (1200×630)", w: 1200, h: 630 },
+  { id: "tg_16_9", name: "Telegram 16:9 (1280×720)", w: 1280, h: 720 },
+  { id: "tg_square", name: "Telegram 1:1 (1080×1080)", w: 1080, h: 1080 },
+  { id: "a4_portrait", name: "A4 портрет (2480×3508)", w: 2480, h: 3508 },
+  { id: "a4_land", name: "A4 альбом (3508×2480)", w: 3508, h: 2480 },
+  { id: "auto", name: "Auto (по размеру расписания)", w: 0, h: 0 },
+];
+const GENERIC_FAMILIES = new Set([
+  "serif",
+  "sans-serif",
+  "monospace",
+  "cursive",
+  "fantasy",
+  "system-ui",
+  "ui-serif",
+  "ui-sans-serif",
+  "ui-monospace",
+  "-apple-system",
+]);
+const THEME_PRESETS = [
+  {
+    id: "warm-red",
+    name: "Warm Red",
+    tokens: {
+      bg: "#f6f7fb",
+      card: "#ffffff",
+      text: "#0f172a",
+      muted: "#64748b",
+      border: "#e2e8f0",
+      gridHead: "#f8fafc",
+      accent: "#ef4444",
+      now: "#fff7c2",
+      today: "#fff5f5",
+    },
+  },
+  {
+    id: "ocean",
+    name: "Ocean Blue",
+    tokens: {
+      bg: "#f5fbff",
+      card: "#ffffff",
+      text: "#0b1220",
+      muted: "#475569",
+      border: "#dbeafe",
+      gridHead: "#eef6ff",
+      accent: "#0ea5e9",
+      now: "#dbeafe",
+      today: "#e0f2fe",
+    },
+  },
+  {
+    id: "emerald",
+    name: "Emerald",
+    tokens: {
+      bg: "#f6fbf7",
+      card: "#ffffff",
+      text: "#0b1220",
+      muted: "#475569",
+      border: "#d1fae5",
+      gridHead: "#ecfdf5",
+      accent: "#22c55e",
+      now: "#dcfce7",
+      today: "#e7fbe9",
+    },
+  },
+  {
+    id: "violet",
+    name: "Violet",
+    tokens: {
+      bg: "#f7f7ff",
+      card: "#ffffff",
+      text: "#0b1220",
+      muted: "#475569",
+      border: "#e0e7ff",
+      gridHead: "#f0f1ff",
+      accent: "#6366f1",
+      now: "#e0e7ff",
+      today: "#eef2ff",
+    },
+  },
+  {
+    id: "graphite-dark",
+    name: "Graphite Dark",
+    tokens: {
+      bg: "#0b1220",
+      card: "#0f172a",
+      text: "#e5e7eb",
+      muted: "#94a3b8",
+      border: "#1f2a44",
+      gridHead: "#0b1220",
+      accent: "#f59e0b",
+      now: "#3a2f00",
+      today: "#2a1212",
+    },
+  },
+];
+const LOGO_CONSTANTS = {
+  DEFAULT_OPACITY: 12,
+  DEFAULT_COLOR: '#0ea5e9',
+  DEFAULT_LAYOUT: 'center',
+  DEFAULT_TILE_SIZE: 30,
+  DEFAULT_GAP: 180,
+  DEFAULT_ROTATION: 0,
+  DEFAULT_OFFSET: 0,
+  MIN_TILE_SIZE: 20,
+  MAX_TILE_SIZE: 1000,
+  MIN_GAP: 0,
+  MAX_GAP: 800,
+  MIN_ROTATION: -180,
+  MAX_ROTATION: 180,
+  MIN_OFFSET: -2000,
+  MAX_OFFSET: 2000,
+  CACHE_TTL: 1000,
+  DEBOUNCE_DELAY: 150,
+  FILE_MAX_SIZE: 5 * 1024 * 1024,
+  VALID_FILE_TYPES: [
+    'image/svg+xml',
+    'image/png',
+    'image/jpeg',
+    'image/gif',
+    'image/webp'
+  ]
+};
+const DEFAULT_LIGHT = THEME_PRESETS[0].tokens;
+const DEFAULT_DARK = THEME_PRESETS.find((p) => p.id === "graphite-dark").tokens;
+const DEFAULT_FONT_SAMPLE_TEXT = DEFAULT_STATE().settings.font.sampleText;
+function DEFAULT_STATE() {
+  return {
+    version: 13,
+    settings: {
+      schedule: {
+        start: "08:00",
+        end: "22:00",
+        slotMinutes: 60,
+        slotHeight: 72,
+        snapMinutes: 5,
+        maxPerCell: 2,
+        defaultDuration: 60,
+      },
+      display: {
+        cellView: "timeline",
+        cardMode: "namecoachroom",
+        showNotes: true,
+        showEmptyHint: true,
+        showDayView: false,
+        showTodayHighlight: true,
+        dayWidthPx: 0,
+        cellPadPx: 6,
+      },
+      font: {
+        preset: "custom",
+        tightness: "normal",
+        titleFamily: "system",
+        metaFamily: "system",
+        family: "system",
+        lineHeight: 1.12,
+        titleSize1: 12,
+        titleSize2: 10,
+        metaSize1: 11,
+        metaSize2: 9,
+        weightTitle: 900,
+        weightMeta: 600,
+        sampleText: "(расписание / РАСПИСАНИЕ)",
+        letterSpacing: 0,
+        textTransform: "none",
+        titleClamp: 3,
+        cardPadY: 7,
+        cardRadius: 12,
+      },
+      theme: {
+        mode: "auto",
+        customTokens: deepCopy(THEME_PRESETS[0].tokens),
+        alpha: { today: 60, now: 65, event: 100, shadow: 10 },
+      },
+      logo: {
+        enabled: false,
+        variant: 1,
+        opacity: LOGO_CONSTANTS.DEFAULT_OPACITY,
+        recolor: false,
+        color: LOGO_CONSTANTS.DEFAULT_COLOR,
+        layout: LOGO_CONSTANTS.DEFAULT_LAYOUT,
+        tileSize: LOGO_CONSTANTS.DEFAULT_TILE_SIZE,
+        horizontalGap: LOGO_CONSTANTS.DEFAULT_GAP,
+        verticalGap: LOGO_CONSTANTS.DEFAULT_GAP,
+        rotation: LOGO_CONSTANTS.DEFAULT_ROTATION,
+        tileOffsetX: LOGO_CONSTANTS.DEFAULT_OFFSET,
+        tileOffsetY: LOGO_CONSTANTS.DEFAULT_OFFSET,
+        uploadedFileData: null,
+      },
+    },
+    directions: [
+      { id: "yoga", name: "Йога", color: "#ef4444" },
+      { id: "pilates", name: "Пилатес", color: "#14b8a6" },
+      { id: "crossfit", name: "Кроссфит", color: "#0ea5e9" },
+    ],
+    coaches: ["Анна", "Дмитрий", "Елена"],
+    events: [],
+  };
+}
+let state = DEFAULT_STATE();
+
+
+
+
+
+
+
+/**
+ * Класс для управления настройками приложения с поддержкой JSON
+ * @class JsonSettingsManager
+ */
+class JsonSettingsManager {
+  /**
+   * @param {Object} options - Опции менеджера
+   * @param {Object} options.elements - DOM элементы
+   * @param {Object} options.dependencies - Зависимости
+   * @param {Function} options.onStateChange - Коллбек при изменении состояния
+   * @param {Function} options.onSave - Коллбек при сохранении
+   */
+  constructor(options = {}) {
+    this.elements = options.elements || {};
+    this.dependencies = options.dependencies || {};
+    this.onStateChange = options.onStateChange;
+    this.onSave = options.onSave;
+    
+    // Константы
+    this.CONSTANTS = {
+      HISTORY_LIMIT: 50,
+      DEFAULT_STATE: this.getDefaultState(),
+      LOGO: {
+        DEFAULT_OPACITY: 12,
+        DEFAULT_COLOR: '#0ea5e9',
+        DEFAULT_LAYOUT: 'center',
+        DEFAULT_TILE_SIZE: 30,
+        MIN_TILE_SIZE: 0,
+        MAX_TILE_SIZE: 100,
+        MIN_OPACITY: 0,
+        MAX_OPACITY: 100,
+        VARIANTS: 3
+      },
+      THEME_PRESETS: [
+        {
+          id: "warm-red",
+          name: "Warm Red",
+          tokens: {
+            bg: "#f6f7fb",
+            card: "#ffffff",
+            text: "#0f172a",
+            muted: "#64748b",
+            border: "#e2e8f0",
+            gridHead: "#f8fafc",
+            accent: "#ef4444",
+            now: "#fff7c2",
+            today: "#fff5f5",
+          },
+        },
+        // ... другие пресеты
+      ],
+      FONT_PRESETS: {
+        compact: {
+          lineHeight: 1.05,
+          titleClamp: 2,
+          letterSpacing: -0.01,
+          cardPadY: 5,
+          cardRadius: 10,
+          weightTitle: 900,
+          weightMeta: 600,
+        },
+        balanced: {
+          lineHeight: 1.12,
+          titleClamp: 3,
+          letterSpacing: 0.0,
+          cardPadY: 7,
+          cardRadius: 12,
+          weightTitle: 900,
+          weightMeta: 600,
+        },
+        // ... другие пресеты
+      }
+    };
+
+    // Состояние
+    this.state = this.CONSTANTS.DEFAULT_STATE;
+    this.history = [];
+    this.future = [];
+    
+    // Приватные свойства
+    this._initialized = false;
+    this._autoSaveTimer = null;
+  }
+
+  /**
+   * Инициализация менеджера
+   */
+  init() {
+    if (this._initialized) return;
+    
+    this.setupEventListeners();
+    this.loadState();
+    this._initialized = true;
+  }
+
+  /**
+   * Получение дефолтного состояния
+   * @returns {Object}
+   */
+  getDefaultState() {
+    return {
+      version: 13,
+      settings: {
+        schedule: {
+          start: "08:00",
+          end: "22:00",
+          slotMinutes: 60,
+          slotHeight: 72,
+          snapMinutes: 5,
+          maxPerCell: 2,
+          defaultDuration: 60,
+        },
+        display: {
+          cellView: "timeline",
+          cardMode: "namecoachroom",
+          showNotes: true,
+          showEmptyHint: true,
+          showDayView: false,
+          showTodayHighlight: true,
+          dayWidthPx: 0,
+          cellPadPx: 6,
+        },
+        font: {
+          preset: "custom",
+          tightness: "normal",
+          titleFamily: "system",
+          metaFamily: "system",
+          family: "system",
+          lineHeight: 1.12,
+          titleSize1: 12,
+          titleSize2: 10,
+          metaSize1: 11,
+          metaSize2: 9,
+          weightTitle: 900,
+          weightMeta: 600,
+          sampleText: "(расписание / РАСПИСАНИЕ)",
+          letterSpacing: 0,
+          textTransform: "none",
+          titleClamp: 3,
+          cardPadY: 7,
+          cardRadius: 12,
+        },
+        theme: {
+          mode: "auto",
+          customTokens: this.deepCopy(this.CONSTANTS.THEME_PRESETS[0].tokens),
+          alpha: { today: 60, now: 65, event: 100, shadow: 10 },
+        },
+        logo: {
+          enabled: false,
+          variant: 1,
+          opacity: this.CONSTANTS.LOGO.DEFAULT_OPACITY,
+          recolor: false,
+          color: this.CONSTANTS.LOGO.DEFAULT_COLOR,
+          layout: this.CONSTANTS.LOGO.DEFAULT_LAYOUT,
+          tileSize: this.CONSTANTS.LOGO.DEFAULT_TILE_SIZE,
+          horizontalGap: 180,
+          verticalGap: 180,
+          rotation: 0,
+          tileOffsetX: 0,
+          tileOffsetY: 0,
+          uploadedFileData: null,
+        },
+      },
+      directions: [
+        { id: "yoga", name: "Йога", color: "#ef4444" },
+        { id: "pilates", name: "Пилатес", color: "#14b8a6" },
+        { id: "crossfit", name: "Кроссфит", color: "#0ea5e9" },
+      ],
+      coaches: ["Анна", "Дмитрий", "Елена"],
+      events: [],
+    };
+  }
+
+  /**
+   * Экспорт состояния в JSON файл
+   * @param {Object} options - Опции экспорта
+   * @param {string} options.filename - Имя файла
+   * @param {boolean} options.pretty - Форматированный вывод
+   */
+  exportToJson(options = {}) {
+    const {
+      filename = `schedule_${new Date().toISOString().slice(0, 10)}.json`,
+      pretty = true
+    } = options;
+
+    try {
+      const jsonString = JSON.stringify(this.state, null, pretty ? 2 : 0);
+      const blob = new Blob([jsonString], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.click();
+      
+      URL.revokeObjectURL(url);
+      
+      this.showNotification("OK", "Экспорт JSON", "Файл скачан.");
+      
+      return true;
+    } catch (error) {
+      console.error("Export error:", error);
+      this.showNotification("ERR", "Ошибка экспорта", error.message);
+      return false;
+    }
+  }
+
+  /**
+   * Импорт состояния из JSON файла
+   * @param {File} file - Файл для импорта
+   * @returns {Promise<boolean>}
+   */
+  async importFromJson(file) {
+    return new Promise((resolve) => {
+      if (!file || !(file instanceof File)) {
+        this.showNotification("ERR", "Ошибка импорта", "Некорректный файл");
+        resolve(false);
+        return;
+      }
+
+      const reader = new FileReader();
+      
+      reader.onload = (event) => {
+        try {
+          const parsed = JSON.parse(event.target.result);
+          
+          if (!this.validateImportedData(parsed)) {
+            this.showNotification("ERR", "Ошибка импорта", "Некорректный формат данных");
+            resolve(false);
+            return;
+          }
+
+          if (!confirm("Импортировать данные? Текущие данные будут заменены.")) {
+            resolve(false);
+            return;
+          }
+
+          this.pushHistory("Импорт JSON");
+          
+          // Обновляем состояние
+          this.state = parsed;
+          this.hardenState();
+          
+          // Сохраняем в хранилище
+          this.saveState();
+          
+          // Вызываем коллбеки
+          if (this.onStateChange) this.onStateChange(this.state);
+          if (this.onSave) this.onSave();
+          
+          this.showNotification("OK", "Импорт выполнен", "Данные загружены.");
+          resolve(true);
+          
+        } catch (error) {
+          console.error("Import error:", error);
+          this.showNotification("ERR", "Импорт не удался", error.message || "Проверьте формат JSON.");
+          resolve(false);
+        }
+      };
+      
+      reader.onerror = () => {
+        this.showNotification("ERR", "Ошибка чтения файла", "Не удалось прочитать файл");
+        resolve(false);
+      };
+      
+      reader.readAsText(file);
+    });
+  }
+
+  /**
+   * Валидация импортированных данных
+   * @param {Object} data - Данные для валидации
+   * @returns {boolean}
+   */
+  validateImportedData(data) {
+    if (!data || typeof data !== 'object') return false;
+    
+    // Проверка обязательных полей
+    const requiredFields = ['version', 'settings', 'events'];
+    for (const field of requiredFields) {
+      if (!(field in data)) return false;
+    }
+    
+    // Проверка структуры settings
+    const settings = data.settings;
+    if (!settings || typeof settings !== 'object') return false;
+    
+    const requiredSettings = ['schedule', 'display', 'font', 'theme'];
+    for (const setting of requiredSettings) {
+      if (!settings[setting]) return false;
+    }
+    
+    return true;
+  }
+
+  /**
+   * Сохранение настроек из формы
+   * @returns {boolean}
+   */
+  saveSettings() {
+    const validationResult = this.validateSettings();
+    if (!validationResult.valid) {
+      this.showValidationErrors(validationResult.errors);
+      return false;
+    }
+
+    // Сохраняем изменения времени
+    const removedEvents = this.processTimeChanges();
+    
+    // Сохраняем настройки логотипа
+    this.saveLogoSettings();
+    
+    // Сохраняем другие настройки
+    this.saveGeneralSettings();
+    
+    // Сохраняем настройки шрифтов
+    this.saveFontSettings();
+    
+    // Сохраняем настройки темы
+    this.saveThemeSettings();
+    
+    // Сохраняем состояние
+    this.pushHistory("Изменение настроек");
+    this.saveState();
+    
+    // Вызываем коллбеки
+    if (this.onStateChange) this.onStateChange(this.state);
+    if (this.onSave) this.onSave();
+    
+    // Показываем уведомление
+    if (removedEvents > 0) {
+      this.showNotification(
+        "WARN",
+        "Применено",
+        `Удалено занятий вне диапазона/слота: ${removedEvents}.`
+      );
+    } else {
+      this.showNotification("OK", "", "Настройки сохранены.");
+    }
+    
+    return true;
+  }
+
+  /**
+   * Валидация настроек
+   * @returns {Object}
+   */
+  validateSettings() {
+    const errors = [];
+    
+    // Валидация времени
+    const startStr = this.elements.setStart?.value;
+    const endStr = this.elements.setEnd?.value;
+    const defaultDuration = Number(this.elements.setDefaultDur?.value);
+
+    const startMin = this.parseHHMM(startStr);
+    const endMin = this.parseHHMM(endStr);
+
+    if (startMin == null || endMin == null) {
+      errors.push("Проверьте время начала/конца.");
+    }
+    
+    if (startMin != null && endMin != null && endMin <= startMin) {
+      errors.push("Конец дня должен быть позже начала.");
+    }
+    
+    if (!defaultDuration || defaultDuration < 1) {
+      errors.push("Длительность по умолчанию должна быть >= 1.");
+    }
+
+    // Валидация шрифтов
+    const lineHeight = Number(this.elements.fontLineHeight?.value);
+    if (!Number.isFinite(lineHeight)) {
+      errors.push("Line-height: некорректное число.");
+    }
+
+    const titleSize1 = Number(this.elements.fontTitle1?.value);
+    const titleSize2 = Number(this.elements.fontTitle2?.value);
+    
+    if (titleSize2 > titleSize1) {
+      errors.push(
+        "Размер названия для 2 занятий должен быть <= размера для 1 занятия."
+      );
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors
+    };
+  }
+
+  /**
+   * Обработка изменений временных параметров
+   * @returns {number} Количество удаленных событий
+   */
+  processTimeChanges() {
+    const oldStart = this.state.settings.schedule.start;
+    const oldEnd = this.state.settings.schedule.end;
+    const newStart = this.elements.setStart?.value;
+    const newEnd = this.elements.setEnd?.value;
+    
+    const timeParamsChanged = oldStart !== newStart || oldEnd !== newEnd;
+    
+    if (!timeParamsChanged) return 0;
+    
+    const before = this.state.events.length;
+    
+    // Здесь должна быть логика фильтрации событий
+    // Для примера оставляем все события
+    // this.state.events = this.state.events.filter(ev => ...);
+    
+    return before - this.state.events.length;
+  }
+
+  /**
+   * Сохранение настроек логотипа
+   */
+  saveLogoSettings() {
+    if (!this.state.settings.logo) {
+      this.state.settings.logo = {};
+    }
+    
+    const logo = this.state.settings.logo;
+    const constants = this.CONSTANTS.LOGO;
+    
+    // Основные настройки
+    if (this.elements.logoEnabled) {
+      logo.enabled = !!this.elements.logoEnabled.checked;
+    }
+    
+    if (this.elements.logoRecolor) {
+      logo.recolor = !!this.elements.logoRecolor.checked;
+    }
+    
+    if (this.elements.logoColor) {
+      logo.color = String(this.elements.logoColor.value || constants.DEFAULT_COLOR).trim();
+    }
+    
+    // Вариант логотипа
+    if (this.elements.logoVariant) {
+      const variantValue = Number(this.elements.logoVariant.value);
+      logo.variant = this.clamp(variantValue, 1, constants.VARIANTS);
+    }
+    
+    // Режим отображения
+    if (this.elements.logoLayout) {
+      logo.layout = String(this.elements.logoLayout.value || constants.DEFAULT_LAYOUT);
+    }
+    
+    // Прозрачность
+    if (this.elements.logoOpacity) {
+      const opacityValue = this.clamp(
+        Math.round(Number(this.elements.logoOpacity.value || constants.DEFAULT_OPACITY)),
+        constants.MIN_OPACITY,
+        constants.MAX_OPACITY
+      );
+      logo.opacity = opacityValue;
+    }
+    
+    // Размер тайла (процент)
+    if (this.elements.logoTileSize) {
+      const tileSize = this.clamp(
+        Math.round(Number(this.elements.logoTileSize.value || constants.DEFAULT_TILE_SIZE)),
+        constants.MIN_TILE_SIZE,
+        constants.MAX_TILE_SIZE
+      );
+      logo.tileSize = tileSize;
+    }
+  }
+
+  /**
+   * Сохранение общих настроек
+   */
+  saveGeneralSettings() {
+    // Расписание
+    const schedule = this.state.settings.schedule;
+    schedule.start = this.elements.setStart?.value || schedule.start;
+    schedule.end = this.elements.setEnd?.value || schedule.end;
+    schedule.defaultDuration = Number(this.elements.setDefaultDur?.value) || schedule.defaultDuration;
+    
+    // Отображение
+    const display = this.state.settings.display;
+    
+    if (this.elements.dispShowToday) {
+      display.showTodayHighlight = this.elements.dispShowToday.value === "yes";
+    }
+    
+    if (this.elements.dispDayWidth) {
+      let dayWidthPx = Number(this.elements.dispDayWidth.value);
+      if (!Number.isFinite(dayWidthPx) || dayWidthPx < 0) dayWidthPx = 0;
+      if (dayWidthPx > 0) dayWidthPx = this.clamp(Math.round(dayWidthPx), 120, 800);
+      display.dayWidthPx = dayWidthPx;
+    }
+    
+    if (this.elements.dispCellPad) {
+      let cellPadPx = Number(this.elements.dispCellPad.value);
+      if (!Number.isFinite(cellPadPx) || cellPadPx < 0) cellPadPx = 0;
+      cellPadPx = this.clamp(Math.round(cellPadPx), 0, 24);
+      display.cellPadPx = cellPadPx;
+    }
+    
+    if (this.elements.dispCellView) {
+      display.cellView = this.elements.dispCellView.value;
+    }
+    
+    if (this.elements.dispCardMode) {
+      display.cardMode = this.elements.dispCardMode.value;
+    }
+    
+    if (this.elements.dispShowNotes) {
+      display.showNotes = this.elements.dispShowNotes.value === "yes";
+    }
+    
+    if (this.elements.dispShowEmptyHint) {
+      display.showEmptyHint = this.elements.dispShowEmptyHint.value === "yes";
+    }
+  }
+
+  /**
+   * Сохранение настроек шрифтов
+   */
+  saveFontSettings() {
+    const font = this.state.settings.font;
+    const preset = this.elements.fontPreset?.value || "custom";
+    
+    // Применение пресета
+    if (preset !== "custom" && this.CONSTANTS.FONT_PRESETS[preset]) {
+      Object.assign(font, this.CONSTANTS.FONT_PRESETS[preset]);
+      font.preset = preset;
+    }
+    
+    // Основные настройки
+    if (this.elements.fontFamily) {
+      font.family = this.elements.fontFamily.value || "system";
+    }
+    
+    if (this.elements.fontTitleFamily) {
+      font.titleFamily = this.elements.fontTitleFamily.value || font.family;
+    }
+    
+    if (this.elements.fontMetaFamily) {
+      font.metaFamily = this.elements.fontMetaFamily.value || font.family;
+    }
+    
+    if (this.elements.fontLineHeight) {
+      let lh = Number(this.elements.fontLineHeight.value);
+      if (!Number.isFinite(lh)) lh = 1.12;
+      font.lineHeight = this.clamp(lh, 1.0, 1.8);
+    }
+    
+    if (this.elements.fontTitle1) {
+      font.titleSize1 = Number(this.elements.fontTitle1.value) || 12;
+    }
+    
+    if (this.elements.fontTitle2) {
+      font.titleSize2 = Number(this.elements.fontTitle2.value) || 10;
+    }
+    
+    if (this.elements.fontMeta1) {
+      font.metaSize1 = Number(this.elements.fontMeta1.value) || 11;
+    }
+    
+    if (this.elements.fontMeta2) {
+      font.metaSize2 = Number(this.elements.fontMeta2.value) || 9;
+    }
+    
+    // Дополнительные настройки
+    if (this.elements.fontLetterSpacing) {
+      let letterSpacing = Number(this.elements.fontLetterSpacing.value);
+      if (!Number.isFinite(letterSpacing)) letterSpacing = 0;
+      font.letterSpacing = this.clamp(letterSpacing, -0.05, 0.2);
+    }
+    
+    if (this.elements.fontTitleClamp) {
+      let titleClamp = Number(this.elements.fontTitleClamp.value);
+      if (!Number.isFinite(titleClamp)) titleClamp = 3;
+      font.titleClamp = this.clamp(Math.round(titleClamp), 2, 4);
+    }
+  }
+
+  /**
+   * Сохранение настроек темы
+   */
+  saveThemeSettings() {
+    const theme = this.state.settings.theme;
+    
+    if (this.elements.themeMode) {
+      theme.mode = this.elements.themeMode.value;
+    }
+    
+    if (this.elements.alphaToday) {
+      theme.alpha.today = Number(this.elements.alphaToday.value);
+    }
+    
+    if (this.elements.alphaNow) {
+      theme.alpha.now = Number(this.elements.alphaNow.value);
+    }
+    
+    if (this.elements.alphaEvent) {
+      theme.alpha.event = Number(this.elements.alphaEvent.value);
+    }
+    
+    if (this.elements.alphaShadow) {
+      theme.alpha.shadow = Number(this.elements.alphaShadow.value);
+    }
+  }
+
+  /**
+   * Загрузка состояния из localStorage
+   */
+  loadState() {
+    try {
+      const saved = localStorage.getItem('scheduleState');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        this.state = this.mergeState(this.getDefaultState(), parsed);
+        this.hardenState();
+      }
+    } catch (error) {
+      console.error('Failed to load state:', error);
+      this.state = this.getDefaultState();
+    }
+  }
+
+  /**
+   * Сохранение состояния в localStorage
+   */
+  saveState() {
+    try {
+      localStorage.setItem('scheduleState', JSON.stringify(this.state));
+    } catch (error) {
+      console.error('Failed to save state:', error);
+    }
+  }
+
+  /**
+   * Мердж состояний с глубоким копированием
+   */
+  mergeState(defaultState, savedState) {
+    const result = this.deepCopy(defaultState);
+    
+    const mergeDeep = (target, source) => {
+      for (const key in source) {
+        if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+          if (!target[key]) target[key] = {};
+          mergeDeep(target[key], source[key]);
+        } else if (Array.isArray(source[key])) {
+          target[key] = Array.isArray(source[key]) ? [...source[key]] : source[key];
+        } else {
+          target[key] = source[key];
+        }
+      }
+    };
+    
+    mergeDeep(result, savedState);
+    return result;
+  }
+
+  /**
+   * Упрочнение состояния (нормализация)
+   */
+  hardenState() {
+    const defaultState = this.getDefaultState();
+    
+    // Гарантируем наличие всех секций
+    if (!this.state.settings) this.state.settings = this.deepCopy(defaultState.settings);
+    if (!this.state.settings.schedule) this.state.settings.schedule = this.deepCopy(defaultState.settings.schedule);
+    if (!this.state.settings.font) this.state.settings.font = this.deepCopy(defaultState.settings.font);
+    if (!this.state.settings.display) this.state.settings.display = this.deepCopy(defaultState.settings.display);
+    if (!this.state.settings.theme) this.state.settings.theme = this.deepCopy(defaultState.settings.theme);
+    if (!this.state.settings.logo) this.state.settings.logo = this.deepCopy(defaultState.settings.logo);
+    
+    // Нормализация логотипа
+    const logo = this.state.settings.logo;
+    const logoConstants = this.CONSTANTS.LOGO;
+    
+    logo.enabled = !!logo.enabled;
+    logo.variant = this.clamp(Math.round(Number(logo.variant ?? 1)), 1, logoConstants.VARIANTS);
+    logo.opacity = this.clamp(Math.round(Number(logo.opacity ?? logoConstants.DEFAULT_OPACITY)), 0, 100);
+    logo.recolor = !!logo.recolor;
+    logo.color = typeof logo.color === "string" ? logo.color.trim() : logoConstants.DEFAULT_COLOR;
+    logo.layout = (typeof logo.layout === "string" && logo.layout.trim()) || logoConstants.DEFAULT_LAYOUT;
+    logo.tileSize = this.clamp(Math.round(Number(logo.tileSize ?? logoConstants.DEFAULT_TILE_SIZE)), 0, 100);
+    
+    // Миграция старых полей
+    if (typeof logo.horizontalGap === "undefined" && typeof logo.tileGap !== "undefined") {
+      logo.horizontalGap = logo.tileGap;
+    }
+    if (typeof logo.verticalGap === "undefined" && typeof logo.tileGap !== "undefined") {
+      logo.verticalGap = logo.tileGap;
+    }
+    
+    // Нормализация числовых полей
+    logo.horizontalGap = this.clamp(Math.round(Number(logo.horizontalGap ?? 180)), 0, 800);
+    logo.verticalGap = this.clamp(Math.round(Number(logo.verticalGap ?? 180)), 0, 800);
+    logo.rotation = this.clamp(Math.round(Number(logo.rotation ?? 0)), -180, 180);
+    logo.tileOffsetX = this.clamp(Math.round(Number(logo.tileOffsetX ?? 0)), -2000, 2000);
+    logo.tileOffsetY = this.clamp(Math.round(Number(logo.tileOffsetY ?? 0)), -2000, 2000);
+    
+    // Удаление устаревших полей
+    if (typeof logo.tileGap !== "undefined") {
+      delete logo.tileGap;
+    }
+    
+    // Нормализация событий
+    if (!Array.isArray(this.state.events)) this.state.events = [];
+    this.state.events.forEach((ev) => {
+      if (!ev.id) ev.id = this.generateId();
+      if (!ev.createdAt) ev.createdAt = Date.now();
+    });
+    
+    // Нормализация других массивов
+    if (!Array.isArray(this.state.directions)) {
+      this.state.directions = this.deepCopy(defaultState.directions);
+    }
+    
+    if (!Array.isArray(this.state.coaches)) {
+      this.state.coaches = [];
+    }
+  }
+
+  /**
+   * Добавление в историю изменений
+   */
+  pushHistory(reason) {
+    this.history.push({
+      snapshot: this.deepCopy(this.state),
+      reason,
+      ts: Date.now()
+    });
+    
+    if (this.history.length > this.CONSTANTS.HISTORY_LIMIT) {
+      this.history.shift();
+    }
+    
+    this.future = [];
+    this.scheduleAutoSave(`history: ${reason}`);
+  }
+
+  /**
+   * Отмена последнего изменения
+   */
+  undo() {
+    if (this.history.length === 0) return false;
+    
+    const lastState = this.history.pop();
+    this.future.push({
+      snapshot: this.deepCopy(this.state),
+      reason: "undo",
+      ts: Date.now()
+    });
+    
+    this.state = lastState.snapshot;
+    this.saveState();
+    
+    if (this.onStateChange) this.onStateChange(this.state);
+    
+    return true;
+  }
+
+  /**
+   * Повтор последнего отмененного изменения
+   */
+  redo() {
+    if (this.future.length === 0) return false;
+    
+    const nextState = this.future.pop();
+    this.history.push({
+      snapshot: this.deepCopy(this.state),
+      reason: "redo",
+      ts: Date.now()
+    });
+    
+    this.state = nextState.snapshot;
+    this.saveState();
+    
+    if (this.onStateChange) this.onStateChange(this.state);
+    
+    return true;
+  }
+
+  /**
+   * Планирование автосохранения
+   */
+  scheduleAutoSave(reason) {
+    if (this._autoSaveTimer) {
+      clearTimeout(this._autoSaveTimer);
+    }
+    
+    this._autoSaveTimer = setTimeout(() => {
+      this.saveState();
+      this._autoSaveTimer = null;
+    }, 1000);
+  }
+
+  /**
+   * Вспомогательные методы
+   */
+  deepCopy(obj) {
+    return JSON.parse(JSON.stringify(obj));
+  }
+
+  clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+  }
+
+  parseHHMM(timeStr) {
+    if (!timeStr || typeof timeStr !== 'string') return null;
+    
+    const match = timeStr.match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) return null;
+    
+    const hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2], 10);
+    
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+      return null;
+    }
+    
+    return hours * 60 + minutes;
+  }
+
+  generateId() {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+  }
+
+  showNotification(type, title, message) {
+    if (this.dependencies.toast) {
+      this.dependencies.toast(type, title, message);
+    } else {
+      console.log(`[${type}] ${title}: ${message}`);
+    }
+  }
+
+  showValidationErrors(errors) {
+    if (this.elements.settingsWarn) {
+      this.elements.settingsWarn.style.display = "block";
+      this.elements.settingsWarn.textContent = errors.join(" ");
+    }
+  }
+
+  /**
+   * Настройка обработчиков событий
+   */
+  setupEventListeners() {
+    // Экспорт
+    if (this.elements.exportBtn) {
+      this.elements.exportBtn.addEventListener('click', () => this.exportToJson());
+    }
+    
+    // Импорт
+    if (this.elements.importInput) {
+      this.elements.importInput.addEventListener('change', (e) => {
+        if (e.target.files[0]) {
+          this.importFromJson(e.target.files[0]);
+          e.target.value = ''; // Сброс input
+        }
+      });
+    }
+    
+    // Сохранение настроек
+    if (this.elements.saveSettingsBtn) {
+      this.elements.saveSettingsBtn.addEventListener('click', () => this.saveSettings());
+    }
+    
+    // Отмена/повтор
+    if (this.elements.undoBtn) {
+      this.elements.undoBtn.addEventListener('click', () => this.undo());
+    }
+    
+    if (this.elements.redoBtn) {
+      this.elements.redoBtn.addEventListener('click', () => this.redo());
+    }
+  }
+
+  /**
+   * Получение текущего состояния
+   */
+  getState() {
+    return this.deepCopy(this.state);
+  }
+
+  /**
+   * Установка состояния
+   */
+  setState(newState) {
+    this.state = this.deepCopy(newState);
+    this.hardenState();
+    this.saveState();
+    
+    if (this.onStateChange) {
+      this.onStateChange(this.state);
+    }
+  }
+
+  /**
+   * Сброс к настройкам по умолчанию
+   */
+  resetToDefaults() {
+    if (confirm("Сбросить все настройки к значениям по умолчанию?")) {
+      this.state = this.getDefaultState();
+      this.saveState();
+      
+      if (this.onStateChange) {
+        this.onStateChange(this.state);
+      }
+      
+      this.showNotification("OK", "Сброс настроек", "Настройки восстановлены к значениям по умолчанию.");
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Очистка данных
+   */
+  destroy() {
+    if (this._autoSaveTimer) {
+      clearTimeout(this._autoSaveTimer);
+    }
+    
+    this.state = null;
+    this.history = [];
+    this.future = [];
+    this._initialized = false;
+  }
+}
+
+// Экспорт класса
+// module.exports = JsonSettingsManager; // для Node.js
+// export default JsonSettingsManager; // для ES6 модулей

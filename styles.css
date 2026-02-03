@@ -26,7 +26,7 @@
 
   --radius: 14px;
 
-  --timeCol: 76px;
+  --timeCol: 46px;
   --dayMinW: 150px; /* fallback; JS может заменить */
   --dayW: 150px;    /* fallback; JS может заменить */
   --slotH: 72px;    /* fallback; JS может заменить */
@@ -1956,9 +1956,9 @@ html[data-scheme="dark"] .event:hover {
 
 /* Плиточный режим - ограничиваем областью контента */
 #logoLayer[data-wm="tile"] #logoMark {
-  width: calc(100% - var(--time-col-width, 76px)) !important;
+  width: calc(100% - var(--time-col-width, 46px)) !important;
   height: calc(100% - var(--day-head-height, 42px)) !important;
-  left: var(--time-col-width, 76px) !important;
+  left: var(--time-col-width, 46px) !important;
   top: var(--day-head-height, 42px) !important;
   transform: rotate(var(--logo-rotation, 0deg)) !important;
   background-repeat: repeat !important;
@@ -1974,9 +1974,9 @@ html[data-scheme="dark"] .event:hover {
 
 /* Диагональный режим - ограничиваем областью контента */
 #logoLayer[data-wm="diagonal"] #logoMark {
-  width: calc(100% - var(--time-col-width, 76px)) !important;
+  width: calc(100% - var(--time-col-width, 46px)) !important;
   height: calc(100% - var(--day-head-height, 42px)) !important;
-  left: var(--time-col-width, 76px) !important;
+  left: var(--time-col-width, 46px) !important;
   top: var(--day-head-height, 42px) !important;
   transform: rotate(var(--logo-rotation, 0deg)) !important;
   background-repeat: repeat !important;
@@ -2143,7 +2143,7 @@ html[data-scheme="dark"] .event:hover {
 
 /* CSS переменные для логотипа */
 :root {
-  --time-col-width: 76px;  /* Ширина колонки времени */
+  --time-col-width: 46px;  /* Ширина колонки времени */
   --day-head-height: 42px; /* Высота заголовков дней */
 }
 
@@ -2162,26 +2162,838 @@ html[data-scheme="dark"] .event:hover {
   opacity: var(--logo-opacity, 0.12) !important;
 }
 
-/* Убедитесь, что для каждого режима в export-mode сохраняются их специфичные стили */
-.export-mode #logoLayer[data-wm="tile"] #logoMark,
-.export-mode #logoLayer[data-wm="diagonal"] #logoMark {
-  width: calc(100% - var(--time-col-width, 76px)) !important;
-  height: calc(100% - var(--day-head-height, 42px)) !important;
-  left: var(--time-col-width, 76px) !important;
-  top: var(--day-head-height, 42px) !important;
+/* ===== КЛАССЫ ДЛЯ ИЗМЕРЕНИЯ ГЕОМЕТРИИ ===== */
+
+/* Фаза 1: измерение ширины */
+.schedule.measuring {
+  visibility: hidden;
+  position: fixed;
+  left: -9999px;
+  top: -9999px;
+  width: max-content;
+  height: auto;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.schedule.measuring .cell.droppable {
+  width: max-content;
+  min-width: auto;
+}
+
+.schedule.measuring .slot-inner {
+  width: max-content;
+}
+
+/* Фаза 2: измерение высоты */
+.schedule.measuring-h {
+  visibility: hidden;
+  position: fixed;
+  left: -9999px;
+  top: -9999px;
+  width: auto;
+  height: max-content;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.schedule.measuring-h .cell.droppable,
+.schedule.measuring-h .slot {
+  height: auto !important;
+  min-height: auto !important;
+}
+
+.schedule.measuring-h .event {
+  height: auto !important;
+  flex: 0 0 auto !important;
+}
+
+/* В обычном режиме - сбрасываем !important */
+.schedule:not(.measuring):not(.measuring-h) .cell.droppable {
+  height: auto;
+}
+
+.schedule:not(.measuring):not(.measuring-h) .slot.tl-fill.two .event {
+  flex: 1 1 0 !important;
+}
+
+.schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill.two .slot-inner {
+  gap: 2px;
+  position: relative;
+}
+
+.schedule:not(.measuring):not(.compact-mode) .cell.droppable .slot.tl-fill.two .slot-inner::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(0, 0, 0, 0.1);
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.schedule-wrap::-webkit-scrollbar {
+  height: 8px;
+}
+
+.schedule-wrap::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+/* Для Firefox */
+.schedule-wrap {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+/* Для остальных браузеров */
+.schedule-wrap::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.schedule-wrap::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.schedule-wrap {
+  overflow-x: auto !important;  /* Горизонтальный скролл */
+  overflow-y: hidden !important; /* Вертикальный скрыт */
 }
 
 
-.event {
-  background-color: var(--ev-bg-color, rgba(var(--ev-bg-rgb), var(--eventAlpha, 1)));
-  transition: opacity 0.2s;
+/* ВО ВРЕМЯ ИЗМЕРЕНИЯ ВЫСОТЫ - ТЕКСТ РАСКРЫВАЕТСЯ ПОЛНОСТЬЮ */
+.schedule.measuring-h .event.double .t,
+.schedule.measuring-h .event .t {
+  display: block !important;
+  -webkit-box-orient: initial !important;
+  -webkit-line-clamp: initial !important;
+  overflow: visible !important;
+  white-space: normal !important;
+  text-overflow: clip !important;
+  height: auto !important;
+  max-height: none !important;
 }
 
-.event.dim {
-  opacity: 0.35 !important;
+.schedule.measuring-h .event.double .m,
+.schedule.measuring-h .event .m {
+  overflow: visible !important;
+  white-space: normal !important;
+  text-overflow: clip !important;
+  height: auto !important;
+  max-height: none !important;
 }
 
-.col-today {
-  background-color: var(--todayColRGBA, rgba(255, 245, 245, 0.6)) !important;
+/* Слоты и события должны иметь авто-высоту при измерении */
+.schedule.measuring-h .slot,
+.schedule.measuring-h .slot-inner,
+.schedule.measuring-h .cell.droppable {
+  height: auto !important;
+  min-height: 0 !important;
 }
 
+.schedule.measuring-h .event {
+  height: auto !important;
+  flex: 0 0 auto !important;
+  position: static !important;
+}
+
+/* Для двойных событий - они должны растягиваться по контенту */
+.schedule.measuring-h .slot.two .event.double {
+  flex: 0 0 auto !important;
+  height: auto !important;
+  min-height: 0 !important;
+}
+
+.schedule.measuring-h .slot.two .slot-inner {
+  display: block !important;
+  height: auto !important;
+}
+
+/* Стили для двух занятий в одной ячейке */
+.event.double {
+  height: auto !important;
+  min-height: 0 !important;
+  flex: 1 1 auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.event.double .t {
+  -webkit-line-clamp: 2 !important;
+  line-clamp: 2 !important;
+  display: -webkit-box !important;
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
+  max-height: calc(var(--evTitleSize1, 12px) * var(--evLineHeight, 1.12) * 2) !important;
+  flex-shrink: 0 !important;
+}
+
+.event.double .m {
+  flex-shrink: 0 !important;
+  margin-top: auto !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+/* Для slot-inner с двумя занятиями */
+.slot.two .slot-inner {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  height: 100% !important;
+}
+
+/* Убираем принудительные высоты для ячеек с двумя занятиями */
+.cell.droppable[data-double="1"] {
+  height: auto !important;
+  min-height: calc(var(--slotH, 72px) * 0.9) !important; /* Минимальная высота чуть меньше обычной ячейки */
+}
+
+
+/* CSS Grid для двух занятий */
+.slot.two .slot-inner {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 2px;
+  height: 100%;
+}
+
+.event.double {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  padding: 4px 6px;
+  box-sizing: border-box;
+  position: relative;
+}
+
+.event.double .t {
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  flex-shrink: 0;
+  max-height: calc(var(--evTitleSize1, 12px) * var(--evLineHeight, 1.12) * 2);
+  margin-bottom: 2px;
+}
+
+.event.double .m {
+  flex-shrink: 0;
+  margin-top: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: calc(100% - 20px);
+}
+
+.field-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.field-actions button {
+  flex: 1;
+  min-width: 100px;
+  padding: 8px 12px;
+  font-size: 14px;
+}
+
+.field-actions button.danger {
+  background: var(--danger);
+  color: white;
+}
+
+@media (max-width: 768px) {
+  .field-actions {
+    flex-direction: column;
+  }
+  .field-actions button {
+    width: 100%;
+    min-width: auto;
+  }
+}
+/* ==================== БЛОК СКРОЛЛА И DRAG AND DROP ==================== */
+
+/* ==================== СКРОЛЛ ИНДИКАТОРЫ ==================== */
+
+/* Общие стили для индикаторов */
+.auto-scroll-indicator {
+    position: fixed;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0;
+    transition: all 0.2s ease-out;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    user-select: none;
+}
+
+/* Верхний индикатор */
+.auto-scroll-indicator.top {
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-100%);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 8px 16px;
+    border-radius: 20px;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+/* Нижний индикатор */
+.auto-scroll-indicator.bottom {
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100%);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 8px 16px;
+    border-radius: 20px;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+/* Левый индикатор */
+.auto-scroll-indicator.left {
+    left: 20px;
+    top: 50%;
+    transform: translateY(-50%) translateX(-100%);
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    padding: 8px 16px;
+    border-radius: 20px;
+    box-shadow: 0 4px 12px rgba(240, 147, 251, 0.4);
+}
+
+/* Правый индикатор */
+.auto-scroll-indicator.right {
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%) translateX(100%);
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    padding: 8px 16px;
+    border-radius: 20px;
+    box-shadow: 0 4px 12px rgba(240, 147, 251, 0.4);
+}
+
+/* Активные индикаторы */
+.auto-scroll-indicator.active {
+    opacity: 1 !important;
+    transform: translateX(-50%) scale(1.05) !important;
+}
+
+.auto-scroll-indicator.left.active,
+.auto-scroll-indicator.right.active {
+    transform: translateY(-50%) scale(1.05) !important;
+}
+
+/* Анимация пульсации для активных индикаторов */
+@keyframes indicatorPulse {
+    0%, 100% {
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        transform: translateX(-50%) scale(1);
+    }
+    50% {
+        box-shadow: 0 8px 24px rgba(102, 126, 234, 0.6);
+        transform: translateX(-50%) scale(1.1);
+    }
+}
+
+@keyframes indicatorPulseHorizontal {
+    0%, 100% {
+        box-shadow: 0 4px 12px rgba(240, 147, 251, 0.4);
+        transform: translateY(-50%) scale(1);
+    }
+    50% {
+        box-shadow: 0 8px 24px rgba(240, 147, 251, 0.6);
+        transform: translateY(-50%) scale(1.1);
+    }
+}
+
+.auto-scroll-indicator.top.active,
+.auto-scroll-indicator.bottom.active {
+    animation: indicatorPulse 1.5s ease-in-out infinite;
+}
+
+.auto-scroll-indicator.left.active,
+.auto-scroll-indicator.right.active {
+    animation: indicatorPulseHorizontal 1.5s ease-in-out infinite;
+}
+/* ==================== ЗОНЫ АКТИВАЦИИ СКРОЛЛА ==================== */
+
+/* Визуальная индикация зоны активации скролла (для отладки) */
+.scroll-edge-zone {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9998;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+/* Верхняя зона */
+.scroll-edge-zone.top {
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 100px;
+    background: linear-gradient(to bottom, rgba(102, 126, 234, 0.15), transparent);
+}
+
+/* Нижняя зона */
+.scroll-edge-zone.bottom {
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 100px;
+    background: linear-gradient(to top, rgba(102, 126, 234, 0.15), transparent);
+}
+
+/* Левая зона */
+.scroll-edge-zone.left {
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 100px;
+    background: linear-gradient(to right, rgba(240, 147, 251, 0.15), transparent);
+}
+
+/* Правая зона */
+.scroll-edge-zone.right {
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 100px;
+    background: linear-gradient(to left, rgba(240, 147, 251, 0.15), transparent);
+}
+
+/* Показываем зоны при перетаскивании */
+.dragging-active .scroll-edge-zone,
+.scroll-edge-zone.active {
+    opacity: 1;
+}
+
+/* ==================== КОНТЕЙНЕР РАСПИСАНИЯ ==================== */
+
+.schedule-wrap {
+    position: relative;
+    overflow-x: auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch; /* Плавный скролл на iOS */
+    touch-action: pan-x pan-y; /* Разрешаем нативный скролл */
+    scrollbar-width: thin; /* Firefox */
+    scrollbar-color: rgba(102, 126, 234, 0.3) transparent; /* Firefox */
+}
+
+/* Стили скроллбара для Webkit */
+.schedule-wrap::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.schedule-wrap::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.schedule-wrap::-webkit-scrollbar-thumb {
+    background: rgba(102, 126, 234, 0.3);
+    border-radius: 4px;
+    transition: background 0.3s ease;
+}
+
+.schedule-wrap::-webkit-scrollbar-thumb:hover {
+    background: rgba(102, 126, 234, 0.5);
+}
+
+/* Улучшенный скролл при перетаскивании */
+.schedule-wrap.dragging {
+    scroll-behavior: smooth;
+}
+
+/* 🔥 ИНДИКАЦИЯ РЕЖИМА FIREFOX DND */
+.schedule-wrap.firefox-dnd-mode::before {
+    content: "🦊 Firefox DnD Mode";
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background: rgba(255, 99, 71, 0.2);
+    color: #ff6347;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    z-index: 1000;
+    pointer-events: none;
+    display: none;
+}
+
+.schedule-wrap.firefox-dnd-mode.dragging::before {
+    display: block;
+}
+
+/* ==================== ВИЗУАЛЬНАЯ ОБРАТНАЯ СВЯЗЬ ПРИ УДЕРЖАНИИ ==================== */
+
+@keyframes touchFeedbackPulse {
+    0% { transform: scale(0.3); opacity: 1; }
+    80% { transform: scale(1); opacity: 1; }
+    100% { transform: scale(1.2); opacity: 0; }
+}
+
+/* Подсветка целевой ячейки для тач */
+.cell.droppable.touch-drop-target {
+    background-color: rgba(14, 165, 233, 0.15) !important;
+    border-color: rgba(14, 165, 233, 0.5) !important;
+    transition: all 0.2s ease;
+}
+
+/* Эффект при перетаскивании на мобильном */
+.event.touch-dragging {
+    opacity: 0.7 !important;
+    transform: scale(0.98);
+    transition: transform 0.1s, opacity 0.1s;
+}
+
+/* Стиль для клонированного элемента */
+.event.touch-dragging-clone {
+    position: fixed !important;
+    z-index: 9999 !important;
+    pointer-events: none !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3) !important;
+    opacity: 0.9 !important;
+    transition: transform 0.1s ease-out, opacity 0.1s;
+}
+
+/* Подсказка о перетаскивании */
+.touch-drag-hint {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 12px 24px;
+    border-radius: 24px;
+    font-size: 14px;
+    z-index: 10000;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+}
+
+.touch-drag-hint.show {
+    opacity: 1;
+}
+
+/* ==================== СОРТИРОВКА И ПЕРЕТАСКИВАНИЕ ==================== */
+
+@keyframes cancelZonePulse {
+    from { box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4); }
+    to { box-shadow: 0 4px 20px rgba(239, 68, 68, 0.6); }
+}
+
+/* SortableJS visual feedback */
+.drag-ghost {
+    opacity: 0.85 !important;
+    transform: rotate(2deg) !important;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3) !important;
+    z-index: 9999 !important;
+    cursor: grabbing !important;
+    pointer-events: none !important;
+    transition: transform 0.1s ease !important;
+}
+
+.dragging {
+    opacity: 0.9 !important;
+    transform: scale(1.05) !important;
+    z-index: 9999 !important;
+    cursor: grabbing !important;
+    box-shadow: 0 8px 24px rgba(59, 130, 246, 0.4) !important;
+    transition: all 0.15s ease !important;
+}
+
+.drag-chosen {
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.4) !important;
+    z-index: 100 !important;
+    position: relative !important;
+}
+
+/* 🔥 УЛУЧШЕНИЯ ДЛЯ FIREFOX */
+.drag-chosen::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: -1;
+}
+
+/* Улучшенные стили для пустых слотов */
+.empty-slot {
+    transition: all 0.2s ease;
+}
+
+.slot-inner:hover .empty-slot {
+    opacity: 0.7;
+}
+
+/* ==================== АНИМАЦИИ СКРОЛЛА ==================== */
+
+@keyframes scrollIndicatorSlideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+@keyframes scrollIndicatorSlideInHorizontal {
+    from {
+        opacity: 0;
+        transform: translateY(-50%) translateX(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(-50%) translateX(0);
+    }
+}
+
+.auto-scroll-indicator.top.active {
+    animation: scrollIndicatorSlideIn 0.3s ease-out forwards, indicatorPulse 1.5s ease-in-out 0.3s infinite;
+}
+
+.auto-scroll-indicator.bottom.active {
+    animation: scrollIndicatorSlideIn 0.3s ease-out forwards, indicatorPulse 1.5s ease-in-out 0.3s infinite;
+}
+
+.auto-scroll-indicator.left.active {
+    animation: scrollIndicatorSlideInHorizontal 0.3s ease-out forwards, indicatorPulseHorizontal 1.5s ease-in-out 0.3s infinite;
+}
+
+.auto-scroll-indicator.right.active {
+    animation: scrollIndicatorSlideInHorizontal 0.3s ease-out forwards, indicatorPulseHorizontal 1.5s ease-in-out 0.3s infinite;
+}
+
+/* ==================== АДАПТИВНЫЕ СТИЛИ ==================== */
+
+@media (max-width: 768px) {
+    /* Увеличиваем зоны активации для мобильных */
+    .scroll-edge-zone.top,
+    .scroll-edge-zone.bottom {
+        height: 120px !important;
+    }
+    
+    .scroll-edge-zone.left,
+    .scroll-edge-zone.right {
+        width: 120px !important;
+    }
+    
+    /* Увеличиваем индикаторы */
+    .auto-scroll-indicator {
+        font-size: 14px !important;
+        padding: 10px 20px !important;
+    }
+    
+    /* Улучшаем видимость на маленьких экранах */
+    .auto-scroll-indicator.top,
+    .auto-scroll-indicator.bottom {
+        top: 20px !important;
+        bottom: 20px !important;
+    }
+    
+    .auto-scroll-indicator.left,
+    .auto-scroll-indicator.right {
+        left: 20px !important;
+        right: 20px !important;
+    }
+}
+
+@media (max-width: 480px) {
+    /* Ещё больше для очень маленьких экранов */
+    .scroll-edge-zone.top,
+    .scroll-edge-zone.bottom {
+        height: 150px !important;
+    }
+    
+    .scroll-edge-zone.left,
+    .scroll-edge-zone.right {
+        width: 150px !important;
+    }
+    
+    .auto-scroll-indicator {
+        font-size: 16px !important;
+        padding: 12px 24px !important;
+    }
+}
+
+/* ==================== ТЕМНАЯ ТЕМА (опционально) ==================== */
+
+@media (prefers-color-scheme: dark) {
+    .auto-scroll-indicator.top,
+    .auto-scroll-indicator.bottom {
+        background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
+        box-shadow: 0 4px 12px rgba(74, 85, 104, 0.4);
+    }
+    
+    .auto-scroll-indicator.left,
+    .auto-scroll-indicator.right {
+        background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
+        box-shadow: 0 4px 12px rgba(74, 85, 104, 0.4);
+    }
+    
+    .schedule-wrap::-webkit-scrollbar-thumb {
+        background: rgba(100, 116, 139, 0.5);
+    }
+    
+    .schedule-wrap::-webkit-scrollbar-thumb:hover {
+        background: rgba(100, 116, 139, 0.7);
+    }
+    
+    .cell.droppable.touch-drop-target {
+        background-color: rgba(56, 178, 172, 0.1) !important;
+        border-color: rgba(56, 178, 172, 0.4) !important;
+    }
+    
+    /* Темная тема для индикатора Firefox */
+    .schedule-wrap.firefox-dnd-mode::before {
+        background: rgba(255, 99, 71, 0.15);
+        color: #ff7961;
+    }
+}
+
+/* ==================== КНОПКА СКРЫТИЯ ПУСТЫХ ЯЧЕЕК ==================== */
+
+#expHideEmpty {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--card);
+    color: var(--text);
+    font-family: var(--tableFont);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+#expHideEmpty:hover {
+    border-color: var(--accent);
+    background: var(--card-hover);
+}
+
+#expHideEmpty:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: var(--focus);
+}
+
+#expHideEmpty:active {
+    transform: scale(0.98);
+}
+
+/* ==================== ДОПОЛНИТЕЛЬНЫЕ УЛУЧШЕНИЯ ==================== */
+
+/* Улучшенная видимость при перетаскивании */
+.drag-ghost::before {
+    content: "↓";
+    position: absolute;
+    top: -15px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 18px;
+    color: rgba(255, 255, 255, 0.9);
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+    z-index: 10000;
+}
+
+/* Плавная анимация при удалении пустых слотов */
+.empty-slot {
+    animation: fadeOut 0.2s ease;
+}
+
+@keyframes fadeOut {
+    from { opacity: 1; transform: scale(1); }
+    to { opacity: 0; transform: scale(0.95); }
+}
+
+/* Улучшенный эффект при наведении на события */
+.event:hover:not(.dragging) {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    transition: all 0.2s ease;
+}
+
+/* Улучшенная видимость активной ячейки */
+.cell.droppable.active-drop-zone {
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.08), rgba(14, 165, 233, 0.04));
+    border: 2px solid rgba(14, 165, 233, 0.3);
+    animation: highlightPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes highlightPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(14, 165, 233, 0); }
+    50% { box-shadow: 0 0 0 8px rgba(14, 165, 233, 0.1); }
+}
+
+/* Улучшенный скроллбар для темной темы */
+@media (prefers-color-scheme: dark) {
+    .schedule-wrap::-webkit-scrollbar-thumb {
+        background: rgba(100, 116, 139, 0.5);
+    }
+    
+    .schedule-wrap::-webkit-scrollbar-thumb:hover {
+        background: rgba(100, 116, 139, 0.7);
+    }
+}
+
+/* 🔥 ДОПОЛНИТЕЛЬНЫЕ УЛУЧШЕНИЯ ДЛЯ FIREFOX */
+
+/* Отключаем выделение текста при перетаскивании в Firefox */
+.schedule-wrap.firefox-dnd-mode * {
+    -moz-user-select: none !important;
+}
+
+/* Улучшаем видимость скроллбара в режиме перетаскивания */
+.schedule-wrap.dragging::-webkit-scrollbar-thumb {
+    background: rgba(102, 126, 234, 0.6);
+}
+
+.schedule-wrap.dragging {
+    scrollbar-color: rgba(102, 126, 234, 0.6) transparent;
+}
+
+/* Улучшаем зоны активации скролла для Firefox */
+.firefox-dnd-mode .scroll-edge-zone {
+    background: linear-gradient(to bottom, rgba(255, 99, 71, 0.1), transparent) !important;
+}
+
+.firefox-dnd-mode .scroll-edge-zone.bottom {
+    background: linear-gradient(to top, rgba(255, 99, 71, 0.1), transparent) !important;
+}
+
+.firefox-dnd-mode .scroll-edge-zone.left {
+    background: linear-gradient(to right, rgba(255, 99, 71, 0.1), transparent) !important;
+}
+
+.firefox-dnd-mode .scroll-edge-zone.right {
+    background: linear-gradient(to left, rgba(255, 99, 71, 0.1), transparent) !important;
+}
+
+/* Улучшаем индикаторы скролла для режима Firefox */
+.firefox-dnd-mode .auto-scroll-indicator.top,
+.firefox-dnd-mode .auto-scroll-indicator.bottom {
+    background: linear-gradient(135deg, #ff6347 0%, #ff4500 100%);
+}
+
+.firefox-dnd-mode .auto-scroll-indicator.left,
+.firefox-dnd-mode .auto-scroll-indicator.right {
+    background: linear-gradient(135deg, #ff6347 0%, #ff4500 100%);
+}

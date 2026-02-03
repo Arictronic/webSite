@@ -14,8 +14,8 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <meta name="theme-color" content="#0ea5e9" />
     <script src="./html-to-image.js"></script>
-    <script src="./html2canvas.min.js"></script>
     <script type="module" src="app.js"></script>
+    <script src="./Sortable.min.js"></script>
   </head>
 
   <body>
@@ -39,38 +39,38 @@
 
         <div class="toolbar">
           <button id="btnSettings" aria-label="Открыть настройки">
-            <span class="mobile-only">⚙</span>
-            <span class="desktop-only">Настройки</span>
+            <span class="mobile-only">Настройки ⚙</span>
+            <span class="desktop-only">Настройки ⚙</span>
           </button>
           <button
             id="btnUndo"
             disabled
             aria-label="Отменить последнее действие"
           >
-            <span class="mobile-only">↶</span>
-            <span class="desktop-only">Undo</span>
+            <span class="mobile-only">↶ Назад</span>
+            <span class="desktop-only">↶ Назад</span>
           </button>
           <button
             id="btnRedo"
             disabled
             aria-label="Повторить отмененное действие"
           >
-            <span class="mobile-only">↷</span>
-            <span class="desktop-only">Redo</span>
+            <span class="mobile-only">Вперед ↷</span>
+            <span class="desktop-only">Вперед ↷</span>
           </button>
           <button
             id="btnExportPng"
             aria-label="Экспортировать расписание в PNG для соцсетей"
           >
-            <span class="mobile-only">🖼️➡️📱</span>
-            <span class="desktop-only">Получить изображение</span>
+            <span class="mobile-only">Создать 🌅</span>
+            <span class="desktop-only">Получить изображение 🌅</span>
           </button>
           <button id="btnExportJson" aria-label="Экспортировать данные в JSON">
-            <span class="mobile-only">📁⬅️🌐📋</span>
+            <span class="mobile-only">Сохранить данные</span>
             <span class="desktop-only">Скачать данные</span>
           </button>
           <button id="btnImportJson" aria-label="Импортировать данные из JSON">
-            <span class="mobile-only">📁➡️🌐📋</span>
+            <span class="mobile-only">Загрузить данные</span>
             <span class="desktop-only">Загрузить данные</span>
           </button>
           <button
@@ -78,8 +78,8 @@
             id="btnClearAll"
             aria-label="Очистить все занятия"
           >
-            <span class="mobile-only">📋➡️🗑️</span>
-            <span class="desktop-only">Очистить всё</span>
+            <span class="mobile-only">Очистьть таблицу</span>
+            <span class="desktop-only">Очистить таблицу</span>
           </button>
           <input type="file" id="fileInput" accept="application/json" hidden />
         </div>
@@ -1242,6 +1242,7 @@
               </button>
             </div>
           </div>
+
           <!-- Logo -->
           <div
             class="tab-panel"
@@ -1250,6 +1251,52 @@
             aria-labelledby="tabLogo"
             hidden
           >
+            <!-- Блок управления пресетами (добавить в начало вкладки) -->
+            <div class="field-group">
+              <h3>Пресеты логотипа</h3>
+
+              <div class="grid2">
+                <div class="field">
+                  <label for="logoPresetSelect">Выберите пресет</label>
+                  <select id="logoPresetSelect">
+                    <option value="preset1">Сейчас</option>
+                    <option value="preset2">Середина</option>
+                    <option value="preset3">Диаганаль</option>
+                    <option value="preset4">Диаганаль 2</option>
+                    <option value="preset5">Сетка</option>
+                    <option value="preset6">Сетка 2</option>
+                  </select>
+                </div>
+
+                <div class="field">
+                  <label>&nbsp;</label>
+                  <div class="field-actions">
+                    <button class="ghost" id="btnLoadLogoPreset" type="button">
+                      Загрузить
+                    </button>
+                    <button class="ghost" id="btnSaveLogoPreset" type="button">
+                      Сохранить
+                    </button>
+                    <button
+                      class="ghost danger"
+                      id="btnDeleteLogoPreset"
+                      type="button"
+                    >
+                      Удалить
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="note" id="logoPresetNote" role="note">
+                Пресеты сохраняют все настройки логотипа: включение, вариант,
+                прозрачность, цвет, макет, размеры, отступы, поворот и смещение.
+              </div>
+            </div>
+
+            <div class="hr"></div>
+            <!-- Остальные настройки логотипа -->
+
             <div class="grid2">
               <div class="field">
                 <label>
@@ -1330,7 +1377,8 @@
                 display: none;
                 margin-top: 15px;
                 padding: 15px;
-                background: #f8fafc;
+                background: var(--card);
+                border: 1px solid var(--border);
                 border-radius: 8px;
               "
             >
@@ -1344,7 +1392,10 @@
                   />
                   <div id="logoPreview" class="file-preview"></div>
                 </div>
-                <div class="note" style="font-size: 11px; margin-top: 5px">
+                <div
+                  class="note"
+                  style="font-size: 11px; margin-top: 5px; color: var(--muted)"
+                >
                   Поддерживаются: SVG, PNG, JPG, GIF, WebP. Рекомендуется SVG
                   для лучшего качества.
                 </div>
@@ -1360,27 +1411,25 @@
             <div class="hr"></div>
 
             <div class="grid2">
-
               <div class="field">
                 <label for="logoTileSize">Размер логотипа (%)</label>
-                  <div class="range-wrap">
-                    <input
-                      id="logoTileSize"
-                      type="range"
-                      min="0"
-                      max="1000"
-                      value="30"
-                    />
-                    <input
-                      id="logoTileSizeNum"
-                      type="number"
-                      value="30"
-                      min="0"
-                      max="1000"
-                      style="margin-left: 10px; width: 80px"
-                    />
-                  </div>
-              
+                <div class="range-wrap">
+                  <input
+                    id="logoTileSize"
+                    type="range"
+                    min="0"
+                    max="1000"
+                    value="30"
+                  />
+                  <input
+                    id="logoTileSizeNum"
+                    type="number"
+                    value="30"
+                    min="0"
+                    max="1000"
+                    style="margin-left: 10px; width: 80px"
+                  />
+                </div>
               </div>
 
               <div class="field">
@@ -1515,23 +1564,11 @@
       </div>
     </div>
     <!-- Export modal -->
-    <div
-      class="backdrop"
-      id="exportBackdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="exportTitle"
-      hidden
-    >
+    <div class="backdrop" id="exportBackdrop" role="dialog" aria-modal="true" aria-labelledby="exportTitle" hidden>
       <div class="modal modal-wide">
         <header class="modal-head">
           <h2 id="exportTitle">Экспорт</h2>
-          <button
-            class="ghost"
-            id="btnCloseExport"
-            title="Закрыть"
-            aria-label="Закрыть"
-          >
+          <button class="ghost" id="btnCloseExport" title="Закрыть" aria-label="Закрыть">
             ×
           </button>
         </header>
@@ -1577,6 +1614,16 @@
             </div>
           </div>
 
+          <!-- НОВЫЙ БЛОК: Убрать пустые слоты -->
+          <div class="field">
+            <label for="expHideEmpty">Убрать пустые слоты</label>
+            <select id="expHideEmpty">
+              <option value="no">Нет</option>
+              <option value="yes">Да</option>
+            </select>
+          </div>
+          <!-- КОНЕЦ НОВОГО БЛОКА -->
+
           <div class="note" id="expHint" role="note">
             Экспортируется только расписание (без панели управления).
             Предпросмотр может занять 1–2 секунды.
@@ -1586,7 +1633,7 @@
 
           <div class="export-preview">
             <div class="export-preview-frame">
-              <img id="expPreviewImg" alt="Предпросмотр экспорта" />
+              <img id="expPreviewImg" />
             </div>
           </div>
         </div>
@@ -1608,6 +1655,7 @@
         </footer>
       </div>
     </div>
+
 
     <div
       class="toasts"
