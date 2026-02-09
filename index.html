@@ -7,7 +7,7 @@
       name="description"
       content="Офлайн-расписание для фитнес-студий с автосохранением и резервным копированием"
     />
-    <title>Расписание студии</title>
+    <title>Расписание офлайн студии</title>
     <!-- Google Fonts с поддержкой кириллицы -->
     <link rel="stylesheet" href="./fonts/fonts.css" />
     <link rel="stylesheet" href="./styles.css" />
@@ -25,14 +25,10 @@
           <div class="logo" aria-hidden="true">SL</div>
           <div class="title">
             <h1>
-              Расписание студии
-              <span class="sr-only">
-                - Офлайн приложение с автосохранением</span
-              >
+              Расписание офлайн студии
             </h1>
             <div class="sub">
-              3 режима отображаемая · кастомная тема/шрифты · мобильная
-              адаптация
+              Таймлайн, выгрузка, темы, шрифты
             </div>
           </div>
         </div>
@@ -248,6 +244,14 @@
                 style="display: none"
                 aria-live="polite"
               ></div>
+              <div class="mt10" style="display: flex; gap: 8px">
+                <button type="button" class="primary" id="btnSaveNewDir">
+                  ✓ Сохранить направление
+                </button>
+                <button type="button" class="ghost" id="btnClearNewDir">
+                  Очистить
+                </button>
+              </div>
             </div>
 
             <!-- Режим редактирования (добавим позже) -->
@@ -507,6 +511,26 @@
                   Правило: занятие должно полностью помещаться в одну клетку; в
                   одной клетке максимум 2 занятия.
                 </div>
+              </div>
+            </div>
+
+            <div class="grid2">
+              <div class="field">
+                <label for="setWeekOffset">Неделя</label>
+                <select id="setWeekOffset">
+                  <option value="0">Текущая неделя</option>
+                  <option value="1">Следующая неделя</option>
+                  <option value="2">Через 2 недели</option>
+                  <option value="3">Через 3 недели</option>
+                  <option value="4">Через 4 недели</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="setShowDate">Показывать дату</label>
+                <select id="setShowDate">
+                  <option value="yes">Да</option>
+                  <option value="no">Нет</option>
+                </select>
               </div>
             </div>
           </div>
@@ -1671,9 +1695,9 @@
     <script>
       // Добавляем атрибут hidden для модалок при загрузке
       document.addEventListener("DOMContentLoaded", function () {
-        document.getElementById("eventBackdrop").hidden = false;
-        document.getElementById("settingsBackdrop").hidden = false;
-        document.getElementById("exportBackdrop").hidden = false;
+        document.getElementById("eventBackdrop")?.setAttribute('hidden', 'false');
+        document.getElementById("settingsBackdrop")?.setAttribute('hidden', 'false');
+        document.getElementById("exportBackdrop")?.setAttribute('hidden', 'false');
 
         // Добавляем CSS для мобильных/десктопных кнопок
         const style = document.createElement("style");

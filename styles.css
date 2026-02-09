@@ -406,7 +406,7 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
 
   grid-template-columns: var(--timeCol) repeat(7, minmax(var(--dayMinW), var(--dayW)));
   border-left: 1px solid var(--border);
-  border-top: 1px solid var(--border);
+  border-top: 0;
 }
 
 /* Measuring mode — снять clamp + дать max-content ширину */
@@ -453,48 +453,89 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
   transition: background-color 0.2s ease;
 }
 
+.cell.time,
+.cell.head,
+.cell.head.time {
+  border-bottom: 0 !important;
+}
+
+.cell.head {
+  border-right: 0 !important;
+  border-top: 0 !important;
+}
+
 .head {
-  min-height: 42px;
+  min-height: var(--dayHeadHeight, var(--timeCol, 46px));
+  height: var(--dayHeadHeight, var(--timeCol, 46px));
   background: var(--gridHead);
+  color: var(--text);
 
   position: sticky;
   top: 0;
   z-index: 5;
 
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: flex-end;
+  justify-content: flex-start;
+  text-align: left;
   gap: 8px;
 
-  font-size: 12px;
-  font-weight: 900;
+  font-size: var(--evTitleSize1);
+  font-weight: var(--evTitleW);
+  font-family: var(--evTitleFont);
+}
+
+.cell.head {
+  padding: 0 4px 10px 4px;
 }
 
 .head .day-actions {
   opacity: 0.6;
   cursor: pointer;
   font-weight: 900;
+  margin-left: auto;
 }
 
 .head .day-actions:hover { opacity: 1; }
 
+.head .day-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .time {
   background: var(--gridHead);
-  text-align: right;
-  padding-right: 10px;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
 
-  font-size: 12px;
-  color: var(--muted);
-  font-weight: 900;
+  text-align: center;
+  padding-bottom: 10px;
+
+  font-size: var(--evTitleSize1);
+  color: #000;
+  font-weight: var(--evTitleW);
+  font-family: var(--evTitleFont);
 
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: flex-end;
 }
 
 .time.now {
-  background: var(--nowRowRGBA);
-  color: var(--text);
+  background: var(--gridHead);
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.cell.head.time {
+  writing-mode: horizontal-tb;
+  transform: none;
+  align-items: flex-end;
+  justify-content: flex-start;
 }
 
 .col-today { background: var(--todayColRGBA); }
@@ -574,7 +615,7 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
   flex-direction: column;
   gap: 3px;
 
-  color: var(--ev-text, #fff);
+  color: var(--ev-text, var(--text));
   line-height: var(--evLineHeight);
 
   border-radius: var(--evCardRadius);
@@ -586,8 +627,8 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
   content: "";
   position: absolute;
   inset: 0;
-  background: var(--ev-bg, #64748b);
-  opacity: var(--eventAlpha);
+  background: var(--ev-bg);
+  opacity: var(--eventAlpha, 1);
   transition: opacity 0.3s ease;
 }
 
@@ -916,13 +957,9 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
 .schedule.compact-mode .cell.time { display: none; }
 
 /* Минимальные отступы в колонке времени (timeline/list) */
-.schedule:not(.compact-mode) .cell.time{
-  padding: 0 4px !important;   /* было по сути 6px + 10px справа */
-}
-
-/* Убираем лишний правый отступ, который задаёт .time */
-.schedule:not(.compact-mode) .time{
-  padding-right: 0 !important;
+.schedule:not(.compact-mode) .cell.time:not(.head){
+  padding: 0 0 10px 10px !important;
+  grid-column: 1;
 }
 
 
@@ -935,7 +972,7 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: var(--cellPad);
+  padding: 0;
   height: auto;
   min-height: 0; 
 }
@@ -2040,25 +2077,31 @@ html[data-scheme="dark"] .event:hover {
 }
 
 /* Режим экспорта */
-.export-mode #logoLayer {
-  display: block !important;
-  z-index: 0 !important;
-  position: absolute !important;
-  top: 0 !important;
-  left: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
+.export-mode #logoLayer,
+.export-mode #logoMark {
   pointer-events: none !important;
 }
 
-.export-mode #logoMark {
-  width: 100% !important;
-  height: 100% !important;
-  position: absolute !important;
-  top: 0 !important;
-  left: 0 !important;
-  pointer-events: none !important;
-  opacity: var(--logo-opacity, 0.12) !important;
+.export-preview-frame {
+  height: 60vh;
+  max-height: 60vh;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-x pan-y;
+  scrollbar-gutter: stable both-edges;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.export-preview-frame img,
+.export-preview-frame object {
+  display: block;
+  max-width: none;
+  max-height: none;
+  pointer-events: none;
+  user-select: none;
 }
 
 /* Контейнер для предпросмотра логотипа */
@@ -2143,24 +2186,10 @@ html[data-scheme="dark"] .event:hover {
 
 /* CSS переменные для логотипа */
 :root {
-  --time-col-width: 46px;  /* Ширина колонки времени */
-  --day-head-height: 42px; /* Высота заголовков дней */
+  --time-col-width: 36px;  /* Ширина колонки времени */
+  --day-head-height: 26px; /* Высота заголовков дней */
 }
 
-.export-mode #logoLayer {
-  display: block !important;
-  z-index: 0 !important;
-  position: absolute !important;
-  top: 0 !important;
-  left: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
-  pointer-events: none !important;
-}
-
-.export-mode #logoMark {
-  opacity: var(--logo-opacity, 0.12) !important;
-}
 
 /* ===== КЛАССЫ ДЛЯ ИЗМЕРЕНИЯ ГЕОМЕТРИИ ===== */
 
@@ -2200,7 +2229,7 @@ html[data-scheme="dark"] .event:hover {
 .schedule.measuring-h .cell.droppable,
 .schedule.measuring-h .slot {
   height: auto !important;
-  min-height: auto !important;
+  min-height: 0 !important; 
 }
 
 .schedule.measuring-h .event {
@@ -2996,4 +3025,147 @@ html[data-scheme="dark"] .event:hover {
 .firefox-dnd-mode .auto-scroll-indicator.left,
 .firefox-dnd-mode .auto-scroll-indicator.right {
     background: linear-gradient(135deg, #ff6347 0%, #ff4500 100%);
+}
+
+.drop-target-touch {
+    background-color: rgba(14, 165, 233, 0.15) !important;
+    border-color: rgba(14, 165, 233, 0.5) !important;
+    transition: all 0.2s ease;
+}
+
+.drop-target-full {
+    border: 2px solid #ef4444 !important;
+    background-color: rgba(239, 68, 68, 0.1) !important;
+    animation: shake 0.5s ease-in-out;
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-2px); }
+    75% { transform: translateX(2px); }
+}
+
+.touch-drag-clone {
+    position: fixed !important;
+    z-index: 10000 !important;
+    pointer-events: none !important;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3) !important;
+    opacity: 0.9 !important;
+    transform: translate(-50%, -50%) scale(1.05) !important;
+    transition: transform 0.1s ease !important;
+}
+
+.dragging-touch {
+    opacity: 0.3 !important;
+}
+
+.drop-target-touch {
+    background-color: rgba(59, 130, 246, 0.1) !important;
+    box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.5) !important;
+}
+
+.touch-cancel-zone {
+    position: fixed !important;
+    z-index: 10001 !important;
+    pointer-events: auto !important;
+}
+
+@keyframes touchDragProgress {
+    from {
+        background: conic-gradient(from 0deg, rgba(59, 130, 246, 0.8) 0%, rgba(59, 130, 246, 0.1) 0%);
+    }
+    to {
+        background: conic-gradient(from 0deg, rgba(59, 130, 246, 0.8) 100%, rgba(59, 130, 246, 0.1) 0%);
+    }
+}
+
+/* Добавьте в ваш CSS файл */
+
+/* Подсветка строки при предпросмотре */
+.cell.droppable.preview-highlight {
+    background-color: rgba(59, 130, 246, 0.05) !important;
+    transition: background-color 0.2s ease;
+}
+
+/* Анимация для плавного изменения высоты */
+.cell.droppable, .slot-inner, .event {
+    transition: height 0.3s ease, min-height 0.3s ease;
+}
+
+/* Для двойных ячеек в режиме предпросмотра */
+.cell.droppable[data-double="1"] .event.double {
+    transition: height 0.2s ease, min-height 0.2s ease;
+}
+
+/* Улучшенный drag clone */
+.touch-drag-clone {
+    transition: transform 0.1s ease, opacity 0.2s ease;
+    will-change: transform, left, top;
+}
+
+
+
+
+
+
+
+
+
+#schedule-container {
+  overflow: auto;
+  -webkit-overflow-scrolling: touch; /* Для iOS */
+}
+
+/* Стили для двойных событий */
+.event.event-double {
+    box-shadow: none !important; /* Убираем тень между двойными событиями */
+    position: relative;
+}
+
+.event.event-double-top {
+    margin-bottom: 1px; /* 2px отступ между двойными событиями */
+    border-bottom: none;
+}
+
+.event.event-double-bottom {
+    margin-top: 1px; /* 2px отступ между двойными событиями */
+    border-top: none;
+}
+
+/* Убираем скругления на стыке двойных событий */
+.event.event-double-top:not(.rounded-b) {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.event.event-double-bottom:not(.rounded-t) {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
+
+/* Для компактного вида - минимальная высота 30px */
+.event.compact {
+    min-height: 30px;
+    margin: 0;
+    border-radius: 4px;
+}
+
+/* ==== Font + clamp sync (overrides) ==== */
+button,
+input,
+select,
+textarea {
+  font-family: var(--tableFont);
+}
+
+.event .t,
+.event .m,
+.event.double .t,
+.event.double .m {
+  line-height: var(--evLineHeight) !important;
+}
+
+.event .t,
+.event.double .t {
+  max-height: none !important;
 }

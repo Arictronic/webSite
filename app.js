@@ -6,7 +6,7 @@ import {
 
 // ===================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И КОНСТАНТЫ =====================
 const $ = (id) => document.getElementById(id);
-const DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+const DAYS = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"];
 const LOGO_URLS = {
   1: "./src/Logo.svg",
   2: "./src/Logo2.svg",
@@ -219,6 +219,8 @@ function DEFAULT_STATE() {
         snapMinutes: 5,
         maxPerCell: 2,
         defaultDuration: 60,
+        showDate: true,
+        weekOffset: 0,
       },
       display: {
         cellView: "timeline",
@@ -251,7 +253,7 @@ function DEFAULT_STATE() {
         cardRadius: 12,
       },
       theme: {
-        mode: "auto",
+        mode: "light",
         customTokens: deepCopy(THEME_PRESETS[0].tokens),
         alpha: { today: 60, now: 65, event: 100, shadow: 10 },
       },
@@ -289,7 +291,7 @@ function DEFAULT_STATE() {
           tileOffsetX: LOGO_CONSTANTS.DEFAULT_OFFSET,
           tileOffsetY: LOGO_CONSTANTS.DEFAULT_OFFSET,
           uploadedFileData: null,
-        }
+        },
       },
       preset2: {
         name: "Середина",
@@ -307,7 +309,7 @@ function DEFAULT_STATE() {
           tileOffsetX: LOGO_CONSTANTS.DEFAULT_OFFSET,
           tileOffsetY: LOGO_CONSTANTS.DEFAULT_OFFSET,
           uploadedFileData: null,
-        }
+        },
       },
       preset3: {
         name: "Диагональ",
@@ -325,7 +327,7 @@ function DEFAULT_STATE() {
           tileOffsetX: LOGO_CONSTANTS.DEFAULT_OFFSET,
           tileOffsetY: LOGO_CONSTANTS.DEFAULT_OFFSET,
           uploadedFileData: null,
-        }
+        },
       },
       preset4: {
         name: "Диагональ 2",
@@ -343,7 +345,7 @@ function DEFAULT_STATE() {
           tileOffsetX: LOGO_CONSTANTS.DEFAULT_OFFSET,
           tileOffsetY: LOGO_CONSTANTS.DEFAULT_OFFSET,
           uploadedFileData: null,
-        }
+        },
       },
       preset5: {
         name: "Сетка",
@@ -361,7 +363,7 @@ function DEFAULT_STATE() {
           tileOffsetX: LOGO_CONSTANTS.DEFAULT_OFFSET,
           tileOffsetY: LOGO_CONSTANTS.DEFAULT_OFFSET,
           uploadedFileData: null,
-        }
+        },
       },
       preset6: {
         name: "Сетка 2",
@@ -379,8 +381,8 @@ function DEFAULT_STATE() {
           tileOffsetX: LOGO_CONSTANTS.DEFAULT_OFFSET,
           tileOffsetY: LOGO_CONSTANTS.DEFAULT_OFFSET,
           uploadedFileData: null,
-        }
-      }
+        },
+      },
     },
     directions: [
       { id: "yoga", name: "Йога", color: "#ef4444" },
@@ -444,26 +446,10 @@ let filters = {
 };
 
 // ===================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ДЛЯ МОБИЛЬНОГО DND =====================
-let touchDragTimeout = null;        // Таймер для задержки 2 сек
-let touchDragElement = null;        // Элемент, который перетаскиваем
-let touchDragStartY = 0;            // Начальная позиция тача
-let touchDragStartX = 0;
-let touchDragActive = false;        // Флаг активного перетаскивания
-let touchDragInitialPosition = null; // Исходная позиция элемента
-let touchDragPlaceholder = null;    // Плейсхолдер для визуализации
-let touchDragTargetCell = null;     // Ячейка, над которой находимся
-let touchDragEventData = null;      // Данные события для перемещения
-let touchDragStartTime = 0;         // Время начала удержания
-let touchDragFeedback = null;       // Визуальная обратная связь (круг прогресса)
-let touchLastX = 0;                 // Последняя позиция X
-let touchLastY = 0;
-let autoScrollInterval = null;      // Интервал для автоматической прокрутки
-let autoScrollDirection = 0;        // Направление прокрутки: -1 (вверх), 0 (нет), 1 (вниз)
-let autoScrollSpeed = 8;            // Скорость прокрутки в пикселях
-let edgeThreshold = 80;             // Порог расстояния от края экрана для активации прокрутки
-let scheduleContainer = null;  
-  let autoScrollDirectionX = 0;       //нет), 1 (вправо)
-let autoScrollIntervalX = null;
+let lastValidDropCoords = { x: 0, y: 0 };
+let lastValidDropIndices = { dayIndex: -1, slotIndex: -1 };
+
+let isUpdating = false;
 
 let saveIndicatorStyleAdded = false;
 let filterCache = new Map();
@@ -487,13 +473,11 @@ let geometryRafId = null;
 let geometryCache = new WeakMap();
 let searchDebounceTimer = null;
 let lastSearchValue = "";
-let lastFilterHash = "";
+let pendingRowHeightSync = false;
+let rowHeightSyncRaf = 0;
+let lastHeightSyncKey = "";
 
-let sortableInstances = [];
-let sortableInitTimeout = null;
-let lastValidDropCell = null; 
-let lastValidDropCoords = { x: 0, y: 0 }; 
-let lastValidDropIndices = { dayIndex: -1, slotIndex: -1 }; 
+let lastFilterHash = "";
 
 const SEARCH_DEBOUNCE_MS = 300;
 const METRICS_CACHE_TIME = 1000;
@@ -505,7 +489,9 @@ const MAX_NAME_CHARS = 150;
 const MAX_NAME_LINE_LEN = 50;
 const HISTORY_LIMIT = 60;
 
-// ================== ID HTML элементы ============================
+// ===================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И КОНСТАНТЫ =====================
+
+// ============================ ID HTML элементы ============================
 const exportBackdrop = $("exportBackdrop");
 const expPreset = $("expPreset");
 const expFormat = $("expFormat");
@@ -537,12 +523,16 @@ const newDirName = $("newDirName");
 const newDirColor = $("newDirColor");
 const swatches = $("swatches");
 const newDirPreview = $("newDirPreview");
+const btnSaveNewDir = $("btnSaveNewDir");
+const btnClearNewDir = $("btnClearNewDir");
 const btnDelete = $("btnDelete");
 const btnDuplicate = $("btnDuplicate");
 const logoVariant = $("logoVariant");
 const setStart = $("setStart");
 const setEnd = $("setEnd");
 const setDefaultDur = $("setDefaultDur");
+const setWeekOffset = $("setWeekOffset");
+const setShowDate = $("setShowDate");
 const dispCellView = $("dispCellView");
 const dispCardMode = $("dispCardMode");
 const dispShowNotes = $("dispShowNotes");
@@ -621,414 +611,7 @@ const expHideEmpty = $("expHideEmpty");
 const btnLoadLogoPreset = $("btnLoadLogoPreset");
 const btnSaveLogoPreset = $("btnSaveLogoPreset");
 const btnDeleteLogoPreset = $("btnDeleteLogoPreset");
-
-// ==================== DRAG ====================
- // renderSchedule
-
-function initSortableJS() {
-  // Очищаем старые инстансы
-  if (sortableInstances && sortableInstances.length) {
-    sortableInstances.forEach(instance => {
-      if (instance && typeof instance.destroy === 'function') {
-        instance.destroy();
-      }
-    });
-  }
-  sortableInstances = [];
-  
-  // 🔴 КРИТИЧЕСКИ ВАЖНО: определяем контейнер скролла ДО инициализации
-  const scrollContainer = document.querySelector('.schedule-wrap');
-  if (!scrollContainer) {
-    console.error('[SortableJS] Контейнер .schedule-wrap не найден для автоскролла!');
-    return;
-  }
-  
-  // 🔴 Определяем браузер (более надёжный способ)
-  const isFirefox = typeof InstallTrigger !== 'undefined' || 
-                    navigator.userAgent.toLowerCase().includes('firefox');
-  
-  // 🔴 Настройки скролла в зависимости от браузера
-  const scrollConfig = {
-    scroll: scrollContainer, // ЯВНО указываем контейнер вместо `true`
-    scrollSensitivity: isFirefox ? 60 : 40, // Увеличиваем зону активации для Firefox
-    scrollSpeed: isFirefox ? 12 : 8,        // Повышаем скорость для Firefox
-    bubbleScroll: true
-  };
-  
-  console.log(`[SortableJS] Инициализация: Firefox=${isFirefox}, scrollContainer=${!!scrollContainer}`);
-  
-  const cells = document.querySelectorAll('.cell.droppable');
-  
-  cells.forEach(cell => {
-    const slotInner = cell.querySelector('.slot-inner');
-    if (!slotInner) return;
-    
-    const sortable = new Sortable(slotInner, {
-      group: {
-        name: 'schedule-events',
-        put: true,
-        pull: true
-      },
-      
-      // 🔥 АВТО-СКРОЛЛ (ИСПРАВЛЕНО ДЛЯ FIREFOX)
-      ...scrollConfig,
-      
-      // 🔥 КРИТИЧЕСКИ ВАЖНО ДЛЯ FIREFOX:
-      forceFallback: isFirefox, // Отключаем нативный DnD Firefox
-      fallbackTolerance: 5,     // Минимальное смещение для активации
-      
-      // Визуальные эффекты
-      animation: 150,
-      ghostClass: 'drag-ghost',
-      dragClass: 'dragging',
-      chosenClass: 'drag-chosen',
-      swapThreshold: 0.65,
-      invertSwap: true,
-      
-      // Фильтрация
-      filter: '.empty-slot',
-      preventOnFilter: false,
-      
-      // Тач-поддержка
-      touchStartThreshold: 5,
-      delay: 0,
-      delayOnTouchOnly: false,
-      
-      // Обработчики событий
-      onStart: function(evt) {
-        console.log('[DnD] Started:', evt.item.dataset.eid);
-        
-        // 🔥 Убираем артефакты Firefox (outline при DnD)
-        if (isFirefox && evt.item) {
-          evt.item.style.outline = 'none';
-          evt.item.style.MozUserSelect = 'none'; // Отключаем выделение
-        }
-        
-        // Скрываем пустые слоты
-        document.querySelectorAll('.empty-slot').forEach(el => {
-          el.style.display = 'none';
-        });
-      },
-      
-      onEnd: function(evt) {
-        console.log('[DnD] Ended');
-        
-        // 🔥 Восстанавливаем стили после DnD в Firefox
-        if (isFirefox && evt.item) {
-          evt.item.style.outline = '';
-          evt.item.style.MozUserSelect = '';
-        }
-        
-        // Восстанавливаем пустые слоты
-        document.querySelectorAll('.empty-slot').forEach(el => {
-          el.style.display = '';
-        });
-        
-        // Обновляем позицию события
-        updateEventPosition(evt);
-      },
-      
-      onMove: function(evt) {
-        return true;
-      },
-      
-      setData: function(dataTransfer, dragEl) {
-        dataTransfer.setData('text/plain', dragEl.dataset.eid);
-      }
-    });
-    
-    sortableInstances.push(sortable);
-  });
-  
-  // 🔥 Дополнительная защита для Firefox
-  if (isFirefox && scrollContainer) {
-    // Предотвращаем проблемы с нативным dragover
-    scrollContainer.addEventListener('dragover', (e) => {
-      e.preventDefault();
-    }, { passive: false });
-    
-    // Добавляем класс для визуальной индикации
-    scrollContainer.classList.add('firefox-dnd-mode');
-  }
-  
-  console.log(`[SortableJS] Initialized: ${sortableInstances.length} containers (Firefox mode: ${isFirefox})`);
-}
-
-function updateEventPosition(evt) {
-  const eventId = evt.item.dataset.eid;
-  if (!eventId) return;
-  
-  const newContainer = evt.to;
-  
-  // Находим ячейку по контейнеру
-  const newCell = newContainer.closest('.cell.droppable');
-  if (!newCell) {
-    console.error('newCell не найден');
-    return;
-  }
-  
-  // ✅ ИСПРАВЛЕНИЕ: Находим таблицу расписания и все ячейки
-  const schedule = document.querySelector('.schedule');
-  if (!schedule) {
-    console.error('schedule не найден');
-    return;
-  }
-  
-  const allCells = Array.from(schedule.querySelectorAll('.cell.droppable'));
-  const cellIndex = allCells.indexOf(newCell);
-  
-  if (cellIndex === -1) {
-    console.error('Ячейка не найдена в списке');
-    return;
-  }
-  
-  let newDayIndex;
-  const view = state.settings.display.cellView;
-  
-  if (view === 'compact') {
-    // В компактном режиме НЕТ колонки времени - первый элемент это Пн
-    newDayIndex = cellIndex;
-  } else {
-    // В timeline/list есть колонка времени - вычитаем 1
-    // ✅ ИСПРАВЛЕНИЕ: Учитываем количество строк
-    const { step } = getBounds();
-    const slots = buildSlots();
-    const rowsCount = slots.length;
-    
-    // Определяем номер строки
-    const rowIndex = Math.floor(cellIndex / 7);
-    // Определяем номер дня в строке (0-6)
-    const dayInRow = cellIndex % 7;
-    
-    newDayIndex = dayInRow;
-  }
-  
-  if (newDayIndex < 0 || newDayIndex > 6) {
-    console.error('Неверный день:', newDayIndex);
-    return;
-  }
-  
-  // Получаем время слота
-  let newSlotStart;
-  
-  if (view === 'compact') {
-    // В компактном режиме используем текущее время события
-    const existingEvent = state.events.find(e => e.id === eventId);
-    if (existingEvent) {
-      newSlotStart = existingEvent.startMin;
-    } else {
-      newSlotStart = parseHHMM(state.settings.schedule.start) || 540;
-    }
-  } else {
-    // В timeline/list режиме берем из данных ячейки
-    const slotIndex = parseInt(newCell.dataset.slotIndex);
-    const slots = buildSlots();
-    newSlotStart = slots[slotIndex] || parseHHMM(state.settings.schedule.start) || 540;
-  }
-  
-  // ✅ ИСПРАВЛЕНИЕ: Сохраняем состояние после перемещения
-  const oldEvent = state.events.find(e => e.id === eventId);
-  if (!oldEvent) {
-    console.error('Событие не найдено в состоянии');
-    return;
-  }
-  
-  // Проверяем, изменилось ли положение
-  if (oldEvent.dayIndex === newDayIndex && oldEvent.startMin === newSlotStart) {
-    console.log('Позиция не изменилась');
-    return;
-  }
-  
-  // Перемещаем событие
-  smartMoveEvent(eventId, newDayIndex, newSlotStart, "SortableJS DnD");
-}
-
-function destroySortableJS() {
-  if (sortableInstances && sortableInstances.length) {
-    sortableInstances.forEach(instance => {
-      if (instance && typeof instance.destroy === 'function') {
-        instance.destroy();
-      }
-    });
-  }
-  sortableInstances = [];
-  console.log('SortableJS destroyed');
-}
-
-//==========================================================
-// Загрузка пресета
-btnLoadLogoPreset.addEventListener("click", () => {
-  const presetId = logoPresetSelect.value;
-  loadLogoPreset(presetId);
-});
-
-// Сохранение в пресет
-btnSaveLogoPreset.addEventListener("click", () => {
-  const presetId = logoPresetSelect.value;
-  const presetName = logoPresetSelect.options[logoPresetSelect.selectedIndex].text;
-  
-  if (confirm(`Сохранить текущие настройки логотипа в "${presetName}"?`)) {
-    saveLogoPreset(presetId);
-    toast("OK", "Успех", `Настройки сохранены в "${presetName}"`);
-  }
-});
-
-// Удаление пресета
-btnDeleteLogoPreset.addEventListener("click", () => {
-  const presetId = logoPresetSelect.value;
-  const presetName = logoPresetSelect.options[logoPresetSelect.selectedIndex].text;
-  
-  if (confirm(`Удалить пресет "${presetName}"? Это действие нельзя отменить.`)) {
-    deleteLogoPreset(presetId);
-    toast("OK", "Успех", `Пресет "${presetName}" удален`);
-  }
-});
-
-/**
- * Сохраняет текущие настройки логотипа в пресет
- */
-function saveLogoPreset(presetId) {
-  if (!state.exportPresets) {
-    state.exportPresets = DEFAULT_STATE().exportPresets;
-  }
-  
-  // Получаем текущие настройки логотипа
-  const currentLogoSettings = {
-    enabled: state.settings.logo.enabled,
-    variant: state.settings.logo.variant,
-    opacity: state.settings.logo.opacity,
-    recolor: state.settings.logo.recolor,
-    color: state.settings.logo.color,
-    layout: state.settings.logo.layout,
-    tileSize: state.settings.logo.tileSize,
-    horizontalGap: state.settings.logo.horizontalGap,
-    verticalGap: state.settings.logo.verticalGap,
-    rotation: state.settings.logo.rotation,
-    tileOffsetX: state.settings.logo.tileOffsetX,
-    tileOffsetY: state.settings.logo.tileOffsetY,
-    uploadedFileData: state.settings.logo.uploadedFileData,
-  };
-  
-  // Сохраняем в пресет
-  const presetName = logoPresetSelect.options[logoPresetSelect.selectedIndex].text;
-  state.exportPresets[presetId] = {
-    name: presetName,
-    logo: currentLogoSettings
-  };
-  
-  saveState(true);
-}
-
-/**
- * Загружает настройки логотипа из пресета
- */
-function loadLogoPreset(presetId) {
-  if (!state.exportPresets || !state.exportPresets[presetId]) {
-    toast("WARN", "Внимание", "Пресет не найден");
-    return;
-  }
-  
-  const preset = state.exportPresets[presetId];
-  
-  if (preset.logo) {
-    // Копируем настройки логотипа в текущие настройки
-    state.settings.logo.enabled = preset.logo.enabled;
-    state.settings.logo.variant = preset.logo.variant;
-    state.settings.logo.opacity = preset.logo.opacity;
-    state.settings.logo.recolor = preset.logo.recolor;
-    state.settings.logo.color = preset.logo.color;
-    state.settings.logo.layout = preset.logo.layout;
-    state.settings.logo.tileSize = preset.logo.tileSize;
-    state.settings.logo.horizontalGap = preset.logo.horizontalGap;
-    state.settings.logo.verticalGap = preset.logo.verticalGap;
-    state.settings.logo.rotation = preset.logo.rotation;
-    state.settings.logo.tileOffsetX = preset.logo.tileOffsetX;
-    state.settings.logo.tileOffsetY = preset.logo.tileOffsetY;
-    state.settings.logo.uploadedFileData = preset.logo.uploadedFileData;
-    
-    // Обновляем UI настроек логотипа
-    updateLogoSettingsUI();
-    
-    // Обновляем логотип на странице
-    if (window.logoManager) {
-      window.logoManager.update();
-    }
-    
-    saveState(true);
-    toast("OK", "Успех", `Пресет "${preset.name}" загружен`);
-  }
-}
-
-/**
- * Удаляет пресет (сбрасывает к значениям по умолчанию)
- */
-function deleteLogoPreset(presetId) {
-  if (!state.exportPresets) {
-    state.exportPresets = DEFAULT_STATE().exportPresets;
-  }
-  
-  // Сбрасываем пресет к значениям по умолчанию
-  const defaultState = DEFAULT_STATE();
-  state.exportPresets[presetId] = defaultState.exportPresets[presetId];
-  
-  saveState(true);
-}
-
-/**
- * Обновляет UI элементов настроек логотипа
- */
-
-function updateLogoSettingsUI() {
-  const lg = state.settings.logo;
-  
-  if (logoEnabled) logoEnabled.checked = lg.enabled;
-  if (logoVariant) logoVariant.value = lg.variant;
-  if (logoOpacity) {
-    logoOpacity.value = lg.opacity;
-    logoOpacityVal.textContent = `${lg.opacity}%`;
-    if (logoOpacityNum) logoOpacityNum.value = lg.opacity;
-  }
-  if (logoRecolor) logoRecolor.checked = lg.recolor;
-  if (logoColor) logoColor.value = lg.color;
-  if (logoColorWrap) logoColorWrap.style.display = lg.recolor ? "block" : "none";
-  if (logoLayout) logoLayout.value = lg.layout;
-  if (logoTileSize) {
-    logoTileSize.value = lg.tileSize;
-    if (logoTileSizeNum) logoTileSizeNum.value = lg.tileSize;
-  }
-  if (logoHorizontalGap) {
-    logoHorizontalGap.value = lg.horizontalGap;
-    if (logoHorizontalGapNum) logoHorizontalGapNum.value = lg.horizontalGap;
-  }
-  if (logoVerticalGap) {
-    logoVerticalGap.value = lg.verticalGap;
-    if (logoVerticalGapNum) logoVerticalGapNum.value = lg.verticalGap;
-  }
-  if (logoRotation) {
-    logoRotation.value = lg.rotation;
-    if (logoRotationNum) logoRotationNum.value = lg.rotation;
-  }
-  if (logoTileOffsetX) {
-    logoTileOffsetX.value = lg.tileOffsetX;
-    if (logoTileOffsetXNum) logoTileOffsetXNum.value = lg.tileOffsetX;
-  }
-  if (logoTileOffsetY) {
-    logoTileOffsetY.value = lg.tileOffsetY;
-    if (logoTileOffsetYNum) logoTileOffsetYNum.value = lg.tileOffsetY;
-  }
-  
-  // Обновляем видимость блока загрузки файла
-  const logoUploadWrap = $("logoUploadWrap");
-  if (logoUploadWrap) {
-    logoUploadWrap.style.display = lg.variant === 3 ? "block" : "none";
-  }
-  
-  // Синхронизируем контролы логотипа
-  if (window.logoManager && window.logoManager.controlSyncer) {
-    window.logoManager.controlSyncer.syncInitialValues();
-  }
-}
-
+// ============================ ID HTML элементы ============================
 
 // ================== Пусиые слоты (да нет) ============================
 
@@ -1036,8 +619,6 @@ expHideEmpty.addEventListener("change", () => {
   lastPreview = null;
   expPreviewImg.removeAttribute("src");
 });
-
-
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", initExportModule);
@@ -1049,59 +630,6 @@ window.clearPreviewCache = clearPreviewCache;
 window.buildExportPreview = buildExportPreview;
 window.downloadFromExportModal = downloadFromExportModal;
 
-function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
-}
-
-function toast(kind, title, text) {
-  const toasts = document.querySelector("#toasts");
-  if (!toasts) {
-    console.warn("Контейнер для тостов не найден");
-    return;
-  }
-
-  const el = document.createElement("div");
-  el.className = "toast";
-
-  const icon = document.createElement("div");
-  icon.className = "icon";
-  icon.textContent = kind === "OK" ? "✓" : kind === "WARN" ? "!" : "×";
-  icon.style.background =
-    kind === "OK"
-      ? "var(--ok)"
-      : kind === "WARN"
-        ? "var(--warn)"
-        : "var(--danger)";
-
-  const content = document.createElement("div");
-  content.className = "content";
-  const t = document.createElement("div");
-  t.className = "title";
-  t.textContent = title;
-  const d = document.createElement("div");
-  d.className = "text";
-  d.textContent = text || "";
-  content.appendChild(t);
-  content.appendChild(d);
-
-  const actions = document.createElement("div");
-  actions.className = "actions";
-  const close = document.createElement("button");
-  close.className = "close";
-  close.textContent = "×";
-  close.addEventListener("click", () => el.remove());
-  actions.appendChild(close);
-
-  el.appendChild(icon);
-  el.appendChild(content);
-  el.appendChild(actions);
-
-  toasts.appendChild(el);
-
-  setTimeout(() => {
-    if (el.isConnected) el.remove();
-  }, 4500);
-}
 
 function isAuthorized() {
   return localStorage.getItem(AUTH_OK_KEY) === "1";
@@ -1219,21 +747,7 @@ function renderAuthGate(onSuccess) {
   });
 }
 
-function pad2(n) {
-  return String(n).padStart(2, "0");
-}
 
-function parseHHMM(s) {
-  const [h, m] = (s || "").split(":").map(Number);
-  if (Number.isNaN(h) || Number.isNaN(m)) return null;
-  return h * 60 + m;
-}
-
-function minToHHMM(min) {
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return `${pad2(h)}:${pad2(m)}`;
-}
 
 function initErrorHandling() {
   window.addEventListener("error", function (e) {
@@ -1360,9 +874,6 @@ function generateDirectionId(name) {
   return `dir_${cleanName}_${hash}`;
 }
 
-function getDir(id) {
-  return state.directions.find((d) => d.id === id);
-}
 function matchesQuery(ev) {
   const q = (filters.q || "").trim().toLowerCase();
   if (!q) return true;
@@ -1394,6 +905,8 @@ function eventVisible(ev) {
   );
 }
 
+// =========== Вспомогательные ================
+
 function getBounds() {
   const s = state.settings.schedule;
   return {
@@ -1419,6 +932,141 @@ function slotStartFor(min) {
   const { start, step } = getBounds();
   return start + Math.floor((min - start) / step) * step;
 }
+
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+function parseHHMM(s) {
+  const [h, m] = (s || "").split(":").map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  return h * 60 + m;
+}
+
+function minToHHMM(min) {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return `${pad2(h)}:${pad2(m)}`;
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function formatDateDDMM(d) {
+  const dd = pad2(d.getDate());
+  const mm = pad2(d.getMonth() + 1);
+  return `${dd}.${mm}`;
+}
+
+function getWeekStartDate(baseDate, weekOffset = 0) {
+  const d = new Date(
+    baseDate.getFullYear(),
+    baseDate.getMonth(),
+    baseDate.getDate(),
+  );
+  const day = (d.getDay() + 6) % 7; // Monday = 0
+  d.setDate(d.getDate() - day + weekOffset * 7);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function getScheduleDayLabel(dayIndex) {
+  if (dayIndex < 0 || dayIndex >= DAYS.length) return "";
+  const sch = state.settings.schedule || {};
+  const showDate = sch.showDate !== false;
+  const offset = clamp(Math.round(Number(sch.weekOffset ?? 0)), 0, 4);
+  const monday = getWeekStartDate(new Date(), offset);
+  const cur = new Date(monday);
+  cur.setDate(monday.getDate() + dayIndex);
+  const datePart = formatDateDDMM(cur);
+  return showDate ? `${DAYS[dayIndex]}\u00A0${datePart}` : DAYS[dayIndex];
+}
+
+function updateDayHeaders(scheduleEl) {
+  if (!scheduleEl) return;
+  const headCells = scheduleEl.querySelectorAll(".cell.head");
+  let idx = 0;
+  headCells.forEach((cell) => {
+    if (cell.classList.contains("time")) return;
+    const label = getScheduleDayLabel(idx);
+    const labelEl = cell.querySelector(".day-label") || cell.querySelector("span");
+    if (labelEl) {
+      labelEl.textContent = label;
+    } else {
+      cell.textContent = label;
+    }
+    idx += 1;
+  });
+}
+
+function toast(kind, title, text) {
+  const toasts = document.querySelector("#toasts");
+  if (!toasts) {
+    console.warn("Контейнер для тостов не найден");
+    return;
+  }
+
+  const el = document.createElement("div");
+  el.className = "toast";
+
+  const icon = document.createElement("div");
+  icon.className = "icon";
+  icon.textContent = kind === "OK" ? "✓" : kind === "WARN" ? "!" : "×";
+  icon.style.background =
+    kind === "OK"
+      ? "var(--ok)"
+      : kind === "WARN"
+        ? "var(--warn)"
+        : "var(--danger)";
+
+  const content = document.createElement("div");
+  content.className = "content";
+  const t = document.createElement("div");
+  t.className = "title";
+  t.textContent = title;
+  const d = document.createElement("div");
+  d.className = "text";
+  d.textContent = text || "";
+  content.appendChild(t);
+  content.appendChild(d);
+
+  const actions = document.createElement("div");
+  actions.className = "actions";
+  const close = document.createElement("button");
+  close.className = "close";
+  close.textContent = "×";
+  close.addEventListener("click", () => el.remove());
+  actions.appendChild(close);
+
+  el.appendChild(icon);
+  el.appendChild(content);
+  el.appendChild(actions);
+
+  toasts.appendChild(el);
+
+  setTimeout(() => {
+    if (el.isConnected) el.remove();
+  }, 4500);
+}
+
+function pushHistory(reason) {
+  history.push({ snapshot: deepCopy(state), reason, ts: Date.now() });
+  if (history.length > HISTORY_LIMIT) history.shift();
+  future = [];
+  updateUndoRedoButtons();
+  scheduleAutoSave(`history: ${reason}`);
+}
+
+function uid() {
+  return "e_" + Math.random().toString(36).slice(2, 10);
+}
+
+function getDir(id) {
+  return state.directions.find((d) => d.id === id);
+}
+
+// =========== Вспомогательные ================
 
 function validateTimeSlot(dayIndex, startMin, durationMin, ignoreId = null) {
   const { start, end, step } = getBounds();
@@ -1446,56 +1094,18 @@ function validateTimeSlot(dayIndex, startMin, durationMin, ignoreId = null) {
     };
   }
 
-  const overlappingEvents = state.events.filter((ev) => {
+  const slotStart = slotStartFor(startMin);
+  const eventsInSameSlot = state.events.filter((ev) => {
     if (ev.id === ignoreId) return false;
-
     if (ev.dayIndex !== dayIndex) return false;
-
-    const evStart = ev.startMin;
-    const evEnd = ev.startMin + ev.durationMin;
-    const newStart = startMin;
-    const newEnd = startMin + durationMin;
-
-    return newStart < evEnd && newEnd > evStart;
+    return slotStartFor(ev.startMin) === slotStart;
   });
 
-  if (overlappingEvents.length > 0) {
-    const slotStart = slotStartFor(startMin);
-    const slotEnd = slotStart + step;
-
-    const eventsInSameSlot = overlappingEvents.filter((ev) => {
-      const evSlotStart = slotStartFor(ev.startMin);
-      return evSlotStart === slotStart;
-    });
-
-    if (eventsInSameSlot.length >= maxInSlot) {
-      return {
-        valid: false,
-        reason: `В этом временном интервале уже есть максимальное количество занятий (${maxInSlot}).`,
-      };
-    }
-
-    if (state.settings.display.cellView === "timeline") {
-      // В режиме timeline разрешаем 2 занятия в одном слоте
-      // Проверяем пересечение ТОЛЬКО если уже есть 2 занятия
-      if (eventsInSameSlot.length >= maxInSlot) {
-        const sortedEvents = [...eventsInSameSlot].sort(
-          (a, b) => a.startMin - b.startMin,
-        );
-
-        for (const ev of sortedEvents) {
-          const evStart = ev.startMin;
-          const evEnd = ev.startMin + ev.durationMin;
-
-          if (startMin < evEnd && startMin + durationMin > evStart) {
-            return {
-              valid: false,
-              reason: `Занятие пересекается с существующим (${ev.name} ${minToHHMM(evStart)}-${minToHHMM(evEnd)}).`,
-            };
-          }
-        }
-      }
-    }
+  if (eventsInSameSlot.length >= maxInSlot) {
+    return {
+      valid: false,
+      reason: `В этом слоте уже есть максимальное количество занятий (${maxInSlot}).`,
+    };
   }
 
   return { valid: true };
@@ -1574,67 +1184,73 @@ function applyFont() {
   r.setProperty("--evCardMinH", `${Math.max(60, wantedCardMinH)}px`);
 
   const wantedDayMinW = Math.ceil((t1 || 12) * 7.5 + 84);
-  r.setProperty("--dayMinW", clamp(wantedDayMinW, 120, 240) + "px");
-  if (!(Number(state.settings.display?.dayWidthPx) > 0)) {
+  const fixedDayW = Number(state.settings.display?.dayWidthPx ?? 0);
+  if (fixedDayW > 0) {
+    const w = clamp(Math.round(fixedDayW), 60, 800);
+    r.setProperty("--dayMinW", `${w}px`);
+    r.setProperty("--dayW", `${w}px`);
+  } else {
+    r.setProperty("--dayMinW", clamp(wantedDayMinW, 120, 240) + "px");
     r.setProperty("--dayW", clamp(wantedDayMinW, 120, 240) + "px");
   }
 
-  const wantedTimeCol = Math.ceil(Math.max(44, m1 * 4 + 20));
-  r.setProperty("--timeCol", clamp(wantedTimeCol, 26, 80) + "px");
+  const wantedTimeCol = Math.ceil(Math.max(32, m1 * 3 + 14));
+  r.setProperty("--timeCol", clamp(wantedTimeCol, 24, 64) + "px");
+
+  requestRowHeightSync(true);
+  markGeometryDirtyIfNeeded();
 }
 
 function applyTheme() {
-  const t = state.settings.theme;
-  let tokens;
+    const t = state.settings.theme;
+    let tokens;
 
-  if (t.mode === "auto") tokens = prefersDark() ? DEFAULT_DARK : DEFAULT_LIGHT;
-  else if (t.mode === "light") tokens = DEFAULT_LIGHT;
-  else if (t.mode === "dark") tokens = DEFAULT_DARK;
-  else tokens = t.customTokens;
+    if (t.mode === "auto") tokens = DEFAULT_LIGHT;
+    else if (t.mode === "light") tokens = DEFAULT_LIGHT;
+    else if (t.mode === "dark") tokens = DEFAULT_DARK;
+    else tokens = t.customTokens;
 
-  tokens = ensureThemeContrast(tokens);
+    tokens = ensureThemeContrast(tokens);
 
-  const inferredDark = relLuminance(tokens.bg) < 0.35;
-  document.documentElement.dataset.scheme = inferredDark ? "dark" : "light";
+    const inferredDark = relLuminance(tokens.bg) < 0.35;
+    document.documentElement.dataset.scheme = inferredDark ? "dark" : "light";
 
-  const r = document.documentElement.style;
+    const r = document.documentElement.style;
 
-  r.setProperty(
-    "--logoUploadBg",
-    inferredDark ? "rgba(30, 41, 59, 0.6)" : "rgb(248, 250, 252)",
-  );
-  r.setProperty(
-    "--logoUploadBorder",
-    inferredDark ? "rgba(56, 70, 89, 0.8)" : "rgba(203, 213, 225, 0.6)",
-  );
+    r.setProperty("--bg", tokens.bg);
+    r.setProperty("--card", tokens.card);
+    r.setProperty("--text", tokens.text);
+    r.setProperty("--muted", tokens.muted);
+    r.setProperty("--border", tokens.border);
+    r.setProperty("--gridHead", tokens.gridHead);
+    r.setProperty("--accent", tokens.accent);
+    r.setProperty("--accentText", bestTextOn(tokens.accent));
 
-  r.setProperty("--bg", tokens.bg);
-  r.setProperty("--card", tokens.card);
-  r.setProperty("--text", tokens.text);
-  r.setProperty("--muted", tokens.muted);
-  r.setProperty("--border", tokens.border);
-  r.setProperty("--gridHead", tokens.gridHead);
-  r.setProperty("--accent", tokens.accent);
-  r.setProperty("--accentText", bestTextOn(tokens.accent));
+    const aToday = clamp((t.alpha.today ?? 60) / 100, 0, 1);
+    const aNow = clamp((t.alpha.now ?? 65) / 100, 0, 1);
+    const aEvent = clamp((t.alpha.event ?? 100) / 100, 0.2, 1);
+    const aShadow = clamp((t.alpha.shadow ?? 10) / 100, 0, 1);
 
-  const aToday = clamp((t.alpha.today ?? 60) / 100, 0, 1);
-  const aNow = clamp((t.alpha.now ?? 65) / 100, 0, 1);
-  const aEvent = clamp((t.alpha.event ?? 100) / 100, 0.2, 1);
-  const aShadow = clamp((t.alpha.shadow ?? 10) / 100, 0, 1);
+    r.setProperty("--todayColRGBA", rgba(tokens.today, aToday));
+    r.setProperty("--nowRowRGBA", rgba(tokens.now, aNow));
+    r.setProperty("--eventAlpha", String(aEvent)); // ← Инлайн для обычных элементов
+    r.setProperty("--shadowRGBA", `rgba(15, 23, 42, ${inferredDark ? 0.35 : aShadow})`);
 
-  r.setProperty("--todayColRGBA", rgba(tokens.today, aToday));
-  r.setProperty("--nowRowRGBA", rgba(tokens.now, aNow));
-  r.setProperty("--eventAlpha", String(aEvent));
-  r.setProperty(
-    "--shadowRGBA",
-    `rgba(15, 23, 42, ${inferredDark ? 0.35 : aShadow})`,
-  );
+    // 🔑 КРИТИЧЕСКИ ВАЖНО: псевдоэлементы НЕ видят инлайн-переменные!
+    // Нужно создать <style> тег для :root
+    let themeStyle = document.getElementById("theme-vars");
+    if (!themeStyle) {
+        themeStyle = document.createElement("style");
+        themeStyle.id = "theme-vars";
+        document.head.appendChild(themeStyle);
+    }
+    themeStyle.textContent = `:root { --eventAlpha: ${aEvent}; }`;
 
-  if (window.logoManager && window.logoManager.eventManager) {
-    window.logoManager.eventManager.updateCSSVariables();
-  }
-  applyFont();
-  applyLayout();
+    if (window.logoManager && window.logoManager.eventManager) {
+        window.logoManager.eventManager.updateCSSVariables();
+    }
+    applyFont();
+    applyLayout();
 }
 
 function applyLayout() {
@@ -1644,13 +1260,17 @@ function applyLayout() {
   r.setProperty("--cellPad", `${clamp(pad, 0, 24)}px`);
 
   const w = Number(d.dayWidthPx ?? 0);
-  if (w > 0) r.setProperty("--dayW", `${clamp(w, 120, 800)}px`);
+  if (w > 0) {
+    const maxW = clamp(w, 60, 800);
+    r.setProperty("--dayW", `${maxW}px`);
+    r.setProperty("--dayMinW", `${maxW}px`);
+  }
 
   // Добавляем стили для скролла
   const scheduleWrap = document.querySelector(".schedule-wrap");
   if (scheduleWrap) {
     scheduleWrap.style.overflowX = "auto";
-    scheduleWrap.style.overflowY = "hidden";
+    scheduleWrap.style.overflowY = "auto";
     scheduleWrap.style.width = "100%";
     scheduleWrap.style.maxWidth = "100%";
     scheduleWrap.style.boxSizing = "border-box";
@@ -1662,9 +1282,16 @@ function applyLayout() {
     schedule.style.width = "auto";
   }
 
-  const headHeight = 30; // или 20, или любое значение от 20 до 30
-  r.setProperty("--dayHeadHeight", `${headHeight}px`);
-    
+  const timeCol = getComputedStyle(document.documentElement)
+    .getPropertyValue("--timeCol")
+    .trim();
+  const headHeight = timeCol || "46px";
+  r.setProperty("--dayHeadHeight", headHeight);
+  r.setProperty("--day-head-height", headHeight);
+
+  if (document.getElementById("schedule")) {
+    requestRowHeightSync(true);
+  }
 }
 
 window._logoSvgBlobUrls = window._logoSvgBlobUrls || {};
@@ -1798,7 +1425,7 @@ function metaCoachRoom(ev, includeTime = false) {
 
   if (ev.coach) parts.push(fixTypography(ev.coach));
   if (ev.room) parts.push(fixTypography(ev.room));
-  return parts.join(" · ");
+  return parts.join(" | ");
 }
 
 function metaFullByMode(ev) {
@@ -1823,6 +1450,15 @@ function hardenState() {
   const defaultState =
     typeof DEFAULT_STATE === "function" ? DEFAULT_STATE() : DEFAULT_STATE;
 
+  const fillMissing = (target, defaults) => {
+    if (!target || !defaults) return;
+    Object.keys(defaults).forEach((key) => {
+      if (typeof target[key] === "undefined") {
+        target[key] = deepCopy(defaults[key]);
+      }
+    });
+  };
+
   if (!state.settings) state.settings = deepCopy(defaultState.settings);
   if (!state.settings.schedule)
     state.settings.schedule = deepCopy(defaultState.settings.schedule);
@@ -1832,6 +1468,14 @@ function hardenState() {
     state.settings.display = deepCopy(defaultState.settings.display);
   if (!state.settings.theme)
     state.settings.theme = deepCopy(defaultState.settings.theme);
+
+  fillMissing(state.settings.schedule, defaultState.settings.schedule);
+  fillMissing(state.settings.display, defaultState.settings.display);
+  fillMissing(state.settings.font, defaultState.settings.font);
+  fillMissing(state.settings.theme, defaultState.settings.theme);
+  if (!state.exportPresets) {
+    state.exportPresets = deepCopy(defaultState.exportPresets);
+  }
 
   const f = state.settings.font;
 
@@ -1923,6 +1567,8 @@ function hardenState() {
     240,
   );
   sch.maxPerCell = 2;
+  sch.showDate = sch.showDate !== false;
+  sch.weekOffset = clamp(Math.round(Number(sch.weekOffset ?? 0)), 0, 4);
 
   if (!Array.isArray(state.events)) state.events = [];
   if (!Array.isArray(state.directions))
@@ -1985,13 +1631,7 @@ function isLocalStorageAvailable() {
   }
 }
 
-function pushHistory(reason) {
-  history.push({ snapshot: deepCopy(state), reason, ts: Date.now() });
-  if (history.length > HISTORY_LIMIT) history.shift();
-  future = [];
-  updateUndoRedoButtons();
-  scheduleAutoSave(`history: ${reason}`);
-}
+
 
 function scheduleAutoSave(reason) {
   clearTimeout(autoSaveTimer);
@@ -2319,6 +1959,8 @@ function openSettings() {
   setStart.value = s.start;
   setEnd.value = s.end;
   setDefaultDur.value = String(s.defaultDuration);
+  if (setWeekOffset) setWeekOffset.value = String(s.weekOffset ?? 0);
+  if (setShowDate) setShowDate.value = s.showDate === false ? "no" : "yes";
 
   const d = state.settings.display;
   dispCellView.value = d.cellView;
@@ -2484,6 +2126,9 @@ function saveSettings() {
   const startStr = setStart.value;
   const endStr = setEnd.value;
   const defaultDuration = Number(setDefaultDur.value);
+  const weekOffset = setWeekOffset ? Number(setWeekOffset.value) : 0;
+  const showDate =
+    setShowDate ? setShowDate.value === "yes" : true;
 
   const startMin = parseHHMM(startStr);
   const endMin = parseHHMM(endStr);
@@ -2627,6 +2272,12 @@ function saveSettings() {
   state.settings.schedule.end = endStr;
   state.settings.schedule.defaultDuration = defaultDuration;
   state.settings.schedule.maxPerCell = 2;
+  state.settings.schedule.weekOffset = clamp(
+    Math.round(Number(weekOffset) || 0),
+    0,
+    4,
+  );
+  state.settings.schedule.showDate = !!showDate;
 
   // ✅ Отображение
   if (dispShowToday)
@@ -2856,7 +2507,7 @@ function migrateState(parsed) {
   return parsed;
 }
 
-// ==================== КЛАСС ДЛЯ КЭШИРОВАНИЯ ====================
+// ==================== LOGO_RENDER ====================
 class LogoCache {
   constructor() {
     this.metricsCache = null;
@@ -2924,7 +2575,6 @@ class LogoCache {
   }
 }
 
-// ==================== КЛАСС ДЛЯ РАСЧЕТА МЕТРИК ====================
 class LogoMetrics {
   constructor() {
     this.cache = new Map();
@@ -2942,16 +2592,16 @@ class LogoMetrics {
       return result;
     }
 
-    let timeColWidth = 46;
+    let timeColWidth = schedule.classList.contains("compact-mode") ? 0 : 46;
     const timeCell = schedule.querySelector(".cell.time");
     if (timeCell) {
-      timeColWidth = timeCell.getBoundingClientRect().width;
+      timeColWidth = timeCell.offsetWidth || timeCell.getBoundingClientRect().width;
     }
 
     let dayHeadHeight = 42;
     const headCell = schedule.querySelector(".cell.head");
     if (headCell) {
-      dayHeadHeight = headCell.getBoundingClientRect().height;
+      dayHeadHeight = headCell.offsetHeight || headCell.getBoundingClientRect().height;
     }
 
     let scheduleWidth, scheduleHeight;
@@ -2990,9 +2640,12 @@ class LogoMetrics {
   }
 
   calculateFallback(context = document) {
-    const computedStyle = getComputedStyle(context.documentElement);
-    const timeColWidth =
-      parseFloat(computedStyle.getPropertyValue("--timeCol")) || 46;
+  const computedStyle = getComputedStyle(context.documentElement);
+  let timeColWidth = parseFloat(computedStyle.getPropertyValue("--timeCol")) || 46;
+  const schedule = context.querySelector(".schedule");
+  if (schedule && schedule.classList.contains("compact-mode")) {
+    timeColWidth = 0;
+  }
     const dayHeadHeight = 42;
 
     let scheduleWidth = 0;
@@ -3026,7 +2679,6 @@ class LogoMetrics {
   }
 }
 
-// ==================== КЛАСС ДЛЯ УПРАВЛЕНИЯ АКТИВАМИ ====================
 class LogoAssetManager {
   constructor(cache) {
     this.cache = cache;
@@ -3198,7 +2850,6 @@ class LogoAssetManager {
   }
 }
 
-// ==================== КЛАСС ДЛЯ РЕНДЕРИНГА ====================
 class LogoRenderer {
   constructor(assetManager, cache) {
     this.assetManager = assetManager;
@@ -3213,17 +2864,35 @@ class LogoRenderer {
     if (!scheduleWrap) return false;
 
     if (!this.layer) {
-      this.layer = document.createElement("div");
-      this.layer.id = "logoLayer";
-      this.layer.setAttribute("aria-hidden", "true");
-      scheduleWrap.appendChild(this.layer);
+      const existingLayers = Array.from(
+        scheduleWrap.querySelectorAll("#logoLayer"),
+      );
+      this.layer = existingLayers[0] || null;
+      if (!this.layer) {
+        this.layer = document.createElement("div");
+        this.layer.id = "logoLayer";
+        this.layer.setAttribute("aria-hidden", "true");
+        scheduleWrap.appendChild(this.layer);
+      }
+      // Удаляем дубликаты слоев, если они есть
+      if (existingLayers.length > 1) {
+        existingLayers.slice(1).forEach((dup) => dup.remove());
+      }
     }
 
     if (!this.mark) {
-      this.mark = document.createElement("div");
-      this.mark.id = "logoMark";
-      this.mark.setAttribute("aria-hidden", "true");
-      this.layer.appendChild(this.mark);
+      const existingMark =
+        this.layer?.querySelector("#logoMark") ||
+        scheduleWrap.querySelector("#logoMark");
+      this.mark = existingMark || null;
+      if (!this.mark) {
+        this.mark = document.createElement("div");
+        this.mark.id = "logoMark";
+        this.mark.setAttribute("aria-hidden", "true");
+        this.layer.appendChild(this.mark);
+      } else if (this.layer && this.mark.parentElement !== this.layer) {
+        this.layer.appendChild(this.mark);
+      }
     }
 
     if (scheduleWrap.style.position !== "relative") {
@@ -3457,6 +3126,12 @@ class LogoRenderer {
         display: block;
       `;
     }
+
+    const schedule = document.querySelector(".schedule");
+    if (schedule) {
+      schedule.style.position = "relative";
+      schedule.style.zIndex = "2";
+    }
   }
 
   show() {
@@ -3470,7 +3145,6 @@ class LogoRenderer {
   }
 }
 
-// ==================== КЛАСС ДЛЯ СИНХРОНИЗАЦИИ КОНТРОЛОВ ====================
 class ControlSyncer {
   constructor(logoManager) {
     this.logoManager = logoManager;
@@ -3659,7 +3333,6 @@ class ControlSyncer {
   }
 }
 
-// ==================== КЛАСС ДЛЯ ПРЕДПРОСМОТРА ====================
 class LogoPreview {
   constructor(assetManager) {
     this.assetManager = assetManager;
@@ -3769,7 +3442,6 @@ class LogoPreview {
   }
 }
 
-// ==================== КЛАСС ДЛЯ УПРАВЛЕНИЯ СОБЫТИЯМИ ====================
 class LogoEventManager {
   constructor(logoManager) {
     this.logoManager = logoManager;
@@ -3791,6 +3463,37 @@ class LogoEventManager {
     this.setupCSSVariables();
 
     this.initialized = true;
+  }
+
+  setupEventListeners() {
+    // Обработчик изменения размера окна
+    window.addEventListener("resize", () => {
+      if (this.resizeTimer) clearTimeout(this.resizeTimer);
+      this.resizeTimer = setTimeout(() => {
+        this.cache.clear();
+        if (this.isInitialized) {
+          this.update();
+        }
+      }, 250);
+    });
+
+    // Обработчик изменения ориентации
+    window.addEventListener("orientationchange", () => {
+      if (this.orientationTimer) clearTimeout(this.orientationTimer);
+      this.orientationTimer = setTimeout(() => {
+        this.cache.clear();
+        if (this.isInitialized) {
+          this.update();
+        }
+      }, 300);
+    });
+
+    // Обработчик видимости вкладки
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden && this.isInitialized) {
+        setTimeout(() => this.update(), 100);
+      }
+    });
   }
 
   setupVariantHandler() {
@@ -4091,7 +3794,6 @@ class LogoEventManager {
   }
 }
 
-// ==================== ОСНОВНОЙ КЛАСС УПРАВЛЕНИЯ ====================
 class LogoManager {
   constructor() {
     this.cache = new LogoCache();
@@ -4117,8 +3819,8 @@ class LogoManager {
 
       this.preview.init();
       this.syncPreview();
+      this.setupResizeHandlers();
 
-      this.setupEventListeners();
       this.setupGlobalMethods();
 
       this.isInitialized = true;
@@ -4195,6 +3897,38 @@ class LogoManager {
     this.cache.clear();
   }
 
+  setupResizeHandlers() {
+    if (this._onResize || this._onOrientation) return;
+
+    this._onResize = () => {
+      if (this.resizeTimer) clearTimeout(this.resizeTimer);
+      this.resizeTimer = setTimeout(() => {
+        try {
+          this.cache.clear();
+          this.renderer?.metrics?.clearCache?.();
+          if (typeof updateLogoCSSVariables === "function") {
+            updateLogoCSSVariables();
+          }
+          this.update();
+        } catch (error) {
+          console.warn("LogoManager resize update error:", error);
+        }
+      }, 150);
+    };
+
+    this._onOrientation = () => {
+      if (this.orientationTimer) clearTimeout(this.orientationTimer);
+      this.orientationTimer = setTimeout(() => {
+        if (this._onResize) this._onResize();
+      }, 250);
+    };
+
+    window.addEventListener("resize", this._onResize, { passive: true });
+    window.addEventListener("orientationchange", this._onOrientation, {
+      passive: true,
+    });
+  }
+
   setupGlobalMethods() {
     // Для обратной совместимости
     window.getScheduleMetrics = () => this.renderer.metrics.calculate();
@@ -4231,6 +3965,14 @@ class LogoManager {
 
       if (this.resizeTimer) clearTimeout(this.resizeTimer);
       if (this.orientationTimer) clearTimeout(this.orientationTimer);
+      if (this._onResize) {
+        window.removeEventListener("resize", this._onResize);
+      }
+      if (this._onOrientation) {
+        window.removeEventListener("orientationchange", this._onOrientation);
+      }
+      this._onResize = null;
+      this._onOrientation = null;
 
       this.isInitialized = false;
       console.log("LogoManager уничтожен");
@@ -4240,7 +3982,6 @@ class LogoManager {
   }
 }
 
-// ==================== ГЛОБАЛЬНАЯ ИНИЦИАЛИЗАЦИЯ ====================
 document.addEventListener("DOMContentLoaded", () => {
   window.LogoManager = LogoManager;
   window.LogoAssetManager = LogoAssetManager;
@@ -4255,104 +3996,2139 @@ document.addEventListener("DOMContentLoaded", () => {
   console.log("Модули логотипа загружены и готовы к использованию");
 });
 
-// ==================== ФУНКЦИИ ГЕОМЕТРИИ ====================
+// ==================== LOGO_RENDER ====================
 
-/**
- * Генерирует ключ геометрии на основе текущих настроек
- */
-function getGeomKey() {
+// ==================== ПЕРЕНОС_СКРОЛЛ ====================
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+const CELL_HEIGHT_CONFIG = {
+  MIN_CELL_HEIGHT: 72,
+  EVENT_GAP: 2,
+  CELL_PADDING: 6,
+  MIN_EVENT_HEIGHT: 30,
+  TITLE_LINES: 3,
+  META_LINES: 2,
+  DOUBLE_TITLE_LINES: 2,
+  DOUBLE_META_LINES: 2,
+};
+
+const TOUCH_DRAG_CONFIG = {
+  ACTIVATION_DELAY: 500,
+  FEEDBACK_RADIUS: 24,
+  CANCEL_ZONE_SIZE: 60,
+  AUTO_SCROLL_THRESHOLD: 50,
+  AUTO_SCROLL_SPEED: 15, // Увеличена скорость
+  VIBRATION_SHORT: 20,
+  VIBRATION_CANCEL: 50,
+  MOUSE_ACTIVATION_THRESHOLD_PX: 5,
+  TOUCH_ACTIVATION_THRESHOLD_PX: 10,
+};
+
+function applyTitleStyles(element, lines) {
+  const title = element?.querySelector?.(".t");
+  if (!title) return;
+
+  const set = (prop, value) => title.style.setProperty(prop, value, "important");
+  set("line-height", "var(--evLineHeight)");
+  set("max-height", "none");
+  set("height", "auto");
+
+  if (lines === 1) {
+    set("display", "block");
+    set("-webkit-box-orient", "horizontal");
+    set("-webkit-line-clamp", "unset");
+    set("line-clamp", "unset");
+    set("white-space", "nowrap");
+    set("overflow", "hidden");
+    set("text-overflow", "ellipsis");
+  } else if (lines > 1) {
+    set("display", "-webkit-box");
+    set("-webkit-box-orient", "vertical");
+    set("-webkit-line-clamp", String(lines));
+    set("line-clamp", String(lines));
+    set("white-space", "normal");
+    set("overflow", "hidden");
+    set("text-overflow", "ellipsis");
+  } else {
+    set("display", "block");
+    set("-webkit-box-orient", "horizontal");
+    set("-webkit-line-clamp", "unset");
+    set("line-clamp", "unset");
+    set("white-space", "normal");
+    set("overflow", "visible");
+    set("text-overflow", "clip");
+  }
+}
+
+function applyMetaStyles(element, lines) {
+  const meta = element?.querySelector?.(".m");
+  if (!meta) return;
+
+  const set = (prop, value) => meta.style.setProperty(prop, value, "important");
+  set("line-height", "var(--evLineHeight)");
+  set("max-height", "none");
+  set("height", "auto");
+
+  if (lines === 1) {
+    set("display", "block");
+    set("-webkit-box-orient", "horizontal");
+    set("-webkit-line-clamp", "unset");
+    set("line-clamp", "unset");
+    set("white-space", "nowrap");
+    set("overflow", "hidden");
+    set("text-overflow", "ellipsis");
+  } else if (lines > 1) {
+    set("display", "-webkit-box");
+    set("-webkit-box-orient", "vertical");
+    set("-webkit-line-clamp", String(lines));
+    set("line-clamp", String(lines));
+    set("white-space", "normal");
+    set("overflow", "hidden");
+    set("text-overflow", "ellipsis");
+  } else {
+    set("display", "block");
+    set("-webkit-box-orient", "horizontal");
+    set("-webkit-line-clamp", "unset");
+    set("line-clamp", "unset");
+    set("white-space", "normal");
+    set("overflow", "visible");
+    set("text-overflow", "clip");
+  }
+}
+
+function measureEventHeight(el, titleLines, metaLines) {
+  if (!el) return 0;
+
+  applyTitleStyles(el, titleLines);
+  applyMetaStyles(el, metaLines);
+
+  el.style.height = "auto";
+  el.style.minHeight = "auto";
+  el.style.maxHeight = "none";
+
+  const h = Math.max(el.scrollHeight, CELL_HEIGHT_CONFIG.MIN_EVENT_HEIGHT);
+  return h;
+}
+
+let touchDragState = {
+  active: false,
+  element: null,
+  eventId: null,
+  eventData: null,
+  startX: 0,
+  startY: 0,
+  currentX: 0,
+  currentY: 0,
+  activationTimer: null,
+  clone: null,
+  cancelZone: null,
+  targetCell: null,
+  originalCell: null,
+  originalPosition: { x: 0, y: 0, width: 0, height: 0 },
+  isMouse: false,
+  autoScrollInterval: null, // ОДИН раз
+  pendingRowUpdates: new Set(),
+  rowUpdateTimeout: null,
+  isDragging: false,
+  lastValidDropCell: null,
+  touchStartTime: 0,
+  container: null,
+  feedback: null,
+  lastMoveTime: 0,
+  isProcessingTouch: false,
+  lastTouchStartTime: 0,
+  hadSortableInstances: false,
+  autoScrollDirection: 0, // Добавить в state
+  autoScrollDirectionX: 0, // Добавить в state
+};
+
+let autoScrollDirection = 0;
+let autoScrollDirectionX = 0;
+let autoScrollAnimationFrame = null;
+
+function initTouchDragSafe() {
+  console.log("[TouchDnD] Инициализация системы Drag-and-Drop");
+
+  // Добавляем CSS стили для двойных событий
+  if (!document.getElementById('touch-drag-styles')) {
+    const style = document.createElement('style');
+    style.id = 'touch-drag-styles';
+    style.textContent = `
+      .event.event-double { box-shadow: none !important; }
+      .event.event-double-top { 
+        margin-bottom: ${CELL_HEIGHT_CONFIG.EVENT_GAP}px !important; 
+        border-bottom-left-radius: 0 !important; 
+        border-bottom-right-radius: 0 !important; 
+      }
+      .event.event-double-bottom { 
+        margin-top: ${CELL_HEIGHT_CONFIG.EVENT_GAP}px !important; 
+        border-top-left-radius: 0 !important; 
+        border-top-right-radius: 0 !important; 
+      }
+      .event.compact { 
+        min-height: ${CELL_HEIGHT_CONFIG.MIN_EVENT_HEIGHT}px !important; 
+        margin: 0 !important; 
+        border-radius: 4px !important; 
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important; 
+      }
+      .event:not(.event-double) { 
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important; 
+      }
+      .cell.droppable {
+        min-height: var(--slotH, ${CELL_HEIGHT_CONFIG.MIN_CELL_HEIGHT}px) !important;
+        padding: var(--cellPad) !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  const scheduleEl = document.getElementById("schedule");
+  if (!scheduleEl) {
+    console.error("[TouchDnD] Элемент #schedule не найден");
+    return;
+  }
+
+  // Если уже инициализировано, не переинициализируем
+  if (touchDragState.container === scheduleEl && touchDragState.isInitialized) {
+    return;
+  }
+
+  touchDragState.container = scheduleEl;
+  touchDragState.isInitialized = true;
+
+  // Удаляем старые обработчики
+  scheduleEl.removeEventListener("touchstart", handleTouchStart);
+  scheduleEl.removeEventListener("touchmove", handleTouchMove);
+  scheduleEl.removeEventListener("touchend", handleTouchEnd);
+  scheduleEl.removeEventListener("touchcancel", handleTouchCancel);
+  scheduleEl.removeEventListener("mousedown", handleMouseDown);
+
+  // Добавляем новые обработчики
+  scheduleEl.addEventListener("touchstart", handleTouchStart, { passive: false });
+  scheduleEl.addEventListener("touchmove", handleTouchMove, { passive: false });
+  scheduleEl.addEventListener("touchend", handleTouchEnd);
+  scheduleEl.addEventListener("touchcancel", handleTouchCancel);
+  scheduleEl.addEventListener("mousedown", handleMouseDown);
+
+  // Глобальные обработчики для мыши
+  document.removeEventListener("mousemove", handleMouseMove);
+  document.removeEventListener("mouseup", handleMouseUp);
+  document.addEventListener("mousemove", handleMouseMove);
+  document.addEventListener("mouseup", handleMouseUp);
+
+  // Обработчики для случаев выхода за границы
+  document.addEventListener("mouseleave", handleWindowLeave);
+  window.removeEventListener("blur", handleWindowBlur);
+  window.removeEventListener("beforeunload", handleBeforeUnload);
+  window.addEventListener("blur", handleWindowBlur);
+  window.addEventListener("beforeunload", handleBeforeUnload);
+
+  // Временно отключаем SortableJS если он есть
+  if (window.Sortable) {
+    console.log("[TouchDnD] SortableJS обнаружен, временно отключаем");
+    scheduleEl.classList.add("touch-drag-active");
+    touchDragState.hadSortableInstances = true;
+  }
+
+  // Инициализируем высоты строк и применяем классы для двойных событий
+  initializeAllRowHeights();
+  applyDoubleEventClasses();
+  
+  console.log("[TouchDnD] Инициализация завершена");
+}
+
+function handleTouchStart(e) {
+  // Проверяем, не идет ли уже другое перетаскивание
+  if (touchDragState.isProcessingTouch || touchDragState.active) {
+    return;
+  }
+
+  const now = Date.now();
+  if (now - touchDragState.lastTouchStartTime < 100) {
+    return;
+  }
+
+  if (e.type === 'mousedown' && e.button !== 0) {
+    return;
+  }
+
+  const touch = e.touches ? e.touches[0] : e;
+  let clientX, clientY;
+  
+  if (e.touches) {
+    if (!touch) return;
+    clientX = touch.clientX;
+    clientY = touch.clientY;
+  } else {
+    clientX = touch.clientX;
+    clientY = touch.clientY;
+  }
+
+  // Проверяем, что координаты валидны
+  if (typeof clientX !== 'number' || typeof clientY !== 'number' || 
+      isNaN(clientX) || isNaN(clientY)) {
+    console.warn("[TouchDnD] Некорректные координаты", clientX, clientY);
+    return;
+  }
+
+  const clickedElement = document.elementFromPoint(clientX, clientY);
+  if (!clickedElement) {
+    return;
+  }
+
+  const eventElement = clickedElement.closest('.event');
+  if (!eventElement) {
+    return;
+  }
+
+  const eventId = eventElement.dataset.eid || eventElement.closest("[data-eid]")?.dataset.eid;
+  if (!eventId) {
+    return;
+  }
+
+  if (!e.touches) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  const eventData = state.events.find(ev => ev.id === eventId);
+  if (!eventData) {
+    return;
+  }
+
+  touchDragState.isProcessingTouch = true;
+  touchDragState.element = eventElement;
+  touchDragState.eventId = eventId;
+  touchDragState.eventData = eventData;
+  touchDragState.startX = clientX;
+  touchDragState.startY = clientY;
+  touchDragState.currentX = clientX;
+  touchDragState.currentY = clientY;
+  touchDragState.isMouse = !e.touches;
+  touchDragState.originalCell = eventElement.closest(".cell.droppable");
+  touchDragState.originalPosition = eventElement.getBoundingClientRect();
+  touchDragState.touchStartTime = Date.now();
+  touchDragState.isDragging = false;
+  touchDragState.lastTouchStartTime = now;
+
+  eventElement.classList.add("touch-active");
+
+  touchDragState.activationTimer = setTimeout(() => {
+    if (!touchDragState.isDragging && touchDragState.element) {
+      activateTouchDrag(clientX, clientY);
+    }
+  }, TOUCH_DRAG_CONFIG.ACTIVATION_DELAY);
+
+  if (e.touches) {
+    document.addEventListener("touchmove", handleTouchMoveGlobal, { passive: false });
+    document.addEventListener("touchend", handleTouchEndGlobal, { passive: false });
+    document.addEventListener("touchcancel", handleTouchEndGlobal, { passive: false });
+  } else {
+    document.addEventListener("mousemove", handleMouseMoveInitial);
+    document.addEventListener("mouseup", handleMouseUpInitial);
+  }
+
+  if (navigator.vibrate && navigator.vibrate.length) {
+    try {
+      navigator.vibrate(TOUCH_DRAG_CONFIG.VIBRATION_SHORT);
+    } catch (err) {
+      // Игнорируем ошибки вибрации
+    }
+  }
+}
+
+function handleTouchMoveGlobal(e) {
+  if (!touchDragState.element) return;
+
+  const touch = e.touches ? e.touches[0] : e;
+  if (!touch) return;
+
+  const clientX = touch.clientX;
+  const clientY = touch.clientY;
+
+  // Проверяем валидность координат
+  if (typeof clientX !== 'number' || typeof clientY !== 'number' ||
+      isNaN(clientX) || isNaN(clientY)) {
+    return;
+  }
+
+  handleTouchMove(e, clientX, clientY);
+}
+
+function applyDoubleEventClasses() {
+  const scheduleEl = document.getElementById("schedule");
+  if (!scheduleEl) return;
+
+  const cells = scheduleEl.querySelectorAll('.cell.droppable');
+  
+  cells.forEach(cell => {
+    const events = cell.querySelectorAll('.event:not(.touch-drag-clone)');
+    
+    // Убираем все классы двойных событий
+    events.forEach(event => {
+      event.classList.remove('event-double', 'event-double-top', 'event-double-bottom');
+    });
+
+    // Если в ячейке ровно два события
+    if (events.length === 2) {
+      // Определяем порядок событий (можно по ID или по позиции в DOM)
+      const sortedEvents = Array.from(events).sort((a, b) => {
+        const aId = a.dataset.eid || a.closest('[data-eid]')?.dataset.eid;
+        const bId = b.dataset.eid || b.closest('[data-eid]')?.dataset.eid;
+        return (aId || '').localeCompare(bId || '');
+      });
+      
+      sortedEvents[0].classList.add('event-double', 'event-double-top');
+      sortedEvents[1].classList.add('event-double', 'event-double-bottom');
+    }
+  });
+}
+
+function renderEvent(eventData, cell) {
+  if (!cell || !eventData) return null;
+
+  // Проверяем, есть ли уже такое событие в ячейке
+  const existingEvent = cell.querySelector(`[data-eid="${eventData.id}"]`);
+  if (existingEvent) {
+    return existingEvent;
+  }
+
+  // Создаем элемент события
+  const eventDiv = document.createElement('div');
+  eventDiv.className = 'event';
+  eventDiv.dataset.eid = eventData.id;
+  
+  // Добавляем контент в зависимости от типа отображения
   const view = state.settings.display.cellView;
-  const font = state.settings.font;
-  const layout = state.settings.display;
+  
+  if (view === 'compact') {
+    eventDiv.classList.add('compact');
+    eventDiv.innerHTML = `
+      <div class="event-compact-content">
+        <div class="event-title">${escapeHtml(eventData.name)}</div>
+        ${eventData.teacher ? `<div class="event-teacher">${escapeHtml(eventData.teacher)}</div>` : ''}
+      </div>
+    `;
+  } else {
+    // Стандартный вид
+    eventDiv.innerHTML = `
+      <div class="event-content">
+        <div class="event-title">${escapeHtml(eventData.name)}</div>
+        ${eventData.teacher ? `<div class="event-teacher">${escapeHtml(eventData.teacher)}</div>` : ''}
+        ${eventData.location ? `<div class="event-location">${escapeHtml(eventData.location)}</div>` : ''}
+        ${eventData.type ? `<div class="event-type">${escapeHtml(eventData.type)}</div>` : ''}
+        <div class="event-time">${minToHHMM(eventData.startMin)} - ${minToHHMM(eventData.endMin)}</div>
+      </div>
+    `;
+    
+    // Добавляем цвет события, если есть
+    if (eventData.color) {
+      eventDiv.style.backgroundColor = eventData.color;
+      eventDiv.style.borderColor = eventData.color;
+    }
+  }
 
+  // Добавляем в ячейку
+  const slotInner = cell.querySelector('.slot-inner') || createSlotInner(cell);
+  slotInner.appendChild(eventDiv);
+
+  // Обновляем классы двойных событий для этой ячейки
+  updateDoubleEventClassesForCell(cell);
+  
+  return eventDiv;
+}
+
+function handleMouseMoveInitial(e) {
+  if (!touchDragState.element || touchDragState.isDragging) return;
+
+  const deltaX = Math.abs(e.clientX - touchDragState.startX);
+  const deltaY = Math.abs(e.clientY - touchDragState.startY);
+  const threshold = TOUCH_DRAG_CONFIG.MOUSE_ACTIVATION_THRESHOLD_PX;
+
+  if (deltaX > threshold || deltaY > threshold) {
+    document.removeEventListener("mousemove", handleMouseMoveInitial);
+    document.removeEventListener("mouseup", handleMouseUpInitial);
+
+    if (touchDragState.activationTimer) {
+      clearTimeout(touchDragState.activationTimer);
+      touchDragState.activationTimer = null;
+    }
+
+    activateTouchDrag(e.clientX, e.clientY);
+  }
+}
+
+function createSlotInner(cell) {
+  const slotInner = document.createElement('div');
+  slotInner.className = 'slot-inner';
+  cell.appendChild(slotInner);
+  return slotInner;
+}
+
+function updateDoubleEventClassesForCell(cell) {
+  if (!cell) return;
+  
+  const events = cell.querySelectorAll('.event:not(.touch-drag-clone)');
+  
+  // Убираем старые классы
+  events.forEach(event => {
+    event.classList.remove('event-double', 'event-double-top', 'event-double-bottom');
+  });
+
+  // Применяем новые классы если нужно
+  if (events.length === 2) {
+    const sortedEvents = Array.from(events).sort((a, b) => {
+      const aId = a.dataset.eid || a.closest('[data-eid]')?.dataset.eid;
+      const bId = b.dataset.eid || b.closest('[data-eid]')?.dataset.eid;
+      return (aId || '').localeCompare(bId || '');
+    });
+    
+    sortedEvents[0].classList.add('event-double', 'event-double-top');
+    sortedEvents[1].classList.add('event-double', 'event-double-bottom');
+  }
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function handleTouchMove(e, clientX, clientY) {
+  if (!touchDragState.element) return;
+
+  if (typeof clientX !== "number" || typeof clientY !== "number") {
+    const touch = e?.touches ? e.touches[0] : e;
+    if (!touch) return;
+    clientX = touch.clientX;
+    clientY = touch.clientY;
+  }
+
+  // Проверяем валидность координат
+  if (typeof clientX !== 'number' || typeof clientY !== 'number' ||
+      isNaN(clientX) || isNaN(clientY)) {
+    return;
+  }
+
+  touchDragState.currentX = clientX;
+  touchDragState.currentY = clientY;
+
+  if (!touchDragState.active && !touchDragState.isDragging) {
+    const deltaX = Math.abs(clientX - touchDragState.startX);
+    const deltaY = Math.abs(clientY - touchDragState.startY);
+    const threshold = touchDragState.isMouse
+      ? TOUCH_DRAG_CONFIG.MOUSE_ACTIVATION_THRESHOLD_PX
+      : TOUCH_DRAG_CONFIG.TOUCH_ACTIVATION_THRESHOLD_PX;
+
+    if (deltaX > threshold || deltaY > threshold) {
+      if (touchDragState.activationTimer) {
+        clearTimeout(touchDragState.activationTimer);
+        touchDragState.activationTimer = null;
+      }
+
+      if (!touchDragState.active) {
+        if (touchDragState.isMouse) {
+          activateTouchDrag(clientX, clientY);
+        } else {
+          cancelPendingTouchDrag();
+          return;
+        }
+      }
+    }
+  }
+
+  if (touchDragState.active) {
+    e.preventDefault();
+    e.stopPropagation();
+    updateTouchDragPosition(clientX, clientY);
+  }
+}
+
+function cancelPendingTouchDrag() {
+  if (touchDragState.activationTimer) {
+    clearTimeout(touchDragState.activationTimer);
+    touchDragState.activationTimer = null;
+  }
+
+  document.removeEventListener("touchmove", handleTouchMoveGlobal);
+  document.removeEventListener("touchend", handleTouchEndGlobal);
+  document.removeEventListener("touchcancel", handleTouchEndGlobal);
+
+  document.removeEventListener("mousemove", handleMouseMoveInitial);
+  document.removeEventListener("mouseup", handleMouseUpInitial);
+  document.removeEventListener("mousemove", handleInitialMouseMove);
+
+  if (touchDragState.element) {
+    touchDragState.element.classList.remove("touch-active");
+  }
+
+  touchDragState.active = false;
+  touchDragState.isDragging = false;
+  touchDragState.isProcessingTouch = false;
+  touchDragState.element = null;
+  touchDragState.eventId = null;
+  touchDragState.eventData = null;
+  touchDragState.targetCell = null;
+  touchDragState.originalCell = null;
+  touchDragState.feedback = null;
+  touchDragState.startX = 0;
+  touchDragState.startY = 0;
+  touchDragState.currentX = 0;
+  touchDragState.currentY = 0;
+}
+
+function handleMouseUpInitial(e) {
+  if (!touchDragState.isDragging) {
+    if (touchDragState.element && touchDragState.eventId) {
+      setTimeout(() => {
+        openEdit(touchDragState.eventId);
+      }, 150);
+    }
+    resetTouchDragState();
+  }
+
+  document.removeEventListener("mousemove", handleMouseMoveInitial);
+  document.removeEventListener("mouseup", handleMouseUpInitial);
+}
+
+function handleTouchEnd(e) {
+  if (touchDragState.activationTimer) {
+    clearTimeout(touchDragState.activationTimer);
+    touchDragState.activationTimer = null;
+  }
+
+  if (!touchDragState.active && !touchDragState.isDragging) {
+    const endTime = Date.now();
+    const duration = endTime - touchDragState.touchStartTime;
+    const movedX = Math.abs(touchDragState.currentX - touchDragState.startX);
+    const movedY = Math.abs(touchDragState.currentY - touchDragState.startY);
+
+    if (duration < 300 && movedX < 10 && movedY < 10 && touchDragState.eventId) {
+      setTimeout(() => {
+        openEdit(touchDragState.eventId);
+      }, 150);
+    }
+
+    resetTouchDragState();
+    return;
+  }
+
+  if (touchDragState.active) {
+    e.preventDefault();
+    e.stopPropagation();
+    completeTouchDrag();
+  }
+}
+
+function handleTouchCancel() {
+  if (touchDragState.activationTimer) {
+    clearTimeout(touchDragState.activationTimer);
+    touchDragState.activationTimer = null;
+  }
+
+  if (touchDragState.active) {
+    cancelTouchDrag();
+  } else {
+    resetTouchDragState();
+  }
+}
+
+function handleMouseDown(e) {
+    if (touchDragState.active || e.button !== 0) return;
+
+    const element = e.target.closest('.event');
+    if (!element) return;
+
+    const eventId = element.dataset.eid || element.closest('[data-eid]')?.dataset.eid;
+    if (!eventId) return;
+
+    const eventData = state.events.find(ev => ev.id === eventId);
+    if (!eventData) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    touchDragState.active = false;
+    touchDragState.element = element;
+    touchDragState.eventId = eventId;
+    touchDragState.eventData = eventData;
+    touchDragState.startX = e.clientX;
+    touchDragState.startY = e.clientY;
+    touchDragState.currentX = e.clientX;
+    touchDragState.currentY = e.clientY;
+    touchDragState.isMouse = true;
+    touchDragState.originalCell = element.closest('.cell.droppable');
+    touchDragState.originalPosition = element.getBoundingClientRect();
+    touchDragState.touchStartTime = Date.now();
+    touchDragState.isDragging = false;
+
+    element.classList.add('touch-active');
+
+    document.addEventListener('mousemove', handleInitialMouseMove);
+}
+
+function handleInitialMouseMove(e) {
+    if (!touchDragState.element || touchDragState.active) return;
+
+    const deltaX = Math.abs(e.clientX - touchDragState.startX);
+    const deltaY = Math.abs(e.clientY - touchDragState.startY);
+
+    if (deltaX > TOUCH_DRAG_CONFIG.MOUSE_ACTIVATION_THRESHOLD_PX ||
+        deltaY > TOUCH_DRAG_CONFIG.MOUSE_ACTIVATION_THRESHOLD_PX) {
+        document.removeEventListener('mousemove', handleInitialMouseMove);
+        activateTouchDrag(e.clientX, e.clientY);
+    }
+}
+
+function handleMouseMove(e) {
+  if (!touchDragState.active || !touchDragState.isMouse) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+  updateTouchDragPosition(e.clientX, e.clientY);
+}
+
+function handleTouchEndGlobal(e) {
+  handleTouchEnd(e);
+
+  document.removeEventListener("touchmove", handleTouchMoveGlobal);
+  document.removeEventListener("touchend", handleTouchEndGlobal);
+  document.removeEventListener("touchcancel", handleTouchEndGlobal);
+}
+
+function handleMouseUp(e) {
+    if (!touchDragState.isMouse) return;
+
+    document.removeEventListener('mousemove', handleInitialMouseMove);
+
+    if (touchDragState.active) {
+        e.preventDefault();
+        e.stopPropagation();
+        completeTouchDrag();
+    } else {
+        if (touchDragState.element && touchDragState.eventId) {
+            setTimeout(() => {
+                openEdit(touchDragState.eventId);
+            }, 150);
+        }
+        resetTouchDragState();
+    }
+}
+
+function activateTouchDrag(x, y) {
+  if (!touchDragState.element || touchDragState.active) return;
+
+  console.log("[TouchDnD] Активация перетаскивания");
+
+  touchDragState.active = true;
+  touchDragState.isDragging = true;
+
+  createDragClone();
+  createCancelZone();
+  updateTouchDragPosition(x, y);
+
+  document.body.classList.add("drag-active");
+  touchDragState.element.classList.add("dragging-touch");
+  touchDragState.originalCell?.classList.add("drag-source");
+
+  if (window.Sortable && touchDragState.container) {
+    touchDragState.container.classList.add("touch-drag-active");
+  }
+
+  document.addEventListener("contextmenu", handleContextMenuCancel);
+  document.addEventListener("keydown", handleEscapeCancel);
+}
+
+function createDragClone() {
+  const clone = touchDragState.element.cloneNode(true);
+  clone.classList.add("touch-drag-clone");
+
+  // УБРАТЬ !important из transition
+  clone.style.cssText = `
+    position: fixed;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0.9;
+    transform: scale(1.05) translate(-50%, -50%);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    width: ${touchDragState.originalPosition.width}px;
+    height: ${touchDragState.originalPosition.height}px;
+    left: ${touchDragState.originalPosition.left}px;
+    top: ${touchDragState.originalPosition.top}px;
+    transition: transform 0.2s, opacity 0.2s;
+  `;
+
+  document.body.appendChild(clone);
+  touchDragState.clone = clone;
+}
+
+function createCancelZone() {
+  const zone = document.createElement("div");
+  zone.className = "drag-cancel-zone";
+  zone.innerHTML = "×<br><small>Отмена</small>";
+
+  zone.style.cssText = `
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    width: ${TOUCH_DRAG_CONFIG.CANCEL_ZONE_SIZE}px;
+    height: ${TOUCH_DRAG_CONFIG.CANCEL_ZONE_SIZE}px;
+    border-radius: 50%;
+    background-color: rgba(239, 68, 68, 0.9);
+    color: white;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s, transform 0.2s;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    border: 2px solid white;
+  `;
+
+  document.body.appendChild(zone);
+  touchDragState.cancelZone = zone;
+
+  setTimeout(() => {
+    if (touchDragState.cancelZone) {
+      touchDragState.cancelZone.style.opacity = "1";
+    }
+  }, 100);
+}
+
+function updateTouchDragPosition(x, y) {
+  if (!touchDragState.active || !touchDragState.clone) return;
+
+  console.log("[TouchDnD] updateTouchDragPosition:", x, y);
+
+  touchDragState.currentX = x;
+  touchDragState.currentY = y;
+
+  if (!isNaN(x) && !isNaN(y)) {
+    touchDragState.clone.style.left = `${x}px`;
+    touchDragState.clone.style.top = `${y}px`;
+  }
+
+  if (touchDragState.cancelZone) {
+    const zoneRect = touchDragState.cancelZone.getBoundingClientRect();
+    const centerX = zoneRect.left + zoneRect.width / 2;
+    const centerY = zoneRect.top + zoneRect.height / 2;
+    const distance = Math.sqrt(Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2));
+    const activationRadius = zoneRect.width / 2 + 30;
+
+    if (distance < activationRadius) {
+      touchDragState.cancelZone.style.transform = "scale(1.2)";
+      touchDragState.cancelZone.style.backgroundColor = "rgba(220, 38, 38, 0.95)";
+    } else {
+      touchDragState.cancelZone.style.transform = "scale(1)";
+      touchDragState.cancelZone.style.backgroundColor = "rgba(239, 68, 68, 0.9)";
+    }
+  }
+
+  const targetCell = findTargetCellUnderPoint(x, y);
+  updateTargetCellHighlight(targetCell);
+  
+  // Всегда вызываем автопрокрутку
+  handleAutoScroll(x, y);
+  
+  touchDragState.lastMoveTime = Date.now();
+  console.log("[TouchDnD] Координаты:", x, y, "Направления:", 
+  touchDragState.autoScrollDirection, touchDragState.autoScrollDirectionX);
+}
+
+function findTargetCellUnderPoint(x, y) {
+  if (touchDragState.clone) {
+    touchDragState.clone.style.display = "none";
+  }
+
+  let element;
+  try {
+    element = document.elementFromPoint(x, y);
+  } catch (err) {
+    return null;
+  } finally {
+    if (touchDragState.clone) {
+      touchDragState.clone.style.display = "block";
+    }
+  }
+
+  if (!element) return null;
+
+  const cell = element.closest(".cell.droppable");
+  if (!cell) return null;
+
+  const scheduleEl = document.getElementById("schedule");
+  if (!scheduleEl || !scheduleEl.contains(cell)) return null;
+
+  return cell;
+}
+
+function updateTargetCellHighlight(targetCell) {
+  if (touchDragState.targetCell && touchDragState.targetCell !== targetCell) {
+    touchDragState.targetCell.classList.remove("drop-target-valid", "drop-target-invalid");
+  }
+
+  touchDragState.targetCell = targetCell;
+
+  if (!targetCell) return;
+
+  const currentEvents = targetCell.querySelectorAll(".event:not(.dragging-touch)").length;
+  const maxPerCell = state.settings.schedule.maxPerCell || 2;
+
+  if (currentEvents < maxPerCell) {
+    targetCell.classList.add("drop-target-valid");
+    targetCell.classList.remove("drop-target-invalid");
+
+    if (touchDragState.eventData) {
+      previewRowHeightForDrag(targetCell, touchDragState.eventData);
+    }
+  } else {
+    targetCell.classList.add("drop-target-invalid");
+    targetCell.classList.remove("drop-target-valid");
+  }
+}
+
+function previewRowHeightForDrag(targetCell, eventData) {
+    if (!targetCell) return;
+
+    const slotIndex = targetCell.dataset.slotIndex;
+    if (!slotIndex) return;
+
+    // ДОБАВЛЯЕМ обратно обновление высоты строки
+    touchDragState.pendingRowUpdates.add(parseInt(slotIndex));
+
+    // Откладываем обновление для группировки
+    if (touchDragState.rowUpdateTimeout) {
+        clearTimeout(touchDragState.rowUpdateTimeout);
+    }
+
+    touchDragState.rowUpdateTimeout = setTimeout(() => {
+        if (touchDragState.active && touchDragState.pendingRowUpdates.size > 0) {
+            touchDragState.pendingRowUpdates.forEach(idx => {
+                rerenderRowBySlotIndex(idx);
+            });
+            touchDragState.pendingRowUpdates.clear();
+        }
+    }, 30);
+}
+
+function handleAutoScroll(x, y) {
+  if (!touchDragState.active) return;
+
+  const edgeSize = 100;
+  const scrollContainer = getAutoScrollContainer();
+
+  touchDragState.autoScrollDirection = 0;
+  touchDragState.autoScrollDirectionX = 0;
+
+  if (scrollContainer) {
+    const rect = scrollContainer.getBoundingClientRect();
+
+    if (y < rect.top + edgeSize && scrollContainer.scrollTop > 0) {
+      touchDragState.autoScrollDirection = -1;
+    } else if (
+      y > rect.bottom - edgeSize &&
+      scrollContainer.scrollTop + scrollContainer.clientHeight < scrollContainer.scrollHeight
+    ) {
+      touchDragState.autoScrollDirection = 1;
+    }
+
+    if (x < rect.left + edgeSize && scrollContainer.scrollLeft > 0) {
+      touchDragState.autoScrollDirectionX = -1;
+    } else if (
+      x > rect.right - edgeSize &&
+      scrollContainer.scrollLeft + scrollContainer.clientWidth < scrollContainer.scrollWidth
+    ) {
+      touchDragState.autoScrollDirectionX = 1;
+    }
+  } else {
+    if (y < edgeSize && window.scrollY > 0) {
+      touchDragState.autoScrollDirection = -1;
+    } else if (
+      y > window.innerHeight - edgeSize &&
+      window.scrollY + window.innerHeight < document.documentElement.scrollHeight
+    ) {
+      touchDragState.autoScrollDirection = 1;
+    }
+
+    if (x < edgeSize && window.scrollX > 0) {
+      touchDragState.autoScrollDirectionX = -1;
+    } else if (
+      x > window.innerWidth - edgeSize &&
+      window.scrollX + window.innerWidth < document.documentElement.scrollWidth
+    ) {
+      touchDragState.autoScrollDirectionX = 1;
+    }
+  }
+
+  if (touchDragState.autoScrollDirection !== 0 || touchDragState.autoScrollDirectionX !== 0) {
+    startAutoScroll();
+  } else {
+    stopAutoScroll();
+  }
+}
+
+function getAutoScrollContainer() {
+  return document.querySelector(".schedule-wrap");
+}
+
+function startAutoScroll() {
+  if (touchDragState.autoScrollInterval) return;
+  
+  console.log("[TouchDnD] Старт автопрокрутки");
+  
+  const speed = 20;
+  const scrollContainer = getAutoScrollContainer();
+  
+  touchDragState.autoScrollInterval = setInterval(() => {
+    if (!touchDragState.active || 
+        (touchDragState.autoScrollDirection === 0 && touchDragState.autoScrollDirectionX === 0)) {
+      stopAutoScroll();
+      return;
+    }
+    
+    try {
+      if (scrollContainer) {
+        scrollContainer.scrollBy({
+          left: touchDragState.autoScrollDirectionX * speed,
+          top: touchDragState.autoScrollDirection * speed,
+          behavior: "auto",
+        });
+      } else {
+        window.scrollBy({
+          left: touchDragState.autoScrollDirectionX * speed,
+          top: touchDragState.autoScrollDirection * speed,
+          behavior: "auto",
+        });
+      }
+    } catch (error) {
+      console.error("[TouchDnD] Ошибка прокрутки:", error);
+      stopAutoScroll();
+    }
+  }, 50); // Увеличить интервал для лучшей производительности
+}
+
+function completeTouchDrag() {
+  if (!touchDragState.active) return;
+
+  console.log("[TouchDnD] Завершение перетаскивания");
+
+  // Проверяем зону отмены
+  if (touchDragState.cancelZone) {
+    const zoneRect = touchDragState.cancelZone.getBoundingClientRect();
+    const centerX = zoneRect.left + zoneRect.width / 2;
+    const centerY = zoneRect.top + zoneRect.height / 2;
+    const distance = Math.sqrt(
+      Math.pow(touchDragState.currentX - centerX, 2) + 
+      Math.pow(touchDragState.currentY - centerY, 2)
+    );
+    const activationRadius = zoneRect.width / 2 + 30;
+
+    if (distance < activationRadius) {
+      console.log("[TouchDnD] Отмена в зоне отмены");
+      cancelTouchDrag();
+      return;
+    }
+  }
+
+  // Проверяем наличие данных для перемещения
+  if (!touchDragState.eventId || !touchDragState.eventData) {
+    console.error("[TouchDnD] Нет данных для перемещения");
+    resetTouchDragState();
+    return;
+  }
+
+  if (touchDragState.targetCell) {
+    const dayIndex = touchDragState.targetCell.dataset.dayIndex;
+
+    if (dayIndex !== undefined) {
+      let slotStart = 0;
+      const slotIndex = touchDragState.targetCell.dataset.slotIndex;
+
+      if (slotIndex !== undefined) {
+        const scheduleEl = document.getElementById("schedule");
+        const timeCells = scheduleEl.querySelectorAll(".cell.time");
+
+        for (let i = 0; i < timeCells.length; i++) {
+          if (parseInt(timeCells[i].dataset.slotIndex) === parseInt(slotIndex)) {
+            const timeText = timeCells[i].textContent;
+            slotStart = parseHHMM(timeText) || 0;
+            break;
+          }
+        }
+      } else {
+        slotStart = touchDragState.eventData.startMin;
+      }
+
+      const currentEvents = touchDragState.targetCell.querySelectorAll(".event:not(.dragging-touch)").length;
+      const maxPerCell = state.settings.schedule.maxPerCell || 2;
+
+      if (currentEvents < maxPerCell) {
+        console.log("[TouchDnD] Перемещение разрешено, выполняем");
+        
+        const eventId = touchDragState.eventId;
+        const dayIndexToMove = parseInt(dayIndex);
+        const slotStartToMove = slotStart;
+        
+        cleanupDragVisuals();
+        
+        setTimeout(() => {
+          smartMoveEvent(
+            eventId,
+            dayIndexToMove,
+            slotStartToMove,
+            "Перемещение drag&drop"
+          );
+          
+          setTimeout(() => {
+            resetTouchDragState();
+          }, 100);
+          
+        }, 50);
+
+        if (navigator.vibrate) {
+          try {
+            navigator.vibrate([50, 30, 50]);
+          } catch (err) {}
+        }
+        return;
+      } else {
+        toast("ERR", "Ошибка", "В этой ячейке уже максимальное количество событий");
+      }
+    } else {
+      toast("ERR", "Ошибка", "Не удалось определить целевую ячейку");
+    }
+  }
+
+  console.log("[TouchDnD] Перемещение не удалось, возвращаем на место");
+  cancelTouchDrag();
+}
+
+function cleanupDragVisuals() {
+  console.log("[TouchDnD] Очистка визуальных элементов");
+  
+  if (touchDragState.clone && touchDragState.clone.parentNode) {
+    const clone = touchDragState.clone;
+    if (clone.parentNode) {
+      clone.parentNode.removeChild(clone);
+    }
+    touchDragState.clone = null;
+  }
+
+  if (touchDragState.cancelZone && touchDragState.cancelZone.parentNode) {
+    touchDragState.cancelZone.parentNode.removeChild(touchDragState.cancelZone);
+    touchDragState.cancelZone = null;
+  }
+
+  document.body.classList.remove("drag-active");
+  
+  if (touchDragState.element) {
+    touchDragState.element.classList.remove("dragging-touch", "touch-active");
+  }
+
+  if (touchDragState.originalCell) {
+    touchDragState.originalCell.classList.remove("drag-source");
+  }
+
+  if (touchDragState.targetCell) {
+    touchDragState.targetCell.classList.remove("drop-target-valid", "drop-target-invalid");
+  }
+
+  if (window.Sortable && touchDragState.hadSortableInstances && touchDragState.container) {
+    touchDragState.container.classList.remove("touch-drag-active");
+  }
+}
+
+function cancelTouchDrag() {
+  console.log("[TouchDnD] Отмена перетаскивания");
+
+  if (navigator.vibrate) {
+    navigator.vibrate(TOUCH_DRAG_CONFIG.VIBRATION_CANCEL);
+  }
+
+  cleanupDragVisuals();
+  setTimeout(() => {
+    resetTouchDragState();
+  }, 100);
+}
+
+
+function returnToOriginalPosition() {
+  if (!touchDragState.element || !touchDragState.originalCell) return;
+
+  const clone = touchDragState.clone;
+  if (clone) {
+    const rect = touchDragState.element.getBoundingClientRect();
+    const originalX = rect.left;
+    const originalY = rect.top;
+
+    clone.style.transition = "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)";
+    clone.style.left = `${originalX}px`;
+    clone.style.top = `${originalY}px`;
+    clone.style.opacity = "0.7";
+    clone.style.transform = "scale(0.9) translate(-50%, -50%)";
+    
+    setTimeout(() => {
+      if (clone && clone.parentNode) {
+        clone.style.opacity = "0";
+      }
+    }, 250);
+  }
+}
+
+function resetTouchDragState() {
+  console.log("[TouchDnD] Сброс состояния перетаскивания");
+
+  // Останавливаем все таймеры и интервалы
+  if (touchDragState.activationTimer) {
+    clearTimeout(touchDragState.activationTimer);
+    touchDragState.activationTimer = null;
+  }
+
+  if (touchDragState.rowUpdateTimeout) {
+    clearTimeout(touchDragState.rowUpdateTimeout);
+    touchDragState.rowUpdateTimeout = null;
+  }
+
+  stopAutoScroll();
+
+  // Удаляем клон, если он еще есть
+  if (touchDragState.clone && touchDragState.clone.parentNode) {
+    console.log("[TouchDnD] Удаление клона");
+    const clone = touchDragState.clone;
+    if (clone.parentNode) {
+      clone.parentNode.removeChild(clone);
+    }
+    touchDragState.clone = null;
+  }
+
+  // Удаляем зону отмены
+  if (touchDragState.cancelZone && touchDragState.cancelZone.parentNode) {
+    touchDragState.cancelZone.parentNode.removeChild(touchDragState.cancelZone);
+    touchDragState.cancelZone = null;
+  }
+
+  // Отписываемся от глобальных обработчиков
+  document.removeEventListener("touchmove", handleTouchMoveGlobal);
+  document.removeEventListener("touchend", handleTouchEndGlobal);
+  document.removeEventListener("touchcancel", handleTouchEndGlobal);
+  
+  document.removeEventListener("mousemove", handleMouseMoveInitial);
+  document.removeEventListener("mouseup", handleMouseUpInitial);
+  document.removeEventListener("mousemove", handleInitialMouseMove);
+
+  // Снимаем классы
+  document.body.classList.remove("drag-active");
+
+  if (touchDragState.element) {
+    touchDragState.element.classList.remove("dragging-touch", "touch-active");
+  }
+
+  if (touchDragState.originalCell) {
+    touchDragState.originalCell.classList.remove("drag-source");
+  }
+
+  if (touchDragState.targetCell) {
+    touchDragState.targetCell.classList.remove("drop-target-valid", "drop-target-invalid");
+  }
+
+  if (window.Sortable && touchDragState.hadSortableInstances && touchDragState.container) {
+    touchDragState.container.classList.remove("touch-drag-active");
+  }
+
+  // Обновляем высоты строк после завершения перетаскивания
+  setTimeout(() => {
+    if (touchDragState.pendingRowUpdates.size > 0) {
+      touchDragState.pendingRowUpdates.forEach(slotIndex => {
+        rerenderRowBySlotIndex(slotIndex);
+      });
+      touchDragState.pendingRowUpdates.clear();
+    }
+    requestRowHeightSync();
+  }, 100);
+
+  // Отписываемся от дополнительных обработчиков
+  document.removeEventListener("contextmenu", handleContextMenuCancel);
+  document.removeEventListener("keydown", handleEscapeCancel);
+
+  // Сбрасываем состояние
+  touchDragState.active = false;
+  touchDragState.isDragging = false;
+  touchDragState.isProcessingTouch = false;
+  touchDragState.element = null;
+  touchDragState.eventId = null;
+  touchDragState.eventData = null;
+  touchDragState.targetCell = null;
+  touchDragState.originalCell = null;
+  touchDragState.feedback = null;
+  touchDragState.startX = 0;
+  touchDragState.startY = 0;
+  touchDragState.currentX = 0;
+  touchDragState.currentY = 0;
+  touchDragState.autoScrollDirection = 0;
+  touchDragState.autoScrollDirectionX = 0;
+
+  console.log("[TouchDnD] Состояние сброшено");
+}
+
+function stopAutoScroll() {
+  if (touchDragState.autoScrollInterval) {
+    clearInterval(touchDragState.autoScrollInterval);
+    touchDragState.autoScrollInterval = null;
+  }
+  touchDragState.autoScrollDirection = 0;
+  touchDragState.autoScrollDirectionX = 0;
+}
+
+function rerenderRowBySlotIndex(slotIndex) {
+    const scheduleEl = document.getElementById('schedule');
+    if (!scheduleEl) return;
+
+    const rowCells = scheduleEl.querySelectorAll(`.cell.droppable[data-slot-index="${slotIndex}"]`);
+    if (!rowCells.length) return;
+
+    const minRowH = getEffectiveMinRowHeight();
+    let maxHeight = minRowH;
+    const measured = [];
+
+    rowCells.forEach(cell => {
+        cell.style.minHeight = `${minRowH}px`;
+        cell.style.height = "auto";
+
+        const slotInner = cell.querySelector('.slot-inner');
+        if (!slotInner) return;
+
+        const events = Array.from(slotInner.querySelectorAll('.event:not(.touch-drag-clone)'));
+        const isDouble = events.length === 2;
+
+        const cs = getComputedStyle(cell);
+        const padY =
+          (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+
+        if (isDouble) {
+            slotInner.style.display = 'flex';
+            slotInner.style.flexDirection = 'column';
+            slotInner.style.gap = `${CELL_HEIGHT_CONFIG.EVENT_GAP}px`;
+            slotInner.style.height = 'auto';
+            slotInner.style.minHeight = 'auto';
+        } else {
+            slotInner.style.display = '';
+            slotInner.style.flexDirection = '';
+            slotInner.style.gap = '';
+            slotInner.style.height = '';
+            slotInner.style.minHeight = '';
+        }
+
+        events.forEach(ev => {
+            ev.style.height = "auto";
+            ev.style.minHeight = "auto";
+            ev.style.maxHeight = "none";
+        });
+
+        let contentHeight = minRowH;
+        if (events.length === 1) {
+            const h = measureEventHeight(
+              events[0],
+              CELL_HEIGHT_CONFIG.TITLE_LINES,
+              CELL_HEIGHT_CONFIG.META_LINES,
+            );
+            contentHeight = h + padY;
+        } else if (events.length === 2) {
+            const h1 = measureEventHeight(
+              events[0],
+              CELL_HEIGHT_CONFIG.DOUBLE_TITLE_LINES,
+              CELL_HEIGHT_CONFIG.DOUBLE_META_LINES,
+            );
+            const h2 = measureEventHeight(
+              events[1],
+              CELL_HEIGHT_CONFIG.DOUBLE_TITLE_LINES,
+              CELL_HEIGHT_CONFIG.DOUBLE_META_LINES,
+            );
+            const maxEv = Math.max(h1, h2, CELL_HEIGHT_CONFIG.MIN_EVENT_HEIGHT);
+            contentHeight = (maxEv * 2) + CELL_HEIGHT_CONFIG.EVENT_GAP + padY;
+        } else {
+            contentHeight = minRowH;
+        }
+
+        if (contentHeight > maxHeight) {
+            maxHeight = contentHeight;
+        }
+
+        measured.push({ slotInner, events, isDouble, padY });
+    });
+
+    // Гарантируем минимальную высоту строки
+    maxHeight = Math.max(maxHeight, minRowH);
+
+    // Устанавливаем высоту для всех ячеек в строке
+    rowCells.forEach(cell => {
+        cell.style.height = `${maxHeight}px`;
+        cell.style.minHeight = `${maxHeight}px`;
+    });
+
+    const timeCell = scheduleEl.querySelector(
+      `.cell.time[data-slot-index="${slotIndex}"]:not(.head)`
+    );
+    if (timeCell) {
+        timeCell.style.height = `${maxHeight}px`;
+        timeCell.style.minHeight = `${maxHeight}px`;
+    }
+    measured.forEach(({ slotInner, events, isDouble, padY }) => {
+        if (!slotInner) return;
+
+        if (isDouble && events.length === 2) {
+            const available =
+              Math.max(0, maxHeight - padY - CELL_HEIGHT_CONFIG.EVENT_GAP);
+            const eventH = Math.max(
+              CELL_HEIGHT_CONFIG.MIN_EVENT_HEIGHT,
+              Math.floor(available / 2),
+            );
+
+            slotInner.style.display = 'flex';
+            slotInner.style.flexDirection = 'column';
+            slotInner.style.gap = `${CELL_HEIGHT_CONFIG.EVENT_GAP}px`;
+            slotInner.style.height = '';
+            slotInner.style.minHeight = '';
+
+            events.forEach(ev => {
+                applyTitleStyles(ev, CELL_HEIGHT_CONFIG.DOUBLE_TITLE_LINES);
+                applyMetaStyles(ev, CELL_HEIGHT_CONFIG.DOUBLE_META_LINES);
+                ev.style.height = `${eventH}px`;
+                ev.style.minHeight = `${eventH}px`;
+                ev.style.maxHeight = `${eventH}px`;
+                ev.style.flex = "0 0 auto";
+                ev.style.overflow = "hidden";
+            });
+        } else if (events.length === 1) {
+            const ev = events[0];
+            applyTitleStyles(ev, CELL_HEIGHT_CONFIG.TITLE_LINES);
+            applyMetaStyles(ev, CELL_HEIGHT_CONFIG.META_LINES);
+            ev.style.height = "";
+            ev.style.minHeight = "";
+            ev.style.maxHeight = "";
+            ev.style.flex = "";
+            ev.style.overflow = "";
+        } else {
+            slotInner.style.display = '';
+            slotInner.style.flexDirection = '';
+            slotInner.style.gap = '';
+            slotInner.style.height = '';
+            slotInner.style.minHeight = '';
+        }
+    });
+    
+    console.log(`[TouchDnD] Строка ${slotIndex}: высота=${maxHeight}px`);
+}
+
+function initializeAllRowHeights() {
+  const scheduleEl = document.getElementById("schedule");
+  if (!scheduleEl) return;
+
+  console.log("[TouchDnD] Инициализация высот строк");
+
+  // Устанавливаем минимальную высоту всем ячейкам
+  const allCells = scheduleEl.querySelectorAll(".cell.droppable");
+  const minRowH = getEffectiveMinRowHeight();
+  allCells.forEach(cell => {
+    cell.style.minHeight = `${minRowH}px`;
+    // Сначала ставим минимальную высоту
+    cell.style.height = `${minRowH}px`;
+  });
+
+  // Собираем уникальные индексы строк
+  const slotIndices = new Set();
+  const cells = scheduleEl.querySelectorAll(".cell.droppable[data-slot-index]");
+
+  cells.forEach(cell => {
+    const slotIndex = cell.dataset.slotIndex;
+    if (slotIndex !== undefined) {
+      slotIndices.add(parseInt(slotIndex));
+    }
+  });
+
+  console.log(`[TouchDnD] Найдено строк: ${slotIndices.size}`);
+
+  // Вычисляем и устанавливаем реальные высоты строк
+  slotIndices.forEach(slotIndex => {
+    rerenderRowBySlotIndex(slotIndex);
+  });
+
+  // Применяем классы для двойных событий
+  applyDoubleEventClasses();
+}
+function addEventToDOM(eventData) {
+    renderSchedule();
+}
+
+function removeEventFromDOM(eventId) {
+    renderSchedule();
+}
+
+function handleContextMenuCancel(e) {
+  if (!touchDragState.active) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+  cancelTouchDrag();
+  return false;
+}
+
+function handleEscapeCancel(e) {
+  if (!touchDragState.active || e.key !== 'Escape') return;
+
+  e.preventDefault();
+  e.stopPropagation();
+  cancelTouchDrag();
+}
+
+function handleWindowLeave(e) {
+  if (!touchDragState.active) return;
+
+  if (e.clientY < 0 || e.clientX < 0 ||
+      e.clientX > window.innerWidth || e.clientY > window.innerHeight) {
+    cancelTouchDrag();
+  }
+}
+
+function handleWindowBlur() {
+  if (touchDragState.active) {
+    cancelTouchDrag();
+  }
+}
+
+function handleBeforeUnload(e) {
+  if (touchDragState.active) {
+    returnToOriginalPosition();
+    resetTouchDragState();
+  }
+}
+
+function updateEventInDOM(eventData) {
+    renderSchedule();
+}
+
+function getSlotIndexForTime(startMin) {
+    const scheduleEl = document.getElementById('schedule');
+    if (!scheduleEl) return -1;
+
+    const timeCells = scheduleEl.querySelectorAll('.cell.time');
+    for (let i = 0; i < timeCells.length; i++) {
+        const timeText = timeCells[i].textContent;
+        const cellStart = parseHHMM(timeText) || 0;
+        const { step } = getBounds();
+
+        if (startMin >= cellStart && startMin < cellStart + step) {
+            return parseInt(timeCells[i].dataset.slotIndex || i);
+        }
+    }
+
+    return -1;
+}
+
+function scheduleRowHeightUpdate(slotIndex) {
+    if (touchDragState.active) {
+        touchDragState.pendingRowUpdates.add(slotIndex);
+        return;
+    }
+
+    // Используем requestAnimationFrame для плавного обновления
+    requestAnimationFrame(() => {
+        rerenderRowBySlotIndex(slotIndex);
+    });
+}
+
+function debugScheduleStructure() {
+    const scheduleEl = document.getElementById('schedule');
+    if (!scheduleEl) {
+        console.error('[TouchDnD] Элемент #schedule не найден');
+        return;
+    }
+
+    const cells = scheduleEl.querySelectorAll('.cell.droppable');
+    console.log(`[TouchDnD] Найдено ячеек: ${cells.length}`);
+
+    cells.forEach((cell, index) => {
+        const dayIndex = cell.dataset.dayIndex;
+        const slotIndex = cell.dataset.slotIndex;
+        const events = cell.querySelectorAll('.event').length;
+
+        console.log(`[TouchDnD] Ячейка ${index}: day=${dayIndex}, slot=${slotIndex}, events=${events}`);
+    });
+}
+
+function debugRowHeights(slotIndex) {
+    const scheduleEl = document.getElementById('schedule');
+    if (!scheduleEl) return;
+
+    const rowCells = scheduleEl.querySelectorAll(`.cell.droppable[data-slot-index="${slotIndex}"]`);
+    console.log(`[TouchDnD] Отладка строки ${slotIndex}: ${rowCells.length} ячеек`);
+
+    rowCells.forEach((cell, index) => {
+        const height = cell.offsetHeight;
+        const styleHeight = cell.style.height;
+        const events = cell.querySelectorAll('.event').length;
+
+        console.log(`[TouchDnD] Ячейка ${index}: height=${height}px, style=${styleHeight}, events=${events}`);
+    });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  console.log("[TouchDnD] Загрузка системы Drag-and-Drop");
+  setTimeout(() => {
+    initTouchDragSafe();
+    requestRowHeightSync(true);
+  }, 100);
+
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(() => {
+      requestRowHeightSync(true);
+    });
+  }
+});
+
+const originalRenderAll = window.renderAll;
+window.renderAll = function() {
+  if (originalRenderAll) {
+    originalRenderAll.apply(this, arguments);
+  }
+
+  // Не инициализируем DnD при каждом рендере, только если нужно
+  setTimeout(() => {
+    const scheduleEl = document.getElementById("schedule");
+    if (scheduleEl && !touchDragState.container) {
+      initTouchDragSafe();
+    }
+    // Всегда обновляем высоты при рендере
+    initializeAllRowHeights();
+  }, 50);
+};
+
+window.TouchDragSystem = {
+    init: initTouchDragSafe,
+    reset: resetTouchDragState,
+    debug: () => console.log(touchDragState),
+    addEvent: addEventToDOM,
+    removeEvent: removeEventFromDOM,
+    updateEvent: updateEventInDOM,
+    getRowHeight: rerenderRowBySlotIndex,
+    initializeHeights: initializeAllRowHeights
+};
+
+console.log('[TouchDnD] Система Drag-and-Drop загружена');
+
+function smartMoveEvent(id, toDay, toSlotStart, reason) {
+    if (!id) {
+        console.error("[smartMoveEvent] ID события не указан");
+        return;
+    }
+    
+    console.log(`[smartMoveEvent] Начало: id=${id}, toDay=${toDay}, toSlotStart=${toSlotStart}, reason=${reason}`);
+
+    const eventIndex = state.events.findIndex(e => e.id === id);
+    if (eventIndex === -1) {
+        console.error("[smartMoveEvent] Событие не найдено");
+        toast("ERR", "Ошибка", "Событие не найдено", 2000);
+        return;
+    }
+
+    const ev = state.events[eventIndex];
+
+    if (ev.dayIndex === toDay && ev.startMin === toSlotStart) {
+        console.log("[smartMoveEvent] Событие уже находится на этом месте");
+        toast("INFO", "Без изменений", "Событие уже находится на этом месте", 1500);
+        return;
+    }
+
+    const view = state.settings.display.cellView;
+    if (view !== "compact") {
+        const { step } = getBounds();
+        const slotEnd = toSlotStart + step;
+
+        const eventsInTargetCell = state.events.filter(e =>
+            e.id !== id &&
+            e.dayIndex === toDay &&
+            e.startMin >= toSlotStart &&
+            e.startMin < slotEnd
+        );
+
+        const maxPerCell = state.settings.schedule.maxPerCell || 2;
+        if (eventsInTargetCell.length >= maxPerCell) {
+            console.error("[smartMoveEvent] Ячейка переполнена");
+            toast("ERR", "Ошибка", "Ячейка переполнена", 3000);
+            return;
+        }
+    }
+
+    const oldDayIndex = ev.dayIndex;
+    const oldStartMin = ev.startMin;
+
+    try {
+        state.events[eventIndex].dayIndex = toDay;
+        state.events[eventIndex].startMin = toSlotStart;
+
+        saveState(true);
+
+        // Вызываем перерисовку расписания
+        renderSchedule();
+
+        const dayName = DAYS[toDay] || `День ${toDay + 1}`;
+        const timeStr = minToHHMM(toSlotStart);
+        toast("OK", "Перемещено", `${ev.name} → ${dayName} ${timeStr}`, 2000);
+
+        console.log(`[smartMoveEvent] Успешно перемещено: ${ev.name}`);
+
+    } catch (error) {
+        console.error("[smartMoveEvent] Ошибка:", error);
+        state.events[eventIndex].dayIndex = oldDayIndex;
+        state.events[eventIndex].startMin = oldStartMin;
+        toast("ERR", "Ошибка", "Не удалось переместить событие", 2000);
+    }
+}
+
+function getTargetCellForMove(toDay, toSlotStart) {
+    const scheduleEl = document.getElementById("schedule");
+    if (!scheduleEl) return null;
+
+    const view = state.settings.display.cellView;
+    if (view === "compact") {
+        return scheduleEl.querySelector(`.cell.droppable[data-day-index="${toDay}"]`);
+    }
+
+    const slotIndex = getSlotIndexForTime(toSlotStart);
+    if (slotIndex === -1) return null;
+
+    return scheduleEl.querySelector(
+        `.cell.droppable[data-day-index="${toDay}"][data-slot-index="${slotIndex}"]`
+    );
+}
+
+function ensureEmptyHintForCell(cell) {
+    if (!cell) return;
+    const slotInner = cell.querySelector(".slot-inner") || createSlotInner(cell);
+    const events = slotInner.querySelectorAll(".event:not(.touch-drag-clone)");
+    slotInner.querySelectorAll(".empty-slot").forEach((el) => el.remove());
+
+    if (events.length === 0 && state.settings.display.showEmptyHint) {
+        const hint = document.createElement("div");
+        hint.className = "empty-slot";
+        hint.textContent =
+            state.settings.display.cellView === "compact"
+                ? "Нет занятий"
+                : "Клик для добавления";
+        slotInner.appendChild(hint);
+    }
+}
+
+function updateCellDoubleState(cell) {
+    if (!cell) return;
+    const slotInner = cell.querySelector(".slot-inner");
+    if (!slotInner) return;
+
+    const events = slotInner.querySelectorAll(".event:not(.touch-drag-clone)");
+    const slot = cell.querySelector(".slot");
+
+    if (events.length === 2) {
+        cell.dataset.double = "1";
+        if (slot) slot.classList.add("two");
+        events.forEach((ev) => ev.classList.add("double"));
+    } else {
+        cell.dataset.double = "";
+        if (slot) slot.classList.remove("two");
+        events.forEach((ev) => ev.classList.remove("double"));
+    }
+
+    updateDoubleEventClassesForCell(cell);
+}
+
+function moveEventInDOM(eventId, toDay, toSlotStart) {
+    const scheduleEl = document.getElementById("schedule");
+    if (!scheduleEl) return false;
+
+    const eventEl = scheduleEl.querySelector(`.event[data-eid="${eventId}"]`);
+    if (!eventEl) return false;
+
+    const sourceCell = eventEl.closest(".cell.droppable");
+    if (!sourceCell) return false;
+
+    const targetCell = getTargetCellForMove(toDay, toSlotStart);
+    if (!targetCell) return false;
+
+    if (sourceCell === targetCell) return true;
+
+    const targetInner = targetCell.querySelector(".slot-inner") || createSlotInner(targetCell);
+    targetInner.querySelectorAll(".empty-slot").forEach((el) => el.remove());
+    eventEl.remove();
+    targetInner.appendChild(eventEl);
+
+    ensureEmptyHintForCell(sourceCell);
+    ensureEmptyHintForCell(targetCell);
+    updateCellDoubleState(sourceCell);
+    updateCellDoubleState(targetCell);
+
+    return true;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ==================== ПЕРЕНОС_СКРОЛЛ ====================
+
+// ==================== ФУНКЦИИ_ГЕОМЕТРИИ ====================
+
+function getGeomKey() {
+  const d = state.settings.display;
+  const s = state.settings.schedule;
+  const f = state.settings.font;
   return [
-    view,
-    font.lineHeight,
-    font.titleSize1,
-    font.metaSize1,
-    font.titleClamp,
-    layout.cellPadPx,
-    layout.dayWidthPx,
+    d.cellView,
+    d.dayWidthPx ?? 0,
+    d.cellPadPx ?? 6,
+    s.slotHeight ?? 72,
+    f.family,
+    f.lineHeight,
+    f.titleSize1, f.titleSize2,
+    f.metaSize1, f.metaSize2,
+    f.weightTitle, f.weightMeta
   ].join("|");
 }
 
-/**
- * Помечает геометрию как "грязную" (требует синхронизации)
- */
+function getScheduleStructureKey() {
+  const d = state.settings.display;
+  const s = state.settings.schedule;
+  return [
+    d.cellView,
+    s.start,
+    s.end,
+    s.slotMinutes
+  ].join("|");
+}
+
+function getRowHeightSignature(structureKey) {
+  let hash = 0;
+  for (const ev of state.events) {
+    const day = Number(ev.dayIndex) || 0;
+    const start = Number(ev.startMin) || 0;
+    const dur = Number(ev.durationMin) || 0;
+    const nameLen = ev.name ? ev.name.length : 0;
+    const coachLen = ev.coach ? ev.coach.length : 0;
+    const roomLen = ev.room ? ev.room.length : 0;
+    hash = (hash * 31 + day + start + dur + nameLen + coachLen + roomLen) >>> 0;
+  }
+
+  return [
+    getGeomKey(),
+    structureKey,
+    state.events.length,
+    hash
+  ].join("|");
+}
+
+function getEventRenderKey(ev, view, isDouble) {
+  const coach = ev.coach || "";
+  const room = ev.room || "";
+  const notes = ev.notes || "";
+  const dirId = ev.directionId || "";
+  const mode = state.settings.display.cardMode || "";
+  return [
+    ev.id,
+    ev.name || "",
+    coach,
+    room,
+    ev.startMin || 0,
+    ev.durationMin || 0,
+    dirId,
+    notes,
+    view,
+    isDouble ? 1 : 0,
+    mode,
+  ].join("|");
+}
+
+function requestRowHeightSync(force = false) {
+  if (force) pendingRowHeightSync = true;
+  if (rowHeightSyncRaf) return;
+
+  rowHeightSyncRaf = requestAnimationFrame(() => {
+    rowHeightSyncRaf = 0;
+    if (!pendingRowHeightSync) return;
+
+    if (state.settings.display.cellView === "compact") {
+      pendingRowHeightSync = false;
+      return;
+    }
+
+    const scheduleEl = document.getElementById("schedule");
+    if (!scheduleEl) return;
+
+    pendingRowHeightSync = false;
+    initializeAllRowHeights();
+  });
+}
+
 function markGeometryDirty() {
+  if (geometryDirty && geometrySyncRaf) return;
+
   geometryDirty = true;
   requestGeometrySync();
 }
 
-/**
- * Помечает геометрию как "грязную" только если изменился ключ
- */
 function markGeometryDirtyIfNeeded() {
-  const newKey = getGeomKey();
-  if (newKey !== lastGeomKey) {
-    lastGeomKey = newKey;
-    markGeometryDirty();
-  }
+  const key = getGeomKey();
+  if (key === lastGeomKey) return;
+  lastGeomKey = key;
+  markGeometryDirty();
 }
 
-/**
- * Запрашивает синхронизацию геометрии (с использованием RAF)
- */
 function requestGeometrySync() {
-  if (geometryRafId) return;
+  if (!geometryDirty) return;
+  if (geometrySyncRaf) cancelAnimationFrame(geometrySyncRaf);
 
-  geometryRafId = requestAnimationFrame(() => {
-    if (geometryDirty) {
-      syncGridGeometry();
-      geometryDirty = false;
-    }
-    geometryRafId = null;
+  geometrySyncRaf = requestAnimationFrame(() => {
+    geometrySyncRaf = 0;
+    geometryDirty = false;
+    syncGridGeometry();
   });
 }
 
-/**
- * Синхронизирует геометрию таблицы (измерение размеров)
- */
 function syncGridGeometry() {
-  const scheduleEl = document.querySelector(".schedule");
+  const view = state.settings.display.cellView;
+  const scheduleEl = document.getElementById("schedule");
   if (!scheduleEl) return;
 
-  const view = state.settings.display.cellView;
 
-  // Сохраняем предыдущий вид для сравнения
-  if (lastCellView !== view) {
-    lastCellView = view;
-    geometryCache = new WeakMap(); // Сбрасываем кэш при смене режима
+  if (view === "list") return;
+
+
+  if (view === 'compact') {
+    const allCells = Array.from(scheduleEl.querySelectorAll('.cell.droppable'));
+    if (!allCells.length) return;
+
+    const allCards = Array.from(scheduleEl.querySelectorAll('.event.compact-card'));
+
+
+    for (const cell of allCells) {
+      cell.style.removeProperty('height');
+      cell.style.removeProperty('min-height');
+    }
+    for (const card of allCards) {
+      card.style.removeProperty('height');
+      card.style.removeProperty('min-height');
+    }
+
+    requestAnimationFrame(() => {
+      if (state.settings.display.cellView !== 'compact') return;
+
+
+      let maxCardH = 0;
+      for (const card of allCards) {
+        const h = card.getBoundingClientRect().height;
+        if (h > maxCardH) maxCardH = h;
+      }
+
+      const cardH = Math.ceil(maxCardH) + 'px';
+
+
+      for (const card of allCards) {
+        card.style.setProperty('height', cardH, 'important');
+      }
+
+
+      let maxCellH = 0;
+      for (const cell of allCells) {
+        const cs = getComputedStyle(cell);
+        const padY =
+          (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+
+        const inner = cell.querySelector('.slot-inner');
+        const contentH = inner ? inner.scrollHeight : cell.scrollHeight;
+        const need = contentH + padY;
+
+        if (need > maxCellH) maxCellH = need;
+      }
+
+      const cellH = Math.ceil(maxCellH) + 'px';
+
+
+      for (const cell of allCells) {
+        cell.style.height = cellH;
+      }
+    });
+
+    return;
   }
 
-  // Выбираем метод синхронизации в зависимости от режима
-  if (view === "compact") {
-    syncCompactGeometry(scheduleEl);
-  } else if (view === "timeline") {
-    syncTimelineGeometry(scheduleEl);
-  } else if (view === "list") {
-    syncListGeometry(scheduleEl);
-  }
+
+  scheduleEl.classList.add("measuring");
+
+  requestAnimationFrame(() => {
+    if (state.settings.display.cellView !== "timeline") {
+      scheduleEl.classList.remove("measuring");
+      return;
+    }
+
+    const cells = Array.from(scheduleEl.querySelectorAll(".cell.droppable"));
+    if (!cells.length) {
+      scheduleEl.classList.remove("measuring");
+      return;
+    }
+
+    for (const c of cells) {
+      c.style.removeProperty("height");
+      c.style.removeProperty("min-height");
+    }
+
+
+    let maxCellW = 0;
+    for (const c of cells) {
+      const w = c.getBoundingClientRect().width;
+      if (w > maxCellW) maxCellW = w;
+    }
+
+
+    const events = Array.from(
+      scheduleEl.querySelectorAll(".cell.droppable .event")
+    ).slice(0, 24);
+
+    let maxEventW = 0;
+    for (const ev of events) {
+      const w = Math.max(ev.getBoundingClientRect().width, ev.scrollWidth);
+      if (w > maxEventW) maxEventW = w;
+    }
+
+
+    const rawW = Math.max(maxCellW, maxEventW);
+    if (rawW > 0 && !(Number(state.settings.display?.dayWidthPx) > 0)) {
+      const maxW = Math.min(320, Math.max(220, window.innerWidth - 120));
+      const nextW = clamp(Math.ceil(rawW), 120, maxW);
+
+      const cur =
+        parseFloat(
+          getComputedStyle(document.documentElement).getPropertyValue("--dayW")
+        ) || 0;
+
+      if (!cur || Math.abs(cur - nextW) >= 4) {
+        document.documentElement.style.setProperty("--dayW", nextW + "px");
+      }
+    }
+
+
+    scheduleEl.classList.remove("measuring");
+
+
+    scheduleEl.classList.add("measuring-h");
+
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (state.settings.display.cellView !== "timeline") {
+          scheduleEl.classList.remove("measuring-h");
+          return;
+        }
+
+        try {
+          syncRowHeights(scheduleEl);
+        } finally {
+          scheduleEl.classList.remove("measuring-h");
+        }
+      });
+    });
+  });
 }
 
-/**
- * Синхронизация для компактного режима
- */
 function syncCompactGeometry(scheduleEl) {
-  // Сбрасываем высоты
+
   const cells = scheduleEl.querySelectorAll(".cell.droppable");
   cells.forEach((cell) => {
     cell.style.height = "";
   });
 
-  // Измеряем максимальную высоту ячеек
+
   let maxHeight = 0;
   cells.forEach((cell) => {
     const rect = cell.getBoundingClientRect();
     maxHeight = Math.max(maxHeight, rect.height);
   });
 
-  // Применяем одинаковую высоту всем ячейкам
+
   cells.forEach((cell) => {
     cell.style.height = `${maxHeight}px`;
   });
@@ -4360,24 +6136,27 @@ function syncCompactGeometry(scheduleEl) {
   console.log("Compact geometry synced:", maxHeight);
 }
 
-/**
- * Синхронизация для режима Timeline (двухфазное измерение)
- */
 function syncTimelineGeometry(scheduleEl) {
-  // ===== ФАЗА 1: Измерение ширины (класс "measuring") =====
+
   scheduleEl.classList.add("measuring");
 
   requestAnimationFrame(() => {
-    const maxWidth = getMaxContentWidth(scheduleEl);
-
-    // Устанавливаем --dayW на основе измерений
-    if (maxWidth > 0) {
-      document.documentElement.style.setProperty("--dayW", `${maxWidth}px`);
+    const fixedW = Number(state.settings.display?.dayWidthPx ?? 0);
+    if (fixedW > 0) {
+      document.documentElement.style.setProperty(
+        "--dayW",
+        `${clamp(Math.round(fixedW), 60, 800)}px`,
+      );
+    } else {
+      const maxWidth = getMaxContentWidth(scheduleEl);
+      if (maxWidth > 0) {
+        document.documentElement.style.setProperty("--dayW", `${maxWidth}px`);
+      }
     }
 
     scheduleEl.classList.remove("measuring");
 
-    // ===== ФАЗА 2: Измерение высоты (класс "measuring-h") =====
+
     scheduleEl.classList.add("measuring-h");
 
     requestAnimationFrame(() => {
@@ -4390,7 +6169,7 @@ function syncTimelineGeometry(scheduleEl) {
 }
 
 function syncListGeometry(scheduleEl) {
-  syncTimelineGeometry(scheduleEl); // Используем тот же метод, что и для timeline
+  syncTimelineGeometry(scheduleEl);
 }
 
 function getMaxContentWidth(scheduleEl) {
@@ -4398,7 +6177,7 @@ function getMaxContentWidth(scheduleEl) {
   let maxWidth = 0;
 
   cells.forEach((cell) => {
-    // Измеряем ширину slot-inner (контейнера событий)
+
     const slotInner = cell.querySelector(".slot-inner");
     if (slotInner) {
       const rect = slotInner.getBoundingClientRect();
@@ -4406,15 +6185,15 @@ function getMaxContentWidth(scheduleEl) {
     }
   });
 
-  // Добавляем отступы и минимальную ширину
+
   const cellPad =
     parseInt(
       getComputedStyle(document.documentElement).getPropertyValue("--cellPad"),
     ) || 6;
 
-  maxWidth += cellPad * 2; // Отступы слева и справа
+  maxWidth += cellPad * 2;
 
-  // Учитываем минимальную ширину из настроек
+
   const minW =
     parseInt(
       getComputedStyle(document.documentElement).getPropertyValue("--dayMinW"),
@@ -4424,893 +6203,340 @@ function getMaxContentWidth(scheduleEl) {
 }
 
 function syncRowHeights(scheduleEl) {
-  const { step } = getBounds();
-  const slots = buildSlots();
+    if (!scheduleEl || scheduleEl.classList.contains("compact-mode")) return;
 
-  if (!slots.length || !step) return;
+    const slotIndices = new Set();
+    scheduleEl
+      .querySelectorAll(".cell.droppable[data-slot-index]")
+      .forEach((cell) => {
+        const slotIndex = cell.dataset.slotIndex;
+        if (slotIndex !== undefined) slotIndices.add(parseInt(slotIndex));
+      });
 
-  // Находим все строки (временные слоты), исключая заголовки дней
-  const timeCells = scheduleEl.querySelectorAll(".cell.time:not(.head)");
-
-  timeCells.forEach((timeCell, slotIndex) => {
-    const slotStart = slots[slotIndex];
-    if (slotStart === undefined) return;
-
-    // Находим все ячейки в этой строке (7 дней + 1 колонка времени)
-    const rowCells = [timeCell];
-    let current = timeCell.nextElementSibling;
-    let dayCount = 0;
-
-    // Собираем только ячейки данных, пока не встретим следующую ячейку времени
-    while (current && !current.classList.contains("time") && dayCount < 7) {
-      if (current.classList.contains("droppable")) {
-        rowCells.push(current);
-      }
-      current = current.nextElementSibling;
-      dayCount++;
-    }
-
-    // Вычисляем максимальную высоту в строке
-    let maxRowHeight = 0;
-    let hasDoubleCells = false;
-    
-    rowCells.forEach((cell) => {
-      // Пропускаем ячейки заголовков
-      if (cell.classList.contains("head")) return;
-      
-      if (cell.classList.contains("droppable") && cell.dataset.double === "1") {
-        // Для двойных ячеек используем расчет из calculateAndSetDoubleEventsHeight
-        const slotInner = cell.querySelector(".slot-inner");
-        const eventElements = cell.querySelectorAll(".event.double");
-        
-        if (slotInner && eventElements.length === 2) {
-          // Временно сбрасываем высоту для измерения
-          eventElements.forEach(el => {
-            el.style.height = 'auto';
-            el.style.minHeight = 'auto';
-          });
-          
-          slotInner.style.height = 'auto';
-          slotInner.style.minHeight = 'auto';
-          
-          // Измеряем реальную высоту содержимого
-          let maxEventHeight = 0;
-          eventElements.forEach(el => {
-            const height = el.scrollHeight;
-            maxEventHeight = Math.max(maxEventHeight, Math.ceil(height));
-          });
-          
-          // Добавляем gap между событиями
-          const gap = 2;
-          const totalContentHeight = (maxEventHeight * 2) + gap;
-          
-          // Учитываем отступы и границы ячейки
-          const computedStyle = getComputedStyle(cell);
-          const cellPaddingTop = parseFloat(computedStyle.paddingTop) || 0;
-          const cellPaddingBottom = parseFloat(computedStyle.paddingBottom) || 0;
-          const cellPadding = cellPaddingTop + cellPaddingBottom;
-          
-          const slot = cell.querySelector('.slot');
-          const slotComputedStyle = getComputedStyle(slot);
-          const slotPaddingTop = parseFloat(slotComputedStyle.paddingTop) || 0;
-          const slotPaddingBottom = parseFloat(slotComputedStyle.paddingBottom) || 0;
-          const slotPadding = slotPaddingTop + slotPaddingBottom;
-          
-          const borderTop = parseFloat(computedStyle.borderTopWidth) || 0;
-          const borderBottom = parseFloat(computedStyle.borderBottomWidth) || 0;
-          const borders = borderTop + borderBottom;
-          
-          const cellTotalHeight = totalContentHeight + cellPadding + slotPadding + borders;
-          
-          maxRowHeight = Math.max(maxRowHeight, Math.ceil(cellTotalHeight));
-          hasDoubleCells = true;
-        }
-      } else if (cell.classList.contains("droppable")) {
-        // Обычные ячейки
-        const slot = cell.querySelector(".slot");
-        if (slot) {
-          const slotInner = slot.querySelector(".slot-inner");
-          if (slotInner) {
-            const contentHeight = slotInner.scrollHeight;
-            const computedStyle = getComputedStyle(cell);
-            const paddingTop = parseFloat(computedStyle.paddingTop) || 0;
-            const paddingBottom = parseFloat(computedStyle.paddingBottom) || 0;
-            const padding = paddingTop + paddingBottom;
-            
-            const borderTop = parseFloat(computedStyle.borderTopWidth) || 0;
-            const borderBottom = parseFloat(computedStyle.borderBottomWidth) || 0;
-            const borders = borderTop + borderBottom;
-            
-            const cellHeight = contentHeight + padding + borders;
-            maxRowHeight = Math.max(maxRowHeight, Math.ceil(cellHeight));
-          }
-        }
-      } else if (cell.classList.contains("time") && !cell.classList.contains("head")) {
-        // Только ячейки времени, которые не являются заголовками
-        const height = cell.scrollHeight;
-        maxRowHeight = Math.max(maxRowHeight, Math.ceil(height));
-      }
+    slotIndices.forEach((slotIndex) => {
+      rerenderRowBySlotIndex(slotIndex);
     });
-    
-    // Добавляем минимальную высоту из настроек
-    const minSlotH = parseInt(
-      getComputedStyle(document.documentElement).getPropertyValue("--slotH"),
-    ) || 72;
-    
-    maxRowHeight = Math.max(maxRowHeight, minSlotH);
-    
-    // Если есть двойные ячейки, увеличиваем высоту для лучшего отображения
-    if (hasDoubleCells) {
-      maxRowHeight = Math.max(maxRowHeight, minSlotH * 1.5);
-    }
-    
-    // Устанавливаем высоту только для ячеек данных и времени (не заголовков)
-    const roundedHeight = Math.ceil(maxRowHeight);
-    rowCells.forEach((cell) => {
-      // Пропускаем заголовки
-      if (cell.classList.contains("head")) return;
-      
-      cell.style.height = `${roundedHeight}px`;
-      cell.style.minHeight = `${roundedHeight}px`;
-      
-      // Для ячеек с двойными занятиями дополнительно настраиваем содержимое
-      if (cell.dataset.double === "1") {
-        const slotInner = cell.querySelector(".slot-inner");
-        const eventElements = cell.querySelectorAll(".event.double");
-        
-        if (slotInner && eventElements.length === 2) {
-          // Вычисляем доступную высоту для событий
-          const computedStyle = getComputedStyle(cell);
-          const cellPaddingTop = parseFloat(computedStyle.paddingTop) || 0;
-          const cellPaddingBottom = parseFloat(computedStyle.paddingBottom) || 0;
-          const cellPadding = cellPaddingTop + cellPaddingBottom;
-          
-          const slot = cell.querySelector('.slot');
-          const slotComputedStyle = getComputedStyle(slot);
-          const slotPaddingTop = parseFloat(slotComputedStyle.paddingTop) || 0;
-          const slotPaddingBottom = parseFloat(slotComputedStyle.paddingBottom) || 0;
-          const slotPadding = slotPaddingTop + slotPaddingBottom;
-          
-          const borderTop = parseFloat(computedStyle.borderTopWidth) || 0;
-          const borderBottom = parseFloat(computedStyle.borderBottomWidth) || 0;
-          const borders = borderTop + borderBottom;
-          
-          const availableHeight = roundedHeight - cellPadding - slotPadding - borders;
-          const gap = 2;
-          const eventHeight = Math.floor((availableHeight - gap) / 2);
-          
-          // Устанавливаем высоту событий
-          eventElements.forEach((el, index) => {
-            el.style.height = `${eventHeight}px`;
-            el.style.minHeight = `${eventHeight}px`;
-            el.style.overflow = 'hidden';
-            
-            // Настраиваем заголовок
-            const title = el.querySelector('.t');
-            if (title) {
-              const titleClamp = 2;
-              title.style.webkitLineClamp = titleClamp;
-              title.style.lineClamp = titleClamp;
-              title.style.display = '-webkit-box';
-              title.style.webkitBoxOrient = 'vertical';
-              title.style.overflow = 'hidden';
-              title.style.maxHeight = `calc(${eventHeight - 20}px)`;
-            }
-            
-            // Настраиваем мета-информацию
-            const meta = el.querySelector('.m');
-            if (meta) {
-              meta.style.whiteSpace = 'nowrap';
-              meta.style.textOverflow = 'ellipsis';
-              meta.style.overflow = 'hidden';
-            }
-          });
-          
-          // Настраиваем slotInner
-          slotInner.style.height = `${availableHeight}px`;
-          slotInner.style.minHeight = `${availableHeight}px`;
-          slotInner.style.display = 'flex';
-          slotInner.style.flexDirection = 'column';
-          slotInner.style.gap = `${gap}px`;
-        }
-      }
-    });
-  });
-
-  console.log("Высота строк синхронизирована (исключая заголовки)");
 }
 
 function calculateAndSetDoubleEventsHeight(cell, slotInner, eventElements) {
-  if (!cell.isConnected || !slotInner.isConnected) return;
-  
-  // Сбрасываем высоты для точного измерения
-  eventElements.forEach(el => {
-    el.style.height = 'auto';
-    el.style.minHeight = 'auto';
-    el.style.overflow = 'visible';
-    
-    // Временно снимаем ограничения с заголовка
-    const title = el.querySelector('.t');
+  if (!cell || !slotInner || !eventElements || eventElements.length !== 2)
+    return;
+
+
+  const originalCellHeight = cell.style.height;
+  const originalSlotHeight = slotInner.style.height;
+
+
+  eventElements.forEach((el) => {
+    el.style.height = "auto";
+    el.style.minHeight = "auto";
+    el.style.overflow = "hidden";
+  });
+
+  slotInner.style.height = "auto";
+  slotInner.style.minHeight = "auto";
+  cell.style.height = "auto";
+
+
+  void cell.offsetHeight;
+
+
+  const heights = [];
+  eventElements.forEach((el) => {
+
+    const title = el.querySelector(".t");
+    const meta = el.querySelector(".m");
+
+    const originalTitleDisplay = title?.style.display;
+    const originalMetaWhiteSpace = meta?.style.whiteSpace;
+
     if (title) {
-      title.style.webkitLineClamp = 'initial';
-      title.style.lineClamp = 'initial';
-      title.style.maxHeight = 'none';
-      title.style.display = 'block';
+      title.style.display = "block";
+      title.style.webkitLineClamp = "unset";
+      title.style.maxHeight = "none";
     }
-    
-    // Временно снимаем ограничения с меты
-    const meta = el.querySelector('.m');
     if (meta) {
-      meta.style.whiteSpace = 'normal';
-      meta.style.textOverflow = 'clip';
+      meta.style.whiteSpace = "normal";
     }
-  });
-  
-  slotInner.style.height = 'auto';
-  slotInner.style.minHeight = 'auto';
-  cell.style.height = 'auto';
-  cell.style.minHeight = 'auto';
-  
-  // Принудительный reflow
-  slotInner.offsetHeight;
-  
-  // Измеряем реальную высоту содержимого для каждого события
-  let maxEventHeight = 0;
-  eventElements.forEach(el => {
-    const height = el.scrollHeight;
-    maxEventHeight = Math.max(maxEventHeight, height);
-  });
-  
-  // Округляем до целых пикселей
-  maxEventHeight = Math.ceil(maxEventHeight);
-  
-  // Устанавливаем одинаковую высоту для обоих событий
-  eventElements.forEach(el => {
-    el.style.height = `${maxEventHeight}px`;
-    el.style.minHeight = `${maxEventHeight}px`;
-    el.style.overflow = 'hidden';
-    
-    // Восстанавливаем ограничения для заголовка
-    const title = el.querySelector('.t');
+
+    const scrollHeight = el.scrollHeight;
+    heights.push(scrollHeight);
+
+
     if (title) {
-      const titleClamp = 2;
-      title.style.webkitLineClamp = titleClamp;
-      title.style.lineClamp = titleClamp;
-      title.style.display = '-webkit-box';
-      title.style.webkitBoxOrient = 'vertical';
-      title.style.maxHeight = `calc(${maxEventHeight - 24}px)`;
+      title.style.display = originalTitleDisplay || "";
+      title.style.webkitLineClamp = "";
     }
-    
-    // Восстанавливаем ограничения для меты
-    const meta = el.querySelector('.m');
     if (meta) {
-      meta.style.whiteSpace = 'nowrap';
-      meta.style.textOverflow = 'ellipsis';
+      meta.style.whiteSpace = originalMetaWhiteSpace || "";
     }
   });
-  
-  // Учитываем gap между событиями
+
+
+  const maxHeight = Math.max(...heights);
+
+
   const gap = 2;
-  const totalContentHeight = (maxEventHeight * 2) + gap;
-  
-  // Устанавливаем высоту для slotInner
-  slotInner.style.minHeight = `${Math.ceil(totalContentHeight)}px`;
-  slotInner.style.height = `${Math.ceil(totalContentHeight)}px`;
-  
-  // Вычисляем полную высоту ячейки с учётом всех отступов и границ
-  const computedStyle = getComputedStyle(cell);
-  const cellPaddingTop = parseFloat(computedStyle.paddingTop) || 0;
-  const cellPaddingBottom = parseFloat(computedStyle.paddingBottom) || 0;
-  const cellPadding = cellPaddingTop + cellPaddingBottom;
-  
-  const slotComputedStyle = getComputedStyle(cell.querySelector('.slot'));
-  const slotPaddingTop = parseFloat(slotComputedStyle.paddingTop) || 0;
-  const slotPaddingBottom = parseFloat(slotComputedStyle.paddingBottom) || 0;
-  const slotPadding = slotPaddingTop + slotPaddingBottom;
-  
-  const borderTop = parseFloat(computedStyle.borderTopWidth) || 0;
-  const borderBottom = parseFloat(computedStyle.borderBottomWidth) || 0;
-  const borders = borderTop + borderBottom;
-  
-  const cellTotalHeight = totalContentHeight + cellPadding + slotPadding + borders;
-  
-  // Устанавливаем округлённую высоту ячейки
-  cell.style.height = `${Math.ceil(cellTotalHeight)}px`;
-  cell.style.minHeight = `${Math.ceil(cellTotalHeight)}px`;
+  const totalHeight = maxHeight * 2 + gap;
+
+  eventElements.forEach((el) => {
+    el.style.height = `${maxHeight}px`;
+    el.style.minHeight = `${maxHeight}px`;
+  });
+
+  slotInner.style.minHeight = `${totalHeight}px`;
+  slotInner.style.height = `${totalHeight}px`;
+
+
+  const cellStyle = getComputedStyle(cell);
+  const slotStyle = getComputedStyle(cell.querySelector(".slot"));
+
+  const cellPadding =
+    parseFloat(cellStyle.paddingTop) + parseFloat(cellStyle.paddingBottom);
+  const slotPadding =
+    parseFloat(slotStyle.paddingTop) + parseFloat(slotStyle.paddingBottom);
+  const borders =
+    parseFloat(cellStyle.borderTopWidth) +
+    parseFloat(cellStyle.borderBottomWidth);
+
+  const cellTotalHeight = totalHeight + cellPadding + slotPadding + borders;
+
+
+  cell.style.height = `${cellTotalHeight}px`;
+  cell.style.minHeight = `${cellTotalHeight}px`;
+
+
+  eventElements.forEach((el) => {
+    const title = el.querySelector(".t");
+    const meta = el.querySelector(".m");
+
+    if (title) {
+      title.style.display = "-webkit-box";
+      title.style.webkitBoxOrient = "vertical";
+      title.style.webkitLineClamp = "2";
+      title.style.overflow = "hidden";
+      title.style.maxHeight = `${maxHeight - 20}px`;
+    }
+
+    if (meta) {
+      meta.style.whiteSpace = "nowrap";
+      meta.style.textOverflow = "ellipsis";
+      meta.style.overflow = "hidden";
+    }
+
+
+    el.style.overflow = "hidden";
+  });
 }
 
 function recalculateAllDoubleEventsHeights() {
-  const doubleCells = document.querySelectorAll('.cell.droppable[data-double="1"]');
-  
-  doubleCells.forEach(cell => {
-    const slotInner = cell.querySelector('.slot-inner');
+  const doubleCells = document.querySelectorAll(
+    '.cell.droppable[data-double="1"]',
+  );
+
+  doubleCells.forEach((cell) => {
+    const slotInner = cell.querySelector(".slot-inner");
     if (!slotInner) return;
-    
-    const eventElements = Array.from(slotInner.querySelectorAll('.event.double'));
+
+    const eventElements = Array.from(
+      slotInner.querySelectorAll(".event.double"),
+    );
     if (eventElements.length !== 2) return;
-    
+
     calculateAndSetDoubleEventsHeight(cell, slotInner, eventElements);
   });
 }
 
-// ==================== ФУНКЦИИ РЕНДЕРА ТАБЛИЦЫ ИЗНАЧАЛЬНОЙ ====================
+// ==================== ФУНКЦИИ_ГЕОМЕТРИИ ====================
 
-function renderSchedule() {
-  // ✅ Сбрасываем сохраненные данные перед перерисовкой
-  if (typeof lastValidDropCell !== 'undefined') {
-    lastValidDropCell = null;
-    lastValidDropCoords = { x: 0, y: 0 };
-    lastValidDropIndices = { dayIndex: -1, slotIndex: -1 };
+// ==================== ФУНКЦИИ_РЕНДЕРА_ТАБЛИЦЫ_ИЗНАЧАЛЬНОЙ ====================
+
+
+function getEffectiveMinRowHeight() {
+  const root = document.documentElement;
+  const cssVal = parseFloat(getComputedStyle(root).getPropertyValue("--slotH"));
+  if (Number.isFinite(cssVal) && cssVal > 0) return cssVal;
+
+  const settingVal = Number(state.settings?.schedule?.slotHeight);
+  if (Number.isFinite(settingVal) && settingVal > 0) return settingVal;
+
+  return CELL_HEIGHT_CONFIG.MIN_CELL_HEIGHT;
+}
+
+function updateTodayHighlight(cell, dayIndex, todayIndex) {
+  if (!cell) return;
+  const shouldHighlight =
+    dayIndex === todayIndex && state.settings.display.showTodayHighlight;
+  cell.classList.toggle("col-today", shouldHighlight);
+}
+
+function createCompactEventCard(ev) {
+  const dir = getDir(ev.directionId);
+  const color = dir ? dir.color : "#64748b";
+  const el = document.createElement("div");
+  el.className = "event compact-card";
+  if (!eventVisible(ev)) el.classList.add("dim");
+
+  el.style.setProperty("--ev-bg", color);
+
+  el.dataset.eid = ev.id;
+
+  const title = document.createElement("div");
+  title.className = "t";
+  title.textContent = fixTypography(ev.name) || "Р‘РµР· РЅР°Р·РІР°РЅРёСЏ";
+  el.appendChild(title);
+
+  const metaText = metaCoachRoom(ev, true);
+  if (metaText) {
+    const meta = document.createElement("div");
+    meta.className = "m";
+    meta.textContent = metaText;
+    el.appendChild(meta);
   }
-  
+
+  applyTitleStyles(el, CELL_HEIGHT_CONFIG.TITLE_LINES);
+  applyMetaStyles(el, CELL_HEIGHT_CONFIG.META_LINES);
+
+  const grab = document.createElement("div");
+  grab.className = "grab";
+  grab.textContent = "▲";
+  el.appendChild(grab);
+
+  if (state.settings.display.showNotes) {
+    const tt = [];
+    tt.push(`${minToHHMM(ev.startMin)}▲“${minToHHMM(ev.startMin + ev.durationMin)}`);
+    if (ev.coach) tt.push(ev.coach);
+    if (ev.room) tt.push(ev.room);
+    if (dir) tt.push(dir.name);
+    if (ev.notes) tt.push(`📍 ${ev.notes}`);
+    el.title = tt.join(" В· ");
+  }
+
+  return el;
+}
+
+function createListEventElement(ev, count) {
+  const dir = getDir(ev.directionId);
+  const color = dir ? dir.color : "#64748b";
+  const el = document.createElement("div");
+  el.className = "event list" + (count === 2 ? " double" : "");
+  if (!eventVisible(ev)) el.classList.add("dim");
+  el.style.setProperty("--ev-bg", color);
+
+  el.dataset.eid = ev.id;
+
+  const title = document.createElement("div");
+  title.className = "t";
+  title.textContent = fixTypography(ev.name) || "Р‘РµР· РЅР°Р·РІР°РЅРёСЏ";
+
+  const metaText = count >= 2 ? metaCoachRoom(ev, true) : metaFullByMode(ev);
+  const meta = document.createElement("div");
+  meta.className = "m";
+  meta.textContent = metaText;
+
+  const grab = document.createElement("div");
+  grab.className = "grab";
+  grab.textContent = "▲";
+
+  el.appendChild(title);
+  if (metaText) el.appendChild(meta);
+  el.appendChild(grab);
+
+  const isDouble = count >= 2;
+  applyTitleStyles(
+    el,
+    isDouble ? CELL_HEIGHT_CONFIG.DOUBLE_TITLE_LINES : CELL_HEIGHT_CONFIG.TITLE_LINES,
+  );
+  applyMetaStyles(
+    el,
+    isDouble ? CELL_HEIGHT_CONFIG.DOUBLE_META_LINES : CELL_HEIGHT_CONFIG.META_LINES,
+  );
+
+  if (state.settings.display.showNotes) {
+    const tt = [];
+    tt.push(`${minToHHMM(ev.startMin)}вЂ“${minToHHMM(ev.startMin + ev.durationMin)}`);
+    if (ev.coach) tt.push(ev.coach);
+    if (ev.room) tt.push(ev.room);
+    if (dir) tt.push(dir.name);
+    if (ev.notes) tt.push("вЂ” " + ev.notes);
+    el.title = tt.join("\n");
+  }
+
+  return el;
+}
+
+function createTimelineEventElement(ev, isDouble) {
+  const dir = getDir(ev.directionId);
+  const color = dir ? dir.color : "#64748b";
+  const el = document.createElement("div");
+  el.className = isDouble ? "event double" : "event";
+  if (!eventVisible(ev)) el.classList.add("dim");
+  el.style.setProperty("--ev-bg", color);
+
+  el.dataset.eid = ev.id;
+
+  const title = document.createElement("div");
+  title.className = "t";
+  title.textContent = fixTypography(ev.name);
+  el.appendChild(title);
+
+  const metaText = isDouble ? metaCoachRoom(ev, true) : metaFullByMode(ev);
+  if (metaText) {
+    if (isDouble) el.classList.add("title-3");
+    const meta = document.createElement("div");
+    meta.className = "m";
+    meta.textContent = metaText;
+    el.appendChild(meta);
+  }
+
+  const titleLines = isDouble
+    ? CELL_HEIGHT_CONFIG.DOUBLE_TITLE_LINES
+    : CELL_HEIGHT_CONFIG.TITLE_LINES;
+  const metaLines = isDouble
+    ? CELL_HEIGHT_CONFIG.DOUBLE_META_LINES
+    : CELL_HEIGHT_CONFIG.META_LINES;
+  applyTitleStyles(el, titleLines);
+  applyMetaStyles(el, metaLines);
+
+  const grab = document.createElement("div");
+  grab.className = "grab";
+  grab.textContent = "▲";
+  el.appendChild(grab);
+
+  if (state.settings.display.showNotes) {
+    const tt = [];
+    tt.push(`${minToHHMM(ev.startMin)}вЂ“${minToHHMM(ev.startMin + ev.durationMin)}`);
+    if (ev.coach) tt.push(ev.coach);
+    if (ev.room) tt.push(ev.room);
+    if (dir) tt.push(dir.name);
+    if (ev.notes) tt.push(`📍 ${ev.notes}`);
+    el.title = tt.join(" В· ");
+  }
+
+  return el;
+}
+
+function renderScheduleLegacy() {
   const scheduleEl = $("schedule");
-  if (!scheduleEl) {
-    console.error("Элемент schedule не найден!");
-    return;
-  }
-  
   scheduleEl.innerHTML = "";
 
   const { step } = getBounds();
   const slots = buildSlots();
   const view = state.settings.display.cellView;
+
   const todayIndex = (new Date().getDay() + 6) % 7;
   const nowHour = pad2(new Date().getHours());
 
-  // Отслеживаем изменение режима отображения
   if (view !== lastCellView) {
     lastCellView = view;
     markGeometryDirtyIfNeeded();
   }
 
-  // Управление классом компактного режима
-  scheduleEl.classList.toggle("compact-mode", view === "compact");
-  
-  const sw = document.querySelector(".schedule-wrap");
-  if (sw) {
-    sw.classList.toggle("is-compact", view === "compact");
-  }
+  // Управление классом compact-mode
+  if (view === "compact") scheduleEl.classList.add("compact-mode");
+  else scheduleEl.classList.remove("compact-mode");
 
-  // ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
-  
-  /**
-   * Создает карточку события для компактного режима
-   */
-  function createCompactEventCard(ev) {
-    const dir = getDir(ev.directionId);
-    const color = dir?.color || "#64748b";
-    const text = bestTextOn(color);
-
-    const el = document.createElement("div");
-    el.className = "event compact-card";
-    el.dataset.eid = ev.id;
-    if (!memoizedEventVisible(ev)) el.classList.add("dim");
-
-    el.style.setProperty("--ev-bg", color);
-    el.style.setProperty("--ev-text", text);
-
-    // Настройка перетаскивания
-    el.setAttribute("draggable", "true");
-    el.addEventListener("dragstart", (de) => {
-      de.dataTransfer.setData("text/event-id", ev.id);
-      de.dataTransfer.effectAllowed = "move";
-      el.classList.add("dragging");
-    });
-    el.addEventListener("dragend", () => el.classList.remove("dragging"));
-
-    // Обработчик клика
-    el.addEventListener("click", (ce) => {
-      ce.stopPropagation();
-      openEdit(ev.id);
-    });
-
-    // Показать/скрыть grab-иконку при наведении
-    el.addEventListener('mouseenter', () => {
-      const grab = el.querySelector('.grab');
-      if (grab) grab.style.display = 'block';
-    });
-    
-    el.addEventListener('mouseleave', () => {
-      const grab = el.querySelector('.grab');
-      if (grab) grab.style.display = 'none';
-    });
-
-    // Заголовок события
-    const title = document.createElement("div");
-    title.className = "t";
-    title.textContent = fixTypography(ev.name) || "Без названия";
-    el.appendChild(title);
-
-    // Мета-информация (тренер, зал)
-    const metaText = metaCoachRoom(ev, true);
-    if (metaText) {
-      const meta = document.createElement("div");
-      meta.className = "m";
-      meta.textContent = metaText;
-      el.appendChild(meta);
-    }
-
-    // Grab-иконка для перетаскивания
-    const grab = document.createElement("div");
-    grab.className = "grab";
-    grab.textContent = "↕";
-    grab.style.display = 'none';
-    el.appendChild(grab);
-
-    // Подсказка при наведении
-    if (state.settings.display.showNotes) {
-      const tooltip = [
-        `${minToHHMM(ev.startMin)}–${minToHHMM(ev.startMin + ev.durationMin)}`,
-        ev.coach,
-        ev.room,
-        dir?.name,
-        ev.notes && `📝 ${ev.notes}`
-      ].filter(Boolean).join(" · ");
-      
-      el.title = tooltip;
-    }
-
-    return el;
-  }
-
-  /**
-   * Создает событие для режима списка
-   */
-  function createListEvent(ev, isDouble = false) {
-    const dir = getDir(ev.directionId);
-    const color = dir?.color || "#64748b";
-    const text = bestTextOn(color);
-
-    const el = document.createElement("div");
-    el.className = `event list${isDouble ? " double" : ""}`;
-    el.dataset.eid = ev.id;
-    if (!memoizedEventVisible(ev)) el.classList.add("dim");
-    el.style.setProperty("--ev-bg", color);
-    el.style.setProperty("--ev-text", text);
-
-    // Настройка перетаскивания
-    el.setAttribute("draggable", "true");
-    el.addEventListener("dragstart", (de) => {
-      de.dataTransfer.setData("text/event-id", ev.id);
-      de.dataTransfer.effectAllowed = "move";
-      el.classList.add("dragging");
-    });
-    el.addEventListener("dragend", () => el.classList.remove("dragging"));
-
-    // Обработчик клика
-    el.addEventListener("click", (ce) => {
-      ce.stopPropagation();
-      openEdit(ev.id);
-    });
-
-    // Показать/скрыть grab-иконку при наведении
-    el.addEventListener('mouseenter', () => {
-      const grab = el.querySelector('.grab');
-      if (grab) grab.style.display = 'block';
-    });
-    
-    el.addEventListener('mouseleave', () => {
-      const grab = el.querySelector('.grab');
-      if (grab) grab.style.display = 'none';
-    });
-
-    // Заголовок
-    const title = document.createElement("div");
-    title.className = "t";
-    const sanitizedTitle = sanitizeEventName(ev.name);
-    title.textContent = fixTypography(sanitizedTitle) || "Без названия";
-    el.appendChild(title);
-
-    // Мета-информация
-    const metaText = isDouble ? metaCoachRoom(ev, true) : metaFullByMode(ev);
-    if (metaText) {
-      const meta = document.createElement("div");
-      meta.className = "m";
-      meta.textContent = metaText;
-      el.appendChild(meta);
-    }
-
-    // Grab-иконка
-    const grab = document.createElement("div");
-    grab.className = "grab";
-    grab.textContent = "↕";
-    grab.style.display = 'none';
-    el.appendChild(grab);
-
-    // Подсказка
-    if (state.settings.display.showNotes) {
-      const tooltip = [
-        `${minToHHMM(ev.startMin)}–${minToHHMM(ev.startMin + ev.durationMin)}`,
-        ev.coach,
-        ev.room,
-        dir?.name,
-        ev.notes && "— " + ev.notes
-      ].filter(Boolean).join("\n");
-      
-      el.title = tooltip;
-    }
-
-    return el;
-  }
-
-  /**
-   * Создает событие для режима timeline (двойное)
-   */
-  function createTimelineDoubleEvent(ev, slotInner) {
-    const dir = getDir(ev.directionId);
-    const color = dir?.color || "#64748b";
-    const text = bestTextOn(color);
-
-    const el = document.createElement("div");
-    el.className = "event double";
-    el.dataset.eid = ev.id;
-    if (!memoizedEventVisible(ev)) el.classList.add("dim");
-    el.style.setProperty("--ev-bg", color);
-    el.style.setProperty("--ev-text", text);
-
-    // Flex-раскладка для двойных событий
-    Object.assign(el.style, {
-      display: "flex",
-      flexDirection: "column",
-      padding: "4px 6px",
-      boxSizing: "border-box",
-      position: "relative",
-      overflow: "hidden",
-      flex: "1",
-      minHeight: "0"
-    });
-
-    // Настройка перетаскивания
-    el.setAttribute("draggable", "true");
-    el.addEventListener("dragstart", (de) => {
-      de.dataTransfer.setData("text/event-id", ev.id);
-      de.dataTransfer.effectAllowed = "move";
-      el.classList.add("dragging");
-    });
-    el.addEventListener("dragend", () => el.classList.remove("dragging"));
-
-    // Обработчик клика
-    el.addEventListener("click", (ce) => {
-      ce.stopPropagation();
-      openEdit(ev.id);
-    });
-
-    // Показать/скрыть grab-иконку при наведении
-    el.addEventListener('mouseenter', () => {
-      const grab = el.querySelector('.grab');
-      if (grab) grab.style.display = 'block';
-    });
-    
-    el.addEventListener('mouseleave', () => {
-      const grab = el.querySelector('.grab');
-      if (grab) grab.style.display = 'none';
-    });
-
-    // Заголовок с ограничением в 2 строки
-    const title = document.createElement("div");
-    title.className = "t";
-    title.textContent = fixTypography(ev.name);
-    Object.assign(title.style, {
-      webkitLineClamp: "2",
-      lineClamp: "2",
-      overflow: "hidden",
-      display: "-webkit-box",
-      webkitBoxOrient: "vertical",
-      flexShrink: "0",
-      marginBottom: "2px"
-    });
-    el.appendChild(title);
-
-    // Мета-информация
-    const metaText = metaCoachRoom(ev, true);
-    if (metaText) {
-      const meta = document.createElement("div");
-      meta.className = "m";
-      meta.textContent = metaText;
-      Object.assign(meta.style, {
-        flexShrink: "0",
-        marginTop: "auto",
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        whiteSpace: "nowrap",
-        maxWidth: "calc(100% - 20px)"
-      });
-      el.appendChild(meta);
-    }
-
-    // Grab-иконка
-    const grab = document.createElement("div");
-    grab.className = "grab";
-    grab.textContent = "↕";
-    Object.assign(grab.style, {
-      position: "absolute",
-      right: "4px",
-      bottom: "4px",
-      fontSize: "12px",
-      opacity: "0.5",
-      cursor: "move",
-      display: 'none'
-    });
-    el.appendChild(grab);
-
-    // Подсказка
-    if (state.settings.display.showNotes) {
-      const tooltip = [
-        `${minToHHMM(ev.startMin)}–${minToHHMM(ev.startMin + ev.durationMin)}`,
-        ev.coach,
-        ev.room,
-        dir?.name,
-        ev.notes && `📝 ${ev.notes}`
-      ].filter(Boolean).join(" · ");
-      
-      el.title = tooltip;
-    }
-
-    return el;
-  }
-
-  /**
-   * Создает событие для режима timeline (одиночное)
-   */
-  function createTimelineSingleEvent(ev) {
-    const dir = getDir(ev.directionId);
-    const color = dir?.color || "#64748b";
-    const text = bestTextOn(color);
-
-    const el = document.createElement("div");
-    el.className = "event";
-    el.dataset.eid = ev.id;
-    if (!memoizedEventVisible(ev)) el.classList.add("dim");
-    el.style.setProperty("--ev-bg", color);
-    el.style.setProperty("--ev-text", text);
-
-    // Настройка перетаскивания
-    el.setAttribute("draggable", "true");
-    el.addEventListener("dragstart", (de) => {
-      de.dataTransfer.setData("text/event-id", ev.id);
-      de.dataTransfer.effectAllowed = "move";
-      el.classList.add("dragging");
-    });
-    el.addEventListener("dragend", () => el.classList.remove("dragging"));
-
-    // Обработчик клика
-    el.addEventListener("click", (ce) => {
-      ce.stopPropagation();
-      openEdit(ev.id);
-    });
-
-    // Показать/скрыть grab-иконку при наведении
-    el.addEventListener('mouseenter', () => {
-      const grab = el.querySelector('.grab');
-      if (grab) grab.style.display = 'block';
-    });
-    
-    el.addEventListener('mouseleave', () => {
-      const grab = el.querySelector('.grab');
-      if (grab) grab.style.display = 'none';
-    });
-
-    // Заголовок
-    const title = document.createElement("div");
-    title.className = "t";
-    title.textContent = fixTypography(ev.name);
-    el.appendChild(title);
-
-    // Мета-информация
-    const metaText = metaFullByMode(ev);
-    if (metaText) {
-      const meta = document.createElement("div");
-      meta.className = "m";
-      meta.textContent = metaText;
-      el.appendChild(meta);
-    }
-
-    // Grab-иконка
-    const grab = document.createElement("div");
-    grab.className = "grab";
-    grab.textContent = "↕";
-    grab.style.display = 'none';
-    el.appendChild(grab);
-
-    // Подсказка
-    if (state.settings.display.showNotes) {
-      const tooltip = [
-        `${minToHHMM(ev.startMin)}–${minToHHMM(ev.startMin + ev.durationMin)}`,
-        ev.coach,
-        ev.room,
-        dir?.name,
-        ev.notes && `📝 ${ev.notes}`
-      ].filter(Boolean).join(" · ");
-      
-      el.title = tooltip;
-    }
-
-    return el;
-  }
-
-  /**
-   * Создает пустой слот с подсказкой
-   */
-  function createEmptySlot(isCompact = false) {
-    const hint = document.createElement("div");
-    hint.className = "empty-slot";
-    hint.textContent = isCompact ? "Нет занятий" : "Клик для добавления";
-    return hint;
-  }
-
-  /**
-   * Создает ячейку с событиями
-   */
-  function createCellWithEvents(dayIndex, slotStart, slotEnd, slotIndex, isCompact = false) {
-    const cell = mkCell("cell droppable", "");
-    cell.dataset.slotIndex = String(slotIndex || 0);
-    
-    // ✅ ДОБАВЛЯЕМ атрибут с днём недели
-    cell.dataset.dayIndex = String(dayIndex);
-
-    // Подсветка сегодняшнего дня
-    if (dayIndex === todayIndex && state.settings.display.showTodayHighlight) {
-      cell.classList.add("col-today");
-    }
-
-    const slot = document.createElement("div");
-    slot.className = `slot${isCompact ? " compact-mode" : ""}`;
-    
-    if (!isCompact) {
-      const viewMode = state.settings.display.cellView;
-      if (viewMode === "list") slot.classList.add("list-mode");
-      if (viewMode === "timeline") slot.classList.add("tl-fill");
-    }
-
-    const slotInner = document.createElement("div");
-    slotInner.className = "slot-inner";
-    slot.appendChild(slotInner);
-
-    // Фильтрация событий для ячейки
-    const eventsInCell = state.events.filter(ev => {
-      if (isCompact) {
-        return ev.dayIndex === dayIndex;
-      }
-      return ev.dayIndex === dayIndex &&
-             ev.startMin >= slotStart &&
-             ev.startMin < slotEnd;
-    }).sort((a, b) => a.startMin - b.startMin);
-
-    const count = eventsInCell.length;
-
-    // Пустая ячейка
-    if (count === 0 && state.settings.display.showEmptyHint) {
-      slotInner.appendChild(createEmptySlot(isCompact));
-    } 
-    // Компактный режим
-    else if (isCompact) {
-      eventsInCell.forEach(ev => slotInner.appendChild(createCompactEventCard(ev)));
-    } 
-    // Режим списка
-    else if (state.settings.display.cellView === "list") {
-      eventsInCell.forEach(ev => slotInner.appendChild(createListEvent(ev, count === 2)));
-      
-      // Настройка двойных ячеек
-      if (count === 2) {
-        cell.dataset.double = "1";
-        Object.assign(slotInner.style, {
-          display: "flex",
-          flexDirection: "column",
-          gap: "2px",
-          height: "100%",
-          minHeight: "0"
-        });
-        
-        // Настройка flex-распределения
-        slotInner.querySelectorAll('.event.list.double').forEach(el => {
-          el.style.flex = "1";
-          el.style.minHeight = "0";
-          el.style.overflow = "hidden";
-          
-          const title = el.querySelector('.t');
-          if (title) {
-            Object.assign(title.style, {
-              webkitLineClamp: "2",
-              lineClamp: "2",
-              display: '-webkit-box',
-              webkitBoxOrient: 'vertical',
-              overflow: 'hidden'
-            });
-          }
-          
-          const meta = el.querySelector('.m');
-          if (meta) {
-            Object.assign(meta.style, {
-              whiteSpace: 'nowrap',
-              textOverflow: 'ellipsis',
-              overflow: 'hidden'
-            });
-          }
-        });
-      }
-    } 
-    // Режим timeline
-    else {
-      if (count === 2) {
-        slot.classList.add("two");
-        cell.dataset.double = "1";
-
-        // Flex-раскладка для двойных событий
-        Object.assign(slotInner.style, {
-          display: "flex",
-          flexDirection: "column",
-          gap: "2px",
-          height: "100%",
-          minHeight: "0"
-        });
-
-        const sortedEvents = [...eventsInCell].sort((a, b) => a.startMin - b.startMin);
-        const eventElements = [];
-        
-        sortedEvents.forEach(ev => {
-          const el = createTimelineDoubleEvent(ev, slotInner);
-          eventElements.push(el);
-          slotInner.appendChild(el);
-        });
-
-        // Вычисление высоты после рендеринга
-        setTimeout(() => {
-          calculateAndSetDoubleEventsHeight(cell, slotInner, eventElements);
-        }, 10);
-      } else {
-        cell.dataset.double = "";
-        eventsInCell.forEach(ev => slotInner.appendChild(createTimelineSingleEvent(ev)));
-      }
-    }
-
-    // Обработчик клика по пустой области ячейки
-    cell.addEventListener("click", (e) => {
-      const isCompactMode = state.settings.display.cellView === "compact";
-      
-      if (isCompactMode && count === 0) {
-        const start = parseHHMM(state.settings.schedule.start) || 540;
-        smartOpenCreate(dayIndex, start);
-      } else if (!isCompactMode) {
-        smartOpenCreate(dayIndex, slotStart, slotEnd);
-      }
-    });
-
-    // Обработчики drag & drop (только для timeline/list)
-    if (!isCompact) {
-      cell.addEventListener("dragover", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        cell.classList.add("drop-target");
-        e.dataTransfer.dropEffect = "move";
-      });
-
-      cell.addEventListener("dragleave", (e) => {
-        if (!cell.contains(e.relatedTarget))
-          cell.classList.remove("drop-target");
-      });
-
-      cell.addEventListener("drop", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        cell.classList.remove("drop-target");
-
-        const id = e.dataTransfer.getData("text/event-id");
-        if (!id) return;
-
-        const ev = state.events.find(x => x.id === id);
-        if (!ev) return;
-
-        smartMoveEvent(id, dayIndex, slotStart, "Перемещение drag&drop");
-      });
-    }
-
-    cell.appendChild(slot);
-    return cell;
-  }
-
-  // ===== РЕНДЕРИНГ =====
-
-  // Колонка времени (только если не компактный режим)
+  // Колонка времени только если не compact
   if (view !== "compact") {
     scheduleEl.appendChild(mkCell("cell head time", ""));
   }
@@ -5318,159 +6544,644 @@ function renderSchedule() {
   // Заголовки дней — всегда
   DAYS.forEach((d, dayIndex) => {
     const c = mkCell("cell head", "");
-
-    const daySpan = document.createElement("span");
-    daySpan.textContent = d;
-
-    const actionsSpan = document.createElement("span");
-    actionsSpan.className = "day-actions";
-    actionsSpan.title = "Действия";
-    actionsSpan.textContent = "⋯";
-    actionsSpan.dataset.dayIndex = dayIndex;
-
-    c.appendChild(daySpan);
-    c.appendChild(document.createTextNode(" "));
-    c.appendChild(actionsSpan);
-
+    const label = getScheduleDayLabel(dayIndex);
+    c.innerHTML = `<span class="day-label">${label}</span> <span class="day-actions" title="Действия">⋯</span>`;
+    c.querySelector(".day-actions").addEventListener("click", (e) => {
+      e.stopPropagation();
+      dayMenu(dayIndex);
+    });
     scheduleEl.appendChild(c);
   });
+
+  updateDayHeaders(scheduleEl);
+
+  // ===== helpers (compact) =====
+  function createCompactEventCard(ev) {
+    const dir = getDir(ev.directionId);
+    const color = dir ? dir.color : "#64748b";
+    const el = document.createElement("div");
+    el.className = "event compact-card";
+    if (!eventVisible(ev)) el.classList.add("dim");
+
+    el.style.setProperty("--ev-bg", color);
+
+    // Добавляем атрибут для идентификации события
+    el.dataset.eid = ev.id;
+
+    // Удален обработчик клика, так как он будет обрабатываться системой Drag-and-Drop
+    // Клик обрабатывается в handleTouchEnd и handleMouseUp
+
+    const title = document.createElement("div");
+    title.className = "t";
+    title.textContent = fixTypography(ev.name) || "Без названия";
+    el.appendChild(title);
+
+    const metaText = metaCoachRoom(ev, true);
+    if (metaText) {
+      const meta = document.createElement("div");
+      meta.className = "m";
+      meta.textContent = metaText;
+      el.appendChild(meta);
+    }
+
+    applyTitleStyles(el, CELL_HEIGHT_CONFIG.TITLE_LINES);
+    applyMetaStyles(el, CELL_HEIGHT_CONFIG.META_LINES);
+
+    const grab = document.createElement("div");
+    grab.className = "grab";
+    grab.textContent = "↕";
+    el.appendChild(grab);
+
+    if (state.settings.display.showNotes) {
+      const tt = [];
+      tt.push(`${minToHHMM(ev.startMin)}–${minToHHMM(ev.startMin + ev.durationMin)}`);
+      if (ev.coach) tt.push(ev.coach);
+      if (ev.room) tt.push(ev.room);
+      if (dir) tt.push(dir.name);
+      if (ev.notes) tt.push(`📝 ${ev.notes}`);
+      el.title = tt.join(" · ");
+    }
+
+    return el;
+  }
 
   // ===== КОМПАКТНЫЙ РЕЖИМ =====
   if (view === "compact") {
     for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
-      const cell = createCellWithEvents(dayIndex, null, null, null, true);
+      const cell = mkCell("cell droppable", "");
+      cell.dataset.dayIndex = dayIndex;
+      
+      if (dayIndex === todayIndex && state.settings.display.showTodayHighlight) {
+        cell.classList.add("col-today");
+      }
+
+      const slot = document.createElement("div");
+      slot.className = "slot compact-mode";
+
+      const slotInner = document.createElement("div");
+      slotInner.className = "slot-inner";
+      slot.appendChild(slotInner);
+
+      const dayEvents = state.events
+        .filter((ev) => ev.dayIndex === dayIndex)
+        .sort((a, b) => a.startMin - b.startMin);
+
+      if (dayEvents.length === 0) {
+        if (state.settings.display.showEmptyHint) {
+          const hint = document.createElement("div");
+          hint.className = "empty-slot";
+          hint.textContent = "Нет занятий";
+          slotInner.appendChild(hint);
+        }
+      } else {
+        dayEvents.forEach((ev) => slotInner.appendChild(createCompactEventCard(ev)));
+      }
+
+      cell.addEventListener("click", (e) => {
+        handleCellClickOpen(e, cell, dayIndex, null, null, true);
+      });
+
+      cell.appendChild(slot);
       scheduleEl.appendChild(cell);
     }
-  } 
-  // ===== TIMELINE / LIST =====
-  else {
+  } else {
+    // ===== timeline / list =====
     slots.forEach((slotStart, slotIndex) => {
-      const slotEnd = slotStart + step;
-
-      // Колонка времени
+      const isNow = minToHHMM(slotStart).startsWith(nowHour + ":");
       const tCell = mkCell("cell time", minToHHMM(slotStart));
+      tCell.dataset.slotIndex = slotIndex;
+      if (isNow) tCell.classList.add("now");
       scheduleEl.appendChild(tCell);
 
-      // Ячейки дней
+      const slotEnd = slotStart + step;
+
       for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
-        const cell = createCellWithEvents(dayIndex, slotStart, slotEnd, slotIndex);
+        const cell = mkCell("cell droppable", "");
+        cell.dataset.dayIndex = dayIndex;
+        cell.dataset.slotIndex = String(slotIndex);
+
+        if (dayIndex === todayIndex && state.settings.display.showTodayHighlight) {
+          cell.classList.add("col-today");
+        }
+
+        const slot = document.createElement("div");
+        slot.className = "slot";
+        if (view === "list") slot.classList.add("list-mode");
+        if (view === "timeline") slot.classList.add("tl-fill");
+
+        const slotInner = document.createElement("div");
+        slotInner.className = "slot-inner";
+        slot.appendChild(slotInner);
+
+        cell.addEventListener("click", (e) =>
+          handleCellClickOpen(e, cell, dayIndex, slotStart, slotEnd, false)
+        );
+
+        const eventsInCell = state.events
+          .filter(
+            (ev) =>
+              ev.dayIndex === dayIndex &&
+              ev.startMin >= slotStart &&
+              ev.startMin < slotEnd
+          )
+          .sort((a, b) => a.startMin - b.startMin);
+
+        const count = eventsInCell.length;
+
+        if (!count) {
+          if (state.settings.display.showEmptyHint) {
+            const hint = document.createElement("div");
+            hint.className = "empty-slot";
+            hint.textContent = "Клик для добавления";
+            slotInner.appendChild(hint);
+          }
+        } else if (view === "list") {
+          eventsInCell.forEach((ev) => {
+            const dir = getDir(ev.directionId);
+            const color = dir ? dir.color : "#64748b";
+            const el = document.createElement("div");
+            el.className = "event list" + (count === 2 ? " double" : "");
+            if (!eventVisible(ev)) el.classList.add("dim");
+            el.style.setProperty("--ev-bg", color);
+
+            // Добавляем атрибут для идентификации события
+            el.dataset.eid = ev.id;
+
+            // Удален обработчик клика, так как он будет обрабатываться системой Drag-and-Drop
+            // Клик обрабатывается в handleTouchEnd и handleMouseUp
+
+            const title = document.createElement("div");
+            title.className = "t";
+            title.textContent = fixTypography(ev.name) || "Без названия";
+
+            const metaText = count >= 2 ? metaCoachRoom(ev, true) : metaFullByMode(ev);
+            const meta = document.createElement("div");
+            meta.className = "m";
+            meta.textContent = metaText;
+
+            const grab = document.createElement("div");
+            grab.className = "grab";
+            grab.textContent = "↕";
+
+            el.appendChild(title);
+            if (metaText) el.appendChild(meta);
+            el.appendChild(grab);
+
+            if (state.settings.display.showNotes) {
+              const tt = [];
+              tt.push(`${minToHHMM(ev.startMin)}–${minToHHMM(ev.startMin + ev.durationMin)}`);
+              if (ev.coach) tt.push(ev.coach);
+              if (ev.room) tt.push(ev.room);
+              if (dir) tt.push(dir.name);
+              if (ev.notes) tt.push("— " + ev.notes);
+              el.title = tt.join("\n");
+            }
+
+            slotInner.appendChild(el);
+          });
+        } else {
+          // TIMELINE
+          if (count === 2) {
+            slot.classList.add("two");
+            cell.dataset.double = "1";
+
+            const sortedEvents = [...eventsInCell].sort((a, b) => a.startMin - b.startMin);
+            sortedEvents.forEach((ev) => {
+              const dir = getDir(ev.directionId);
+              const color = dir ? dir.color : "#64748b";
+              const el = document.createElement("div");
+              el.className = "event double";
+              if (!eventVisible(ev)) el.classList.add("dim");
+              el.style.setProperty("--ev-bg", color);
+
+              // Добавляем атрибут для идентификации события
+              el.dataset.eid = ev.id;
+
+              // Удален обработчик клика, так как он будет обрабатываться системой Drag-and-Drop
+              // Клик обрабатывается в handleTouchEnd и handleMouseUp
+
+              const title = document.createElement("div");
+              title.className = "t";
+              title.textContent = fixTypography(ev.name);
+              el.appendChild(title);
+
+              const metaText = metaCoachRoom(ev, true);
+              if (metaText) {
+                const meta = document.createElement("div");
+                el.classList.add("title-3");
+                meta.className = "m";
+                meta.textContent = metaText;
+                el.appendChild(meta);
+              }
+
+              const grab = document.createElement("div");
+              grab.className = "grab";
+              grab.textContent = "↕";
+              el.appendChild(grab);
+
+              if (state.settings.display.showNotes) {
+                const tt = [];
+                tt.push(`${minToHHMM(ev.startMin)}–${minToHHMM(ev.startMin + ev.durationMin)}`);
+                if (ev.coach) tt.push(ev.coach);
+                if (ev.room) tt.push(ev.room);
+                if (dir) tt.push(dir.name);
+                if (ev.notes) tt.push(`📝 ${ev.notes}`);
+                el.title = tt.join(" · ");
+              }
+
+              slotInner.appendChild(el);
+            });
+          } else {
+            cell.dataset.double = "";
+            eventsInCell.forEach((ev) => {
+              const dir = getDir(ev.directionId);
+              const color = dir ? dir.color : "#64748b";
+              const el = document.createElement("div");
+              el.className = "event";
+              if (!eventVisible(ev)) el.classList.add("dim");
+              el.style.setProperty("--ev-bg", color);
+
+              // Добавляем атрибут для идентификации события
+              el.dataset.eid = ev.id;
+
+              // Удален обработчик клика, так как он будет обрабатываться системой Drag-and-Drop
+              // Клик обрабатывается в handleTouchEnd и handleMouseUp
+
+              const title = document.createElement("div");
+              title.className = "t";
+              title.textContent = fixTypography(ev.name);
+              el.appendChild(title);
+
+              const metaText = metaFullByMode(ev);
+              if (metaText) {
+                const meta = document.createElement("div");
+                meta.className = "m";
+                meta.textContent = metaText;
+                el.appendChild(meta);
+              }
+
+              const grab = document.createElement("div");
+              grab.className = "grab";
+              grab.textContent = "↕";
+              el.appendChild(grab);
+
+              if (state.settings.display.showNotes) {
+                const tt = [];
+                tt.push(`${minToHHMM(ev.startMin)}–${minToHHMM(ev.startMin + ev.durationMin)}`);
+                if (ev.coach) tt.push(ev.coach);
+                if (ev.room) tt.push(ev.room);
+                if (dir) tt.push(dir.name);
+                if (ev.notes) tt.push(`📝 ${ev.notes}`);
+                el.title = tt.join(" · ");
+              }
+
+              slotInner.appendChild(el);
+            });
+          }
+        }
+
+        cell.appendChild(slot);
         scheduleEl.appendChild(cell);
       }
     });
-    
-    // Синхронизация геометрии после рендеринга
-    setTimeout(() => {
-      if (view === "list") {
-        syncListGeometry(scheduleEl);
-      } else if (view === "timeline") {
-        syncTimelineGeometry(scheduleEl);
-      }
-    }, 0);
   }
 
-  // Инициализация SortableJS
+  $("emptyHint").hidden = state.events.length !== 0;
+  const heightSig = getRowHeightSignature(structureKey);
+  if (heightSig !== lastHeightSyncKey) {
+    lastHeightSyncKey = heightSig;
+    pendingRowHeightSync = true;
+  }
+  requestRowHeightSync();
+  markGeometryDirty();
+  
+  // Инициализируем систему Drag-and-Drop после рендера
   setTimeout(() => {
-    initSortableJS();
+    if (window.TouchDragSystem && window.TouchDragSystem.init) {
+      window.TouchDragSystem.init();
+    }
   }, 100);
+}
 
-  // Скрытие подсказки о пустом расписании
-  const emptyHint = $("emptyHint");
-  if (emptyHint) {
-    emptyHint.hidden = state.events.length !== 0;
+// ================================================================================================================================================ ЕБАННОЕ_ОТОБРАЖЕНИЕ ========
+function renderSchedule() {
+  const scheduleEl = $("schedule");
+  if (!scheduleEl) return;
+
+  const { step, start } = getBounds();
+  const slots = buildSlots();
+  const view = state.settings.display.cellView;
+
+  const todayIndex = (new Date().getDay() + 6) % 7;
+  const nowHour = pad2(new Date().getHours());
+
+  if (view !== lastCellView) {
+    lastCellView = view;
+    markGeometryDirtyIfNeeded();
   }
 
-  // Обработчик для кнопок действий дней
-  scheduleEl.addEventListener("click", function (e) {
-    const dayActions = e.target.closest(".day-actions");
-    if (dayActions) {
-      e.stopPropagation();
-      const dayIndex = parseInt(dayActions.dataset.dayIndex);
-      if (!isNaN(dayIndex)) {
+  const structureKey = getScheduleStructureKey();
+  const needsRebuild =
+    scheduleEl.dataset.structureKey !== structureKey ||
+    !scheduleEl.firstElementChild;
+  if (needsRebuild) {
+    scheduleEl.dataset.structureKey = structureKey;
+    scheduleEl.innerHTML = "";
+
+    if (view === "compact") scheduleEl.classList.add("compact-mode");
+    else scheduleEl.classList.remove("compact-mode");
+
+    if (view !== "compact") {
+      scheduleEl.appendChild(mkCell("cell head time", ""));
+    }
+
+    DAYS.forEach((d, dayIndex) => {
+      const c = mkCell("cell head", "");
+      const label = getScheduleDayLabel(dayIndex);
+      c.innerHTML = `<span class="day-label">${label}</span><span class="day-actions" title="Действия">⋯</span>`;
+      c.querySelector(".day-actions").addEventListener("click", (e) => {
+        e.stopPropagation();
         dayMenu(dayIndex);
+      });
+      scheduleEl.appendChild(c);
+    });
+
+    if (view === "compact") {
+      for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
+        const cell = mkCell("cell droppable", "");
+        cell.dataset.dayIndex = dayIndex;
+
+        const slot = document.createElement("div");
+        slot.className = "slot compact-mode";
+
+        const slotInner = document.createElement("div");
+        slotInner.className = "slot-inner";
+        slot.appendChild(slotInner);
+
+        cell.addEventListener("click", (e) => {
+          handleCellClickOpen(e, cell, dayIndex, null, null, true);
+        });
+
+        cell.appendChild(slot);
+        scheduleEl.appendChild(cell);
+      }
+    } else {
+      slots.forEach((slotStart, slotIndex) => {
+        const tCell = mkCell("cell time", minToHHMM(slotStart));
+        tCell.dataset.slotIndex = slotIndex;
+        scheduleEl.appendChild(tCell);
+
+        const slotEnd = slotStart + step;
+
+        for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
+          const cell = mkCell("cell droppable", "");
+          cell.dataset.dayIndex = dayIndex;
+          cell.dataset.slotIndex = String(slotIndex);
+
+          const slot = document.createElement("div");
+          slot.className = "slot";
+          if (view === "list") slot.classList.add("list-mode");
+          if (view === "timeline") slot.classList.add("tl-fill");
+
+          const slotInner = document.createElement("div");
+          slotInner.className = "slot-inner";
+          slot.appendChild(slotInner);
+
+          cell.addEventListener("click", (e) =>
+            handleCellClickOpen(e, cell, dayIndex, slotStart, slotEnd, false)
+          );
+
+          cell.appendChild(slot);
+          scheduleEl.appendChild(cell);
+        }
+      });
+    }
+  } else {
+    if (view === "compact") scheduleEl.classList.add("compact-mode");
+    else scheduleEl.classList.remove("compact-mode");
+  }
+
+  updateDayHeaders(scheduleEl);
+
+  const changedSlots = new Set();
+  let anyChanged = false;
+
+  if (view === "compact") {
+    const eventsByDay = Array.from({ length: 7 }, () => []);
+    state.events.forEach((ev) => {
+      if (ev.dayIndex >= 0 && ev.dayIndex < 7) {
+        eventsByDay[ev.dayIndex].push(ev);
+      }
+    });
+    eventsByDay.forEach((arr) => arr.sort((a, b) => a.startMin - b.startMin));
+
+    for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
+      const cell = scheduleEl.querySelector(
+        `.cell.droppable[data-day-index="${dayIndex}"]`
+      );
+      if (!cell) continue;
+
+      updateTodayHighlight(cell, dayIndex, todayIndex);
+
+      const slotInner = cell.querySelector(".slot-inner") || createSlotInner(cell);
+      const dayEvents = eventsByDay[dayIndex] || [];
+      const renderKey = [
+        "compact",
+        state.settings.display.showEmptyHint ? 1 : 0,
+        ...dayEvents.map((ev) => getEventRenderKey(ev, "compact", false)),
+      ].join(";");
+
+      if (slotInner.dataset.renderKey !== renderKey) {
+        slotInner.dataset.renderKey = renderKey;
+        slotInner.replaceChildren();
+
+        if (!dayEvents.length) {
+          if (state.settings.display.showEmptyHint) {
+            const hint = document.createElement("div");
+            hint.className = "empty-slot";
+            hint.textContent = "??? ???????";
+            slotInner.appendChild(hint);
+          }
+        } else {
+          dayEvents.forEach((ev) =>
+            slotInner.appendChild(createCompactEventCard(ev))
+          );
+        }
+        anyChanged = true;
       }
     }
-  });
-}
+  } else {
+    const timeCells = scheduleEl.querySelectorAll(".cell.time");
+    timeCells.forEach((tCell) => {
+      const isNow = tCell.textContent.startsWith(nowHour + ":");
+      tCell.classList.toggle("now", isNow);
+    });
 
-function renderScheduleOnly() {
-    renderSchedule();
-    renderStats();
-    updateFilterChips();
-    markGeometryDirtyIfNeeded();
-    
-    // Обновляем логотип только если он включен
-    if (window.logoManager && state.settings.logo?.enabled) {
-        try {
-            window.logoManager.update();
-        } catch (error) {
-            console.error("Ошибка обновления логотипа:", error);
+    const eventsByCell = new Map();
+    state.events.forEach((ev) => {
+      if (ev.dayIndex == null) return;
+      const slotIndex = Math.floor((ev.startMin - start) / step);
+      if (!Number.isFinite(slotIndex)) return;
+      if (slotIndex < 0 || slotIndex >= slots.length) return;
+      const slotStart = slots[slotIndex];
+      if (ev.startMin < slotStart || ev.startMin >= slotStart + step) return;
+
+      const key = `${slotIndex}|${ev.dayIndex}`;
+      let arr = eventsByCell.get(key);
+      if (!arr) {
+        arr = [];
+        eventsByCell.set(key, arr);
+      }
+      arr.push(ev);
+    });
+    eventsByCell.forEach((arr) => arr.sort((a, b) => a.startMin - b.startMin));
+
+    for (let slotIndex = 0; slotIndex < slots.length; slotIndex++) {
+      for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
+        const cell = scheduleEl.querySelector(
+          `.cell.droppable[data-day-index="${dayIndex}"][data-slot-index="${slotIndex}"]`
+        );
+        if (!cell) continue;
+
+        updateTodayHighlight(cell, dayIndex, todayIndex);
+
+        const slot = cell.querySelector(".slot");
+        if (slot) {
+          slot.classList.toggle("list-mode", view === "list");
+          slot.classList.toggle("tl-fill", view === "timeline");
+          if (view !== "timeline") slot.classList.remove("two");
         }
+
+        const slotInner = cell.querySelector(".slot-inner") || createSlotInner(cell);
+        const key = `${slotIndex}|${dayIndex}`;
+        const eventsInCell = eventsByCell.get(key) || [];
+        const count = eventsInCell.length;
+        const renderKey = [
+          view,
+          state.settings.display.showEmptyHint ? 1 : 0,
+          count,
+          ...eventsInCell.map((ev) => getEventRenderKey(ev, view, count === 2)),
+        ].join(";");
+
+        if (slotInner.dataset.renderKey !== renderKey) {
+          slotInner.dataset.renderKey = renderKey;
+          slotInner.replaceChildren();
+
+          if (!count) {
+            if (state.settings.display.showEmptyHint) {
+              const hint = document.createElement("div");
+              hint.className = "empty-slot";
+              hint.textContent = "Добавить занятие";
+              slotInner.appendChild(hint);
+            }
+            if (slot && view === "timeline") slot.classList.remove("two");
+            cell.dataset.double = "";
+          } else if (view === "list") {
+            eventsInCell.forEach((ev) =>
+              slotInner.appendChild(createListEventElement(ev, count))
+            );
+            cell.dataset.double = "";
+          } else {
+            if (count === 2) {
+              if (slot) slot.classList.add("two");
+              cell.dataset.double = "1";
+              eventsInCell.forEach((ev) =>
+                slotInner.appendChild(createTimelineEventElement(ev, true))
+              );
+            } else {
+              if (slot) slot.classList.remove("two");
+              cell.dataset.double = "";
+              eventsInCell.forEach((ev) =>
+                slotInner.appendChild(createTimelineEventElement(ev, false))
+              );
+            }
+          }
+
+          if (count) updateDoubleEventClassesForCell(cell);
+          anyChanged = true;
+          changedSlots.add(slotIndex);
+        }
+      }
     }
-}
+  }
 
-function onLayoutSettingsChanged() {
-  markGeometryDirtyIfNeeded();
-}
+  $("emptyHint").hidden = state.events.length !== 0;
+  if (view !== "compact") {
+    if (needsRebuild) {
+      pendingRowHeightSync = true;
+      requestRowHeightSync(true);
+    } else if (changedSlots.size) {
+      changedSlots.forEach((idx) => scheduleRowHeightUpdate(idx));
+    }
+  }
 
-function getFilterHash() {
-  const { day, time, dir, q } = filters;
-  const dirStr = Array.from(dir).sort().join(",");
-  return `${day}|${time}|${dirStr}|${q}`;
-}
+  if (needsRebuild || anyChanged) {
+    markGeometryDirty();
+  }
 
-function memoizedEventVisible(ev) {
-  const hash = getFilterHash();
-
-  if (!filterCache.has(ev)) {
-    filterCache.set(ev, {
-      cache: {},
-      timestamps: {},
-      keys: [],
+  if (view !== "compact") {
+    updateEmptyTimeRowsVisibility(scheduleEl, {
+      respectFilters: false,
+      keepNowRow: true,
     });
   }
 
-  const cacheData = filterCache.get(ev);
-
-  if (cacheData.cache[hash] !== undefined) {
-    cacheData.timestamps[hash] = Date.now();
-    return cacheData.cache[hash];
-  }
-
-  const isVisible =
-    matchesDay(ev) && matchesTime(ev) && matchesDir(ev) && matchesQuery(ev);
-
-  cacheData.cache[hash] = isVisible;
-  cacheData.timestamps[hash] = Date.now();
-  cacheData.keys.push(hash);
-
-  if (cacheData.keys.length > 5) {
-    let oldestKey = cacheData.keys[0];
-    let oldestTime = cacheData.timestamps[oldestKey];
-
-    for (let i = 1; i < cacheData.keys.length; i++) {
-      const key = cacheData.keys[i];
-      if (cacheData.timestamps[key] < oldestTime) {
-        oldestKey = key;
-        oldestTime = cacheData.timestamps[key];
+  if (needsRebuild || !touchDragState.container) {
+    setTimeout(() => {
+      if (window.TouchDragSystem && window.TouchDragSystem.init) {
+        window.TouchDragSystem.init();
       }
-    }
+    }, 100);
+  }
+}
 
-    delete cacheData.cache[oldestKey];
-    delete cacheData.timestamps[oldestKey];
-    cacheData.keys = cacheData.keys.filter((k) => k !== oldestKey);
+function renderAll() {
+  applyTheme();
+  renderFilterBar();
+  renderSchedule();
+  renderStats();
+
+  // Обновляем логотип после рендеринга расписания
+  if (window.logoManager) {
+    try {
+      window.logoManager.update();
+    } catch (error) {
+      console.error("Ошибка при обновлении логотипа в renderAll():", error);
+    }
+  }
+  markGeometryDirtyIfNeeded();
+}
+
+
+function memoizedEventVisible(ev) {
+  const q = (filters.q || "").trim().toLowerCase();
+  const dirKey = Array.from(filters.dir || [])
+    .map(String)
+    .sort()
+    .join(",");
+  const hash = `${filters.day}|${filters.time}|${dirKey}|${q}`;
+
+  if (hash !== lastFilterHash) {
+    lastFilterHash = hash;
+    filterCache = new Map();
   }
 
-  return isVisible;
+  const key = ev && ev.id ? ev.id : ev;
+  if (filterCache.has(key)) return filterCache.get(key);
+
+  const visible = eventVisible(ev);
+  filterCache.set(key, visible);
+  return visible;
 }
 
 function clearFilterCache() {
-  filterCache = new WeakMap();
+  filterCache = new Map();
   lastFilterHash = "";
 }
 
 function onFiltersChanged() {
+  clearFilterCache();
   renderFilterBar();
-
   applyEventVisibilityOnly();
 }
 
@@ -5514,57 +7225,30 @@ function applyEventVisibilityOnly() {
 }
 
 function renderStats(visibleCount = null) {
-    const total = state.events.length;
-    const shown = visibleCount !== null 
-        ? visibleCount 
-        : state.events.filter(memoizedEventVisible).length;
-    
-    const statsEl = $("stats");
-    if (statsEl) {
-        statsEl.textContent = total 
-            ? `Показано: ${shown}/${total}` 
-            : "Нет занятий";
-    }
-    
-    updateFilterChips();
+  const total = state.events.length;
+  const shown =
+    visibleCount !== null
+      ? visibleCount
+      : state.events.filter(memoizedEventVisible).length;
+
+  const statsEl = $("stats");
+  if (statsEl) {
+    statsEl.textContent = total ? `Показано: ${shown}/${total}` : "Нет занятий";
+  }
+
+  updateFilterChips();
+}
+
+function updateStats(visibleCount = null) {
+  renderStats(visibleCount);
 }
 
 function updateFilterChips() {
-    const counts = countByDirection();
-    const chips = document.querySelectorAll("#dirGroup .chip");
-    
-    for (const chip of chips) {
-        const dirId = chip.dataset.dirId;
-        if (!dirId) continue;
-        
-        const countEl = chip.querySelector(".count");
-        if (countEl && counts[dirId] !== undefined) {
-            countEl.textContent = String(counts[dirId]);
-        }
-    }
+  // Обновление чипсов фильтров
+  console.log("[updateFilterChips] Обновление чипсов фильтров");
 }
 
-
-
-
-
-
-function renderAll() {
-  applyTheme();
-  renderFilterBar();
-  renderSchedule();
-  renderStats();
-
-  // Обновляем логотип после рендеринга расписания
-  if (window.logoManager) {
-    try {
-      window.logoManager.update();
-    } catch (error) {
-      console.error("Ошибка при обновлении логотипа в renderAll():", error);
-    }
-  }
-  markGeometryDirtyIfNeeded();
-}
+// ==================== ФУНКЦИИ_РЕНДЕРА_ТАБЛИЦЫ_ИЗНАЧАЛЬНОЙ ====================
 
 function dayMenu(dayIndex) {
   const action = prompt(
@@ -5652,9 +7336,39 @@ function smartOpenCreate(dayIndex, slotStart, slotEnd = null) {
   openCreate(dayIndex, defaultStart, defaultDuration);
 }
 
-function uid() {
-  return "e_" + Math.random().toString(36).slice(2, 10);
+function handleCellClickOpen(e, cell, dayIndex, slotStart, slotEnd, isCompact) {
+  if (!cell) return;
+
+  const clickedEvent = e?.target?.closest?.(".event[data-eid]");
+  if (clickedEvent && clickedEvent.dataset?.eid) {
+    openEdit(clickedEvent.dataset.eid);
+    return;
+  }
+
+  const eventsInCell = Array.from(cell.querySelectorAll(".event[data-eid]"));
+  if (eventsInCell.length === 1) {
+    openEdit(eventsInCell[0].dataset.eid);
+    return;
+  }
+
+  if (eventsInCell.length > 1) {
+    toast(
+      "INFO",
+      "Выберите занятие",
+      "В этой ячейке несколько занятий. Нажмите на нужное.",
+      1600,
+    );
+    return;
+  }
+
+  if (isCompact) {
+    const startMin = parseHHMM(state.settings.schedule.start) || 540;
+    smartOpenCreate(dayIndex, startMin);
+  } else {
+    smartOpenCreate(dayIndex, slotStart, slotEnd);
+  }
 }
+
 
 function renderDirSelect(selectedId) {
   evDir.innerHTML = "";
@@ -5759,6 +7473,50 @@ function updateNewDirPreview() {
   newDirPreview.style.display = "inline-flex";
   newDirPreview.style.background = newDirColor.value;
   newDirPreview.textContent = name;
+}
+
+function clearNewDirForm() {
+  newDirName.value = "";
+  newDirColor.value = "#ef4444";
+  updateNewDirPreview();
+  renderDirSwatches();
+}
+
+function createDirectionFromForm({ select = true } = {}) {
+  const name = newDirName.value.trim();
+  if (!name) {
+    toast("WARN", "⚠️", "Укажите название направления.");
+    newDirName.focus();
+    return null;
+  }
+
+  const existing = state.directions.find(
+    (d) => d.name.toLowerCase() === name.toLowerCase(),
+  );
+  let directionId;
+
+  if (existing) {
+    directionId = existing.id;
+    toast("INFO", "ℹ️", "Такое направление уже есть.");
+  } else {
+    const ndId = generateDirectionId(name);
+    const color = newDirColor.value || "#ef4444";
+    state.directions.push({ id: ndId, name, color });
+    directionId = ndId;
+    pushHistory(`➕ Новое направление: ${name}`);
+    saveState();
+    toast("OK", "Сохранено", `Направление "${name}" добавлено`);
+  }
+
+  renderDirSelect(directionId);
+  renderFilterBar();
+  if (select && directionId) {
+    evDir.value = directionId;
+    renderDirPreview();
+  }
+
+  clearNewDirForm();
+  return directionId;
 }
 
 function openCreate(dayIndex, slotStart, duration = null) {
@@ -5940,24 +7698,53 @@ function saveEventFromModal() {
   };
 
   const idx = state.events.findIndex((e) => e.id === id);
-  pushHistory(idx < 0 ? "➕ Новое занятие" : "✏️ Редактирование");
-  if (idx >= 0) state.events[idx] = next;
-  else state.events.push(next);
+  const isNew = idx < 0;
+
+  pushHistory(isNew ? "➕ Новое занятие" : "✏️ Редактирование");
+
+  if (idx >= 0) {
+    // Обновляем существующее событие
+    state.events[idx] = next;
+    updateEventInDOM(next);
+  } else {
+    // Добавляем новое событие
+    state.events.push(next);
+    addEventToDOM(next);
+  }
 
   saveState();
-  renderScheduleOnly();
+  updateStats();
   closeEventModal();
+
+  toast(
+    "OK",
+    isNew ? "Добавлено" : "Обновлено",
+    `${isNew ? "Занятие добавлено" : "Занятие обновлено"}`,
+  );
 }
 
 function deleteEventFromModal() {
   const id = evId.value;
   if (!id) return;
+
   if (!confirm("Удалить занятие?")) return;
+
+  const event = state.events.find((e) => e.id === id);
+  if (!event) return;
+
   pushHistory("Удаление занятия");
+
+  // Удаляем из состояния
   state.events = state.events.filter((e) => e.id !== id);
+
+  // Удаляем из DOM
+  removeEventFromDOM(id);
+
   saveState();
-  renderScheduleOnly();
+  updateStats();
   closeEventModal();
+
+  toast("OK", "Удалено", `Занятие "${event.name}" удалено`);
 }
 
 function duplicateEventFromModal() {
@@ -5987,92 +7774,9 @@ function duplicateEventFromModal() {
   pushHistory("Дублирование занятия");
   state.events.push(copy);
   saveState();
-  renderScheduleOnly();
+  addEventToDOM(copy);
   closeEventModal();
   toast("OK", "Дублировано", "Копия добавлена.");
-}
-
-function smartMoveEvent(id, toDay, toSlotStart, reason, durationMin = null) {
-  const { start, end, step } = getBounds();
-  const idx = state.events.findIndex((e) => e.id === id);
-  if (idx < 0) {
-    toast("ERR", "Ошибка", "Событие не найдено", 2000);
-    return;
-  }
-
-  const ev = state.events[idx];
-  
-  // ✅ Используем переданную продолжительность или берем из события
-  const eventDuration = durationMin !== null ? durationMin : ev.durationMin;
-
-  if (toSlotStart < start || toSlotStart >= end) {
-    toast(
-      "WARN",
-      "Нельзя переместить",
-      "Целевое время вне диапазона расписания",
-      2000,
-    );
-    return;
-  }
-
-  // ✅ Используем правильную продолжительность для валидации
-  const validation = validateTimeSlot(toDay, toSlotStart, eventDuration, id);
-  if (!validation.valid) {
-    toast("WARN", "Нельзя переместить", validation.reason, 3000);
-    return;
-  }
-
-  const slotStart = toSlotStart;
-  const slotEnd = slotStart + step;
-  const eventsInTargetSlot = state.events
-    .filter(
-      (e) =>
-        e.id !== id &&
-        e.dayIndex === toDay &&
-        e.startMin >= slotStart &&
-        e.startMin < slotEnd,
-    )
-    .sort((a, b) => a.startMin - b.startMin);
-
-  let targetStartTime = slotStart;
-
-  if (eventsInTargetSlot.length > 0) {
-    if (state.settings.display.cellView === "timeline") {
-      // ✅ СОХРАНЯЕМ ОТНОСИТЕЛЬНОЕ ВРЕМЯ ВНУТРИ СЛОТА
-      const fromSlotStart = slotStartFor(ev.startMin);
-      const relativeTime = ev.startMin - fromSlotStart;
-      targetStartTime = slotStart + relativeTime;
-
-      // Если время выходит за пределы слота, сбрасываем на начало
-      // ✅ Используем правильную продолжительность
-      if (targetStartTime + eventDuration > slotEnd) {
-        targetStartTime = slotStart;
-      }
-    } else {
-      targetStartTime = slotStart;
-    }
-  }
-
-  pushHistory(reason || "Перемещение занятия");
-  state.events[idx].dayIndex = toDay;
-  state.events[idx].startMin = targetStartTime;
-  
-  // ✅ Обновляем продолжительность только если она была передана
-  if (durationMin !== null) {
-    state.events[idx].durationMin = durationMin;
-  }
-  
-  clearFilterCache();
-  saveState(true);
-  renderScheduleOnly();
-
-  const dayName = DAYS[toDay] || `День ${toDay + 1}`;
-  toast(
-    "OK",
-    "Перемещено",
-    `${ev.name} → ${dayName} ${minToHHMM(targetStartTime)}`,
-    2000,
-  );
 }
 
 function getFontSampleText() {
@@ -6536,6 +8240,7 @@ function renderThemePresetUI() {
   );
 }
 
+
 function openCoachManager() {
   if (!state.coaches.length) {
     toast("INFO", "ℹ️", "Список тренеров пуст");
@@ -6619,6 +8324,19 @@ function fillThemeInputsFromState() {
   // Не изменяем themeMode здесь, это делается в openSettings()
 }
 
+function updateThemePresetSelection() {
+    const currentTokens = state.settings.theme.customTokens || deepCopy(THEME_PRESETS[0].tokens);
+    const matchingPreset = THEME_PRESETS.find((preset) =>
+        Object.keys(preset.tokens).every(
+            (key) =>
+                normalizeHex(preset.tokens[key]) === normalizeHex(currentTokens[key]),
+        ),
+    );
+    if (themePreset) {
+        themePreset.value = matchingPreset ? matchingPreset.id : "custom";
+    }
+}
+
 function collectThemeInputs() {
   return {
     bg: tBg.value,
@@ -6634,12 +8352,17 @@ function collectThemeInputs() {
 }
 
 function applyPresetToCustom(presetId) {
-  const p = THEME_PRESETS.find((x) => x.id === presetId);
-  if (!p) return;
-  state.settings.theme.customTokens = deepCopy(p.tokens);
-  fillThemeInputsFromState();
-  previewThemeWarnings();
-  applyTheme();
+    const p = THEME_PRESETS.find((x) => x.id === presetId);
+    if (!p) return;
+    state.settings.theme.customTokens = deepCopy(p.tokens);
+    state.settings.theme.mode = "custom";
+    fillThemeInputsFromState();
+    previewThemeWarnings();
+    // Обновляем значение селектора
+    if (themePreset) themePreset.value = presetId;
+    // Обновляем режим темы
+    if (themeMode) themeMode.value = "custom";
+    applyTheme();
 }
 
 function previewThemeWarnings() {
@@ -6665,26 +8388,28 @@ function previewThemeWarnings() {
 }
 
 function onThemeInput() {
-  state.settings.theme.customTokens = collectThemeInputs();
-  state.settings.theme.alpha = {
-    today: Number(alphaToday.value),
-    now: Number(alphaNow.value),
-    event: Number(alphaEvent.value),
-    shadow: Number(alphaShadow.value),
-  };
+    state.settings.theme.customTokens = collectThemeInputs();
+    state.settings.theme.alpha = {
+        today: Number(alphaToday.value),
+        now: Number(alphaNow.value),
+        event: Number(alphaEvent.value),
+        shadow: Number(alphaShadow.value),
+    };
 
-  alphaTodayVal.textContent = alphaToday.value;
-  alphaNowVal.textContent = alphaNow.value;
-  alphaEventVal.textContent = alphaEvent.value;
-  alphaShadowVal.textContent = alphaShadow.value;
+    alphaTodayVal.textContent = alphaToday.value;
+    alphaNowVal.textContent = alphaNow.value;
+    alphaEventVal.textContent = alphaEvent.value;
+    alphaShadowVal.textContent = alphaShadow.value;
 
-  previewThemeWarnings();
+    previewThemeWarnings();
 
-  if (themeMode && themeMode.value === "custom") {
-    state.settings.theme.mode = "custom";
-  }
+    if (themeMode && themeMode.value === "custom") {
+        state.settings.theme.mode = "custom";
+    }
 
-  applyTheme();
+    // Обновляем пресет при ручной смене цветов
+    updateThemePresetSelection();
+    applyTheme();
 }
 
 document
@@ -6760,8 +8485,7 @@ q.addEventListener("input", (e) => {
   clearTimeout(searchDebounce);
   searchDebounce = setTimeout(() => {
     filters.q = e.target.value;
-    applyEventVisibilityOnly();
-    renderFilterBar();
+    onFiltersChanged();
   }, 150);
 });
 
@@ -6784,6 +8508,7 @@ evCoach.addEventListener("change", () => {
       if (!state.coaches.includes(coachName)) {
         state.coaches.push(coachName);
         state.coaches.sort();
+        saveState();
       }
       renderCoachSelect(coachName);
       toast("OK", "Добавлен", `Тренер "${coachName}" добавлен`);
@@ -6799,10 +8524,24 @@ evCoach.addEventListener("change", () => {
 evRoom.addEventListener("input", updateConflictsLive);
 
 newDirName.addEventListener("input", updateNewDirPreview);
+newDirName.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    createDirectionFromForm({ select: true });
+  }
+});
 newDirColor.addEventListener("input", () => {
   renderDirSwatches();
   updateNewDirPreview();
 });
+if (btnSaveNewDir) {
+  btnSaveNewDir.addEventListener("click", () => {
+    createDirectionFromForm({ select: true });
+  });
+}
+if (btnClearNewDir) {
+  btnClearNewDir.addEventListener("click", clearNewDirForm);
+}
 
 // Временно отключаем флаг, чтобы предотвратить рекурсию
 let themeModeUpdating = false;
@@ -7075,6 +8814,40 @@ function resetDirDetailsMode() {
   details.open = false;
 }
 
+// Добавляем CSS-стили для экспорта
+function addExportStyles() {
+  if (document.querySelector("#export-styles")) return;
+
+  const style = document.createElement("style");
+  style.id = "export-styles";
+  style.textContent = `
+    .export-mode {
+      overflow: hidden !important;
+      box-sizing: border-box !important;
+    }
+    .export-mode .schedule {
+      overflow: hidden !important;
+    }
+    .export-mode .schedule-wrap {
+      overflow: hidden !important;
+    }
+    .export-mode::-webkit-scrollbar {
+      display: none !important;
+      width: 0 !important;
+      height: 0 !important;
+    }
+    .export-mode * {
+      box-sizing: border-box !important;
+    }
+    #logoLayer.export-logo {
+      z-index: 1 !important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+// ============ Загрузка ==============
+
 function bootstrapCore() {
   loadState();
   state.version = 13;
@@ -7137,40 +8910,6 @@ function bootstrapCore() {
   initErrorHandling();
 }
 
-// Добавляем CSS-стили для экспорта
-function addExportStyles() {
-  if (document.querySelector("#export-styles")) return;
-
-  const style = document.createElement("style");
-  style.id = "export-styles";
-  style.textContent = `
-    .export-mode {
-      overflow: hidden !important;
-      box-sizing: border-box !important;
-    }
-    .export-mode .schedule {
-      overflow: hidden !important;
-    }
-    .export-mode .schedule-wrap {
-      overflow: hidden !important;
-    }
-    .export-mode::-webkit-scrollbar {
-      display: none !important;
-      width: 0 !important;
-      height: 0 !important;
-    }
-    .export-mode * {
-      box-sizing: border-box !important;
-    }
-    #logoLayer.export-logo {
-      z-index: 1 !important;
-    }
-  `;
-  document.head.appendChild(style);
-}
-
-// Обновленная функция waitForResources с улучшенной обработкой изображений
-
 function bootstrap() {
   if (isAuthorized()) {
     authorized = true;
@@ -7224,19 +8963,25 @@ try {
   `;
 }
 
+// ============ Загрузка ==============
+
 function updateLogoCSSVariables() {
   const style = document.documentElement.style;
 
   // Получаем реальные размеры из CSS
   const computedStyle = getComputedStyle(document.documentElement);
-  const timeColWidth = computedStyle.getPropertyValue("--timeCol") || "46px";
-  const dayHeadHeight = "42px"; // Фиксированная высота заголовков из CSS
+  let timeColWidth = computedStyle.getPropertyValue("--timeCol") || "46px";
+  const scheduleEl = document.querySelector(".schedule");
+  if (scheduleEl && scheduleEl.classList.contains("compact-mode")) {
+    timeColWidth = "0px";
+  }
+  const dayHeadHeight =
+    computedStyle.getPropertyValue("--dayHeadHeight") || "26px";
 
   // Устанавливаем CSS переменные для логотипа
   style.setProperty("--time-col-width", timeColWidth);
   style.setProperty("--day-head-height", dayHeadHeight);
 }
-
 
 function openExportModal() {
   expPreset.innerHTML = "";
@@ -7251,12 +8996,12 @@ function openExportModal() {
   expBg.value = "auto";
   expQuality.value = "92";
   expQualityVal.textContent = "92";
-  
+
   // Устанавливаем значение по умолчанию для скрытия пустых слотов
   if (expHideEmpty) {
     expHideEmpty.value = "no"; // По умолчанию НЕ скрывать
   }
-  
+
   expPreviewImg.removeAttribute("src");
   lastPreview = null;
   syncExportModalUI();
@@ -7537,6 +9282,7 @@ async function buildExportPreview() {
 function displaySvgPreview(svgDataUrl) {
   const previewFrame = document.querySelector(".export-preview-frame");
   if (!previewFrame) return;
+  if (expPreviewImg) expPreviewImg.style.display = "none";
 
   // Удаляем старый предпросмотр и освобождаем память
   const oldPreview = previewFrame.querySelector("#expPreviewObject");
@@ -7566,13 +9312,28 @@ function displaySvgPreview(svgDataUrl) {
       previewObject.id = "expPreviewObject";
       previewObject.type = "image/svg+xml";
       previewObject.data = objectUrl;
+      let svgWidth = 800;
+      let svgHeight = 600;
+      const sizeMatchW = svgText.match(/width="([\d.]+)(px)?"/i);
+      const sizeMatchH = svgText.match(/height="([\d.]+)(px)?"/i);
+      if (sizeMatchW && sizeMatchH) {
+        svgWidth = Number(sizeMatchW[1]) || svgWidth;
+        svgHeight = Number(sizeMatchH[1]) || svgHeight;
+      } else {
+        const viewBoxMatch = svgText.match(/viewBox="([\d.\s-]+)"/i);
+        if (viewBoxMatch) {
+          const parts = viewBoxMatch[1].trim().split(/\s+/).map(Number);
+          if (parts.length === 4) {
+            svgWidth = parts[2] || svgWidth;
+            svgHeight = parts[3] || svgHeight;
+          }
+        }
+      }
+
       previewObject.style.cssText = `
-                width: 100%;
-                height: 100%;
-                max-width: 100%;
-                max-height: 100%;
+                width: ${Math.ceil(svgWidth)}px;
+                height: ${Math.ceil(svgHeight)}px;
                 display: block;
-                object-fit: contain;
             `;
 
       // Освобождаем object URL после загрузки
@@ -7590,16 +9351,15 @@ function displaySvgPreview(svgDataUrl) {
       previewObject.type = "image/svg+xml";
       previewObject.data = svgDataUrl;
       previewObject.style.cssText = `
-                width: 100%;
-                height: 100%;
-                max-width: 100%;
-                max-height: 100%;
+                width: auto;
+                height: auto;
                 display: block;
-                object-fit: contain;
             `;
 
       previewFrame.appendChild(previewObject);
     }
+    previewFrame.scrollTop = 0;
+    previewFrame.scrollLeft = 0;
   } catch (error) {
     console.error("Ошибка отображения предпросмотра:", error);
     // Fallback: отображаем сообщение
@@ -7699,11 +9459,23 @@ async function prepareDomForExport({
   // 2. Применяем базовые стили к событиям
   applyCssVariablesToEvents(clone);
 
-  // 3. Скрываем пустые строки (только если параметр включен)
-  const hiddenRows = hideEmpty ? hideEmptyTimeRows(clone, {
+  // 2.1. Применяем стили для заголовков/времени (чтобы корректно попадали в SVG)
+  applyHeaderStylesForExport(clone);
+  applyCellSpacingForExport(clone);
+
+  // 2.2. Синхронизируем скрытие пустых строк как в основном расписании
+  updateEmptyTimeRowsVisibility(clone, {
     respectFilters: false,
-    keepNowRow: false,
-  }) : [];
+    keepNowRow: true,
+  });
+
+  // 3. Скрываем пустые строки (только если параметр включен)
+  const hiddenRows = hideEmpty
+    ? hideEmptyTimeRows(clone, {
+        respectFilters: false,
+        keepNowRow: false,
+      })
+    : [];
 
   // 4. Фиксируем шапку
   const headEls = Array.from(clone.querySelectorAll(".cell.head"));
@@ -7715,20 +9487,50 @@ async function prepareDomForExport({
 
   // 5. Создаем элементы логотипа
   const lg = state.settings.logo;
-  let logoLayer = clone.querySelector("#logoLayer");
-  let logoMark = clone.querySelector("#logoMark");
+  const scheduleWrap =
+    clone?.classList?.contains("schedule-wrap")
+      ? clone
+      : clone.querySelector(".schedule-wrap");
+
+  let logoLayer = null;
+  let logoMark = null;
+
+  if (scheduleWrap) {
+    const layers = Array.from(scheduleWrap.querySelectorAll("#logoLayer"));
+    logoLayer = layers[0] || null;
+    if (layers.length > 1) {
+      layers.slice(1).forEach((dup) => dup.remove());
+    }
+
+    const allMarks = Array.from(scheduleWrap.querySelectorAll("#logoMark"));
+    logoMark =
+      (logoLayer && logoLayer.querySelector("#logoMark")) ||
+      allMarks[0] ||
+      null;
+
+    if (logoLayer && logoMark && logoMark.parentElement !== logoLayer) {
+      logoLayer.appendChild(logoMark);
+    }
+
+    allMarks.forEach((m) => {
+      if (m !== logoMark) m.remove();
+    });
+  }
 
   if (lg.enabled) {
-    if (!logoLayer) {
+    if (!logoLayer && scheduleWrap) {
       logoLayer = document.createElement("div");
       logoLayer.id = "logoLayer";
-      clone.querySelector(".schedule-wrap")?.prepend(logoLayer);
+      scheduleWrap.prepend(logoLayer);
     }
-    if (!logoMark) {
+    if (!logoMark && logoLayer) {
       logoMark = document.createElement("div");
       logoMark.id = "logoMark";
       logoLayer.appendChild(logoMark);
     }
+  } else {
+    if (logoLayer) logoLayer.style.display = "none";
+    if (logoMark) logoMark.style.display = "none";
   }
 
   // 6. Даем браузеру пересчитать layout
@@ -7741,14 +9543,10 @@ async function prepareDomForExport({
 
   if (scheduleEl) {
     const rect = scheduleEl.getBoundingClientRect();
-    width = Math.max(
-      100,
-      Math.ceil(rect.width || scheduleEl.scrollWidth || 800),
-    );
-    height = Math.max(
-      100,
-      Math.ceil(rect.height || scheduleEl.scrollHeight || 600),
-    );
+    const fullWidth = scheduleEl.scrollWidth || rect.width || 800;
+    const fullHeight = scheduleEl.scrollHeight || rect.height || 600;
+    width = Math.max(100, Math.ceil(fullWidth));
+    height = Math.max(100, Math.ceil(fullHeight));
 
     // Устанавливаем размеры НА КОНТЕЙНЕР
     clone.style.width = `${width}px`;
@@ -7756,8 +9554,8 @@ async function prepareDomForExport({
     clone.style.overflow = "visible";
 
     // Расписание растягивается на контейнер
-    scheduleEl.style.width = "100%";
-    scheduleEl.style.height = "100%";
+    scheduleEl.style.width = `${width}px`;
+    scheduleEl.style.height = `${height}px`;
     scheduleEl.style.position = "relative";
   } else {
     width = Math.max(100, Math.ceil(metrics.scheduleWidth || 800));
@@ -7768,13 +9566,16 @@ async function prepareDomForExport({
 
   // 8. ПРИМЕНЯЕМ ПОЛНЫЕ СТИЛИ ДЛЯ ЭКСПОРТА (после измерений!)
   applyCssVariablesToEventsForExport(clone);
+  applyHeaderStylesForExport(clone);
+  applyCellSpacingForExport(clone);
 
-  // 9. Применяем логотип ПОСЛЕ измерений
-  if (lg.enabled) {
-    await applyLogoToExport(clone, lg, metrics, format);
+  if (hideEmpty) {
+    // Дополнительно, по DOM: если строка пустая визуально — скрываем
+    hideEmptyTimeRowsByDom(clone, { keepNowRow: false });
   }
 
-  // 10. Дополнительная фиксация для двойных ячеек
+  
+  // 9. Дополнительная фиксация для двойных ячеек
   clone.querySelectorAll('.cell[data-double="1"]').forEach((cell) => {
     const slot = cell.querySelector(".slot");
     if (slot) {
@@ -7802,27 +9603,29 @@ async function exportToSvg(opts) {
     toast("WARN", "SVG", "html-to-image не найден (проверь подключение).");
     return null;
   }
-  
+
   // 1. Принудительно обновляем рендер перед экспортом
   await new Promise((resolve) => {
     renderAll();
     setTimeout(resolve, 100);
   });
-  
+
   // 2. Получаем подготовленный DOM с учетом параметра скрытия пустых слотов
   const prepared = await prepareDomForExport({
     compact: opts.compact,
     format: "svg",
     hideEmpty: opts.hideEmpty, // ← ПЕРЕДАЕМ ПАРАМЕТР
   });
-  
+
   if (!prepared) {
     toast("ERR", "SVG", "Не удалось подготовить DOM для экспорта");
     return null;
   }
-  
-  const { clone, cleanup, width, height } = prepared;
-  
+
+  const { clone, cleanup, width, height, metrics } = prepared;
+  let exportWidth = width;
+  let exportHeight = height;
+
   try {
     // 3. Проверяем, что расписание видно
     const scheduleEl = clone.querySelector(".schedule");
@@ -7831,42 +9634,62 @@ async function exportToSvg(opts) {
       toast("ERR", "SVG", "Расписание не найдено");
       throw new Error("Расписание не найдено");
     }
-    
+
     // 4. Применяем стили к событиям в клоне
     applyCssVariablesToEventsForExport(clone);
-    
+
     // 5. Собираем используемые шрифты
     const usedFonts = collectUsedFontVariantsFromDom(clone);
     console.log("Собраны шрифты для экспорта:", usedFonts);
-    
+
     // 6. Загружаем шрифты (это важно!)
     await ensureFontsLoaded(3000, usedFonts);
-    
+
     // 7. Ждем перерисовки
     await new Promise((r) =>
       requestAnimationFrame(() => requestAnimationFrame(r)),
     );
-    
+
+    const exportSchedule = clone.querySelector(".schedule");
+    if (exportSchedule) {
+      const rect = exportSchedule.getBoundingClientRect();
+      const fullWidth = exportSchedule.scrollWidth || rect.width || exportWidth;
+      const fullHeight =
+        exportSchedule.scrollHeight || rect.height || exportHeight;
+      exportWidth = Math.max(100, Math.ceil(fullWidth));
+      exportHeight = Math.max(100, Math.ceil(fullHeight));
+      clone.style.width = `${exportWidth}px`;
+      clone.style.height = `${exportHeight}px`;
+      exportSchedule.style.width = `${exportWidth}px`;
+      exportSchedule.style.height = `${exportHeight}px`;
+    }
+
+    const lg = state.settings.logo;
+    if (lg?.enabled) {
+      await applyLogoToExport(clone, lg, metrics, "svg");
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+
     // 8. Собираем CSS для встраивания шрифтов (с data URI если возможно)
     const fontEmbedCSS = await buildFontFaceCssForVariants(usedFonts, {
       embedData: true, // Пытаемся встроить шрифты как data URI
     });
-    
+
     console.log(
       "CSS для встраивания шрифтов:",
       fontEmbedCSS.substring(0, 200) + "...",
     );
-    
+
     // 9. Получаем цвет фона из темы
     const bgColor = getThemeBgCssColor() || "#ffffff";
-    
-    console.log(`SVG экспорт: размеры ${width}x${height}, фон ${bgColor}`);
-    
+
+    console.log(`SVG экспорт: размеры ${exportWidth}x${exportHeight}, фон ${bgColor}`);
+
     // 10. Генерируем SVG
     const dataUrl = await htmlToImage.toSvg(clone, {
       backgroundColor: bgColor,
-      width: width,
-      height: height,
+      width: exportWidth,
+      height: exportHeight,
       pixelRatio: 1,
       cacheBust: true,
       quality: 1.0,
@@ -7876,7 +9699,7 @@ async function exportToSvg(opts) {
         opacity: "1",
       },
     });
-    
+
     return { dataUrl };
   } catch (e) {
     console.error("SVG export error:", e);
@@ -7899,7 +9722,7 @@ function getExportOptsFromUI() {
   const background =
     fmt === "svg" ? null : resolveExportBackground(expBg.value);
   const compact = state.settings.display.cellView === "compact";
-  
+
   // Добавляем параметр скрытия пустых слотов
   const hideEmpty = expHideEmpty.value === "yes";
 
@@ -7934,7 +9757,7 @@ function makeExportClone({ compact = false } = {}) {
 
   // Сбрасываем ТОЛЬКО позиционирование, НЕ сетку!
   // Удаляем !important, чтобы не переопределять важные стили ниже
-  clone.style.position = "static";
+  clone.style.position = "relative";
   clone.style.left = "auto";
   clone.style.top = "auto";
   clone.style.right = "auto";
@@ -7957,8 +9780,8 @@ function makeExportClone({ compact = false } = {}) {
 
     // Принудительно показываем все элементы
     // ВАЖНО: Установка visibility/opacity после сброса display из clone.style
-    scheduleEl.querySelectorAll(".cell, .slot, .event").forEach((el) => {
-      el.style.display = "block"; // Убедиться, что отображается
+    scheduleEl.querySelectorAll(".cell, .slot, .slot-inner, .event").forEach((el) => {
+      el.style.removeProperty("display");
       el.style.visibility = "visible";
       el.classList.remove("dim");
       el.style.opacity = "1";
@@ -7975,6 +9798,8 @@ function makeExportClone({ compact = false } = {}) {
     },
   };
 }
+
+
 
 function getExportMetrics(force = false) {
   const now = Date.now();
@@ -8013,7 +9838,6 @@ function getExportMetrics(force = false) {
     metricsTimestamp = now;
     return cachedMetrics;
   }
-
 
   const rect = schedule.getBoundingClientRect();
   const timeCell = schedule.querySelector(".cell.time");
@@ -8061,25 +9885,25 @@ function hideEmptyTimeRows(rootEl, options = {}) {
   const scheduleEl = rootEl.querySelector(".schedule");
   if (!scheduleEl) return [];
   if (scheduleEl.classList.contains("compact-mode")) return [];
-  
+
   const { step } = getBounds();
   const slots = buildSlots();
   if (!slots.length || !step) return [];
-  
+
   const allCells = Array.from(scheduleEl.children);
   if (!allCells.length) return [];
-  
+
   const COLS = scheduleEl.querySelectorAll(".cell.head").length || 8;
   const headerCount = COLS;
-  
+
   const events =
     respectFilters && typeof memoizedEventVisible === "function"
       ? state.events.filter(memoizedEventVisible)
       : state.events;
-  
+
   const base = slots[0];
   const diff = new Array(slots.length + 1).fill(0);
-  
+
   for (const ev of events) {
     const evStart = ev && Number(ev.startMin);
     const evEnd = evStart + Number(ev.durationMin);
@@ -8089,26 +9913,26 @@ function hideEmptyTimeRows(rootEl, options = {}) {
       evEnd <= evStart
     )
       continue;
-    
+
     let first = Math.floor((evStart - base) / step);
     let last = Math.floor((evEnd - 1 - base) / step);
-    
+
     if (last < 0 || first >= slots.length) continue;
-    
+
     first = Math.max(0, first);
     last = Math.min(slots.length - 1, last);
-    
+
     diff[first] += 1;
     diff[last + 1] -= 1;
   }
-  
+
   const has = new Array(slots.length).fill(false);
   let run = 0;
   for (let i = 0; i < slots.length; i++) {
     run += diff[i];
     has[i] = run > 0;
   }
-  
+
   const changed = [];
   const hideCell = (el) => {
     const prevDisplay = el.style.display;
@@ -8116,21 +9940,154 @@ function hideEmptyTimeRows(rootEl, options = {}) {
     changed.push({ el, prevDisplay });
     el.style.display = "none";
   };
-  
+
   for (let slotIndex = 0; slotIndex < slots.length; slotIndex++) {
     if (has[slotIndex]) continue;
     const rowStartIndex = headerCount + slotIndex * COLS;
     const timeCell = allCells[rowStartIndex];
-    
+
     if (keepNowRow && timeCell && timeCell.classList.contains("now")) continue;
-    
+
     for (let i = 0; i < COLS; i++) {
       const cell = allCells[rowStartIndex + i];
       if (cell) hideCell(cell);
     }
   }
-  
+
   return changed;
+}
+
+function hideEmptyTimeRowsByDom(rootEl, options = {}) {
+  const { keepNowRow = true } = options;
+  const scheduleEl =
+    rootEl?.classList?.contains("schedule")
+      ? rootEl
+      : rootEl?.querySelector
+        ? rootEl.querySelector(".schedule")
+        : null;
+  if (!scheduleEl) return [];
+  if (scheduleEl.classList.contains("compact-mode")) return [];
+
+  const slots = buildSlots();
+  if (!slots.length) return [];
+
+  const allCells = Array.from(scheduleEl.children);
+  if (!allCells.length) return [];
+
+  const COLS = scheduleEl.querySelectorAll(".cell.head").length || 8;
+  const headerCount = COLS;
+  const rowCount = Math.min(
+    slots.length,
+    Math.floor((allCells.length - headerCount) / COLS),
+  );
+
+  const changed = [];
+  const hideCell = (el) => {
+    const prevDisplay = el.style.display;
+    if (prevDisplay === "none") return;
+    changed.push({ el, prevDisplay });
+    el.style.display = "none";
+  };
+
+  for (let slotIndex = 0; slotIndex < rowCount; slotIndex++) {
+    const rowStartIndex = headerCount + slotIndex * COLS;
+    const timeCell = allCells[rowStartIndex];
+
+    if (keepNowRow && timeCell && timeCell.classList.contains("now")) continue;
+
+    let hasEvent = false;
+    for (let i = 0; i < COLS; i++) {
+      const cell = allCells[rowStartIndex + i];
+      if (!cell) continue;
+      if (cell.querySelector?.(".event[data-eid]")) {
+        hasEvent = true;
+        break;
+      }
+    }
+
+    if (!hasEvent) {
+      for (let i = 0; i < COLS; i++) {
+        const cell = allCells[rowStartIndex + i];
+        if (cell) hideCell(cell);
+      }
+    }
+  }
+
+  return changed;
+}
+
+function updateEmptyTimeRowsVisibility(rootEl, options = {}) {
+  const { respectFilters = false, keepNowRow = true } = options;
+  const scheduleEl =
+    rootEl?.classList?.contains("schedule")
+      ? rootEl
+      : rootEl?.querySelector
+        ? rootEl.querySelector(".schedule")
+        : null;
+  if (!scheduleEl) return;
+  if (scheduleEl.classList.contains("compact-mode")) return;
+
+  const { step } = getBounds();
+  const slots = buildSlots();
+  if (!slots.length || !step) return;
+
+  const allCells = Array.from(scheduleEl.children);
+  if (!allCells.length) return;
+
+  const COLS = scheduleEl.querySelectorAll(".cell.head").length || 8;
+  const headerCount = COLS;
+
+  const events =
+    respectFilters && typeof memoizedEventVisible === "function"
+      ? state.events.filter(memoizedEventVisible)
+      : state.events;
+
+  const base = slots[0];
+  const diff = new Array(slots.length + 1).fill(0);
+
+  for (const ev of events) {
+    const evStart = ev && Number(ev.startMin);
+    const evEnd = evStart + Number(ev.durationMin);
+    if (
+      !Number.isFinite(evStart) ||
+      !Number.isFinite(evEnd) ||
+      evEnd <= evStart
+    ) {
+      continue;
+    }
+
+    let first = Math.floor((evStart - base) / step);
+    let last = Math.floor((evEnd - 1 - base) / step);
+
+    if (last < 0 || first >= slots.length) continue;
+
+    first = Math.max(0, first);
+    last = Math.min(slots.length - 1, last);
+
+    diff[first] += 1;
+    diff[last + 1] -= 1;
+  }
+
+  const has = new Array(slots.length).fill(false);
+  let run = 0;
+  for (let i = 0; i < slots.length; i++) {
+    run += diff[i];
+    has[i] = run > 0;
+  }
+
+  for (let slotIndex = 0; slotIndex < slots.length; slotIndex++) {
+    const rowStartIndex = headerCount + slotIndex * COLS;
+    const timeCell = allCells[rowStartIndex];
+    const shouldShow =
+      (keepNowRow && timeCell && timeCell.classList.contains("now")) ||
+      has[slotIndex];
+
+    for (let i = 0; i < COLS; i++) {
+      const cell = allCells[rowStartIndex + i];
+      if (!cell) continue;
+      cell.style.display = shouldShow ? "" : "none";
+    }
+  }
 }
 
 function setupDownloadButtons() {
@@ -8194,24 +10151,17 @@ async function applyLogoToExport(element, lg, metrics, format = "canvas") {
   logoLayer.style.width = "100%";
   logoLayer.style.height = "100%";
   logoLayer.style.pointerEvents = "none";
-  logoLayer.style.zIndex = "0"; // <-- КРИТИЧЕСКИ: Под расписанием
+  logoLayer.style.zIndex = "1"; // под расписанием, как в живом рендере
   logoLayer.style.overflow = "hidden";
   logoLayer.style.display = "block";
 
-  // Применяем фоновые стили напрямую
-  logoLayer.style.backgroundColor = lg.bg || "transparent";
-  if (lg.url) {
-    logoLayer.style.backgroundImage = `url("${lg.url}")`;
-    logoLayer.style.backgroundRepeat = lg.repeat || "no-repeat";
-    logoLayer.style.backgroundPosition = lg.pos || "center";
-    logoLayer.style.backgroundSize = lg.size || "contain";
-  } else {
-    logoLayer.style.backgroundImage = "none";
-  }
+  // В экспорте не используем фоновые изображения (в живом рендере их нет)
+  logoLayer.style.backgroundColor = "transparent";
+  logoLayer.style.backgroundImage = "none";
 
   logoMark.style.position = "absolute";
   logoMark.style.pointerEvents = "none";
-  logoMark.style.zIndex = "0"; // <-- КРИТИЧЕСКИ: Под расписанием
+  logoMark.style.zIndex = "1"; // под расписанием
   logoMark.style.opacity = (lg.opacity || 12) / 100;
   logoMark.style.display = "block";
 
@@ -8219,19 +10169,21 @@ async function applyLogoToExport(element, lg, metrics, format = "canvas") {
   const scheduleEl = element.querySelector(".schedule");
   if (scheduleEl) {
     scheduleEl.style.position = "relative";
-    scheduleEl.style.zIndex = "1"; // Над логотипом
+    scheduleEl.style.zIndex = "2"; // Над логотипом
   }
 
   // Применяем содержимое логотипа (центральный, тайловый и т.д.)
   try {
+    const localMetrics = new LogoMetrics().calculate(element);
+    const exportMetrics = localMetrics || metrics;
     const variant = getLogoVariant();
     const layout = lg.layout || "center";
     const opacity = (lg.opacity || 12) / 100;
 
     if (layout === "center") {
-      await applyCenteredLogo(logoMark, lg, metrics, variant, opacity);
+      await applyCenteredLogo(logoMark, lg, exportMetrics, variant, opacity);
     } else if (layout === "tile" || layout === "diagonal") {
-      await applyTiledLogo(logoMark, lg, metrics, variant, opacity, layout);
+      await applyTiledLogo(logoMark, lg, exportMetrics, variant, opacity, layout);
     }
   } catch (error) {
     console.error("Ошибка применения логотипа:", error);
@@ -8240,8 +10192,22 @@ async function applyLogoToExport(element, lg, metrics, format = "canvas") {
   }
 }
 
+function calculateCenteredLogoSizePx(tileSizePercent, metrics) {
+  const safePercent = clamp(Number(tileSizePercent), 0, 1000);
+  if (!metrics || !metrics.contentWidth || !metrics.contentHeight) {
+    const fallback = Math.round((safePercent / 100) * 300);
+    return Math.max(LOGO_CONSTANTS.MIN_TILE_SIZE, fallback);
+  }
+  const minContent = Math.min(metrics.contentWidth, metrics.contentHeight);
+  const pixelSize = Math.round((safePercent / 100) * minContent);
+  return Math.max(LOGO_CONSTANTS.MIN_TILE_SIZE, pixelSize);
+}
+
 async function applyCenteredLogo(logoMark, lg, metrics, variant, opacity) {
-  const tileSize = Math.max(100, Math.min(1000, Number(lg.tileSize) || 140));
+  const tileSize = calculateCenteredLogoSizePx(
+    Number(lg.tileSize || LOGO_CONSTANTS.DEFAULT_TILE_SIZE),
+    metrics,
+  );
   const halfSize = tileSize / 2;
 
   const centerX = metrics.timeColWidth + metrics.contentWidth / 2;
@@ -8254,37 +10220,25 @@ async function applyCenteredLogo(logoMark, lg, metrics, variant, opacity) {
 
   let left = centerX - halfSize;
   let top = centerY - halfSize;
-  let finalTileSize = tileSize;
 
   if (left < leftBoundary) left = leftBoundary;
-  if (left + finalTileSize > rightBoundary)
-    left = rightBoundary - finalTileSize;
+  if (left + tileSize > rightBoundary) left = rightBoundary - tileSize;
   if (top < topBoundary) top = topBoundary;
-  if (top + finalTileSize > bottomBoundary)
-    top = bottomBoundary - finalTileSize;
-
-  if (rightBoundary - leftBoundary < finalTileSize) {
-    finalTileSize = rightBoundary - leftBoundary;
-    left = leftBoundary;
-  }
-  if (bottomBoundary - topBoundary < finalTileSize) {
-    finalTileSize = Math.min(finalTileSize, bottomBoundary - topBoundary);
-    top = topBoundary;
-  }
+  if (top + tileSize > bottomBoundary) top = bottomBoundary - tileSize;
 
   logoMark.style.cssText = `
     position: absolute;
     pointer-events: none;
     z-index: 1;
     opacity: ${opacity};
-    width: ${finalTileSize}px;
-    height: ${finalTileSize}px;
+    width: ${tileSize}px;
+    height: ${tileSize}px;
     left: ${left}px;
     top: ${top}px;
     transform: rotate(${lg.rotation || 0}deg);
   `;
 
-  const src = getLogoDataUrl(variant, lg.recolor ? lg.color : null, lg.opacity);
+  const src = getLogoDataUrl(variant, lg.recolor ? lg.color : null);
   applyLogoStyle(
     logoMark,
     src,
@@ -8822,269 +10776,299 @@ if (expHideEmpty) {
 }
 
 function applyCssVariablesToEvents(clone) {
-  const eventEls = clone.querySelectorAll(".event");
+    const eventEls = clone.querySelectorAll(".event");
+    eventEls.forEach((el) => {
+        el.style.removeProperty("display");
+        el.style.visibility = "visible";
+        el.classList.remove("dim");
+        el.style.opacity = "1";
 
-  eventEls.forEach((el) => {
-    // Показываем событие
-    el.style.display = "block";
-    el.style.visibility = "visible";
-    el.classList.remove("dim");
-    el.style.opacity = "1";
+        const originalId = el.dataset.eid;
+        if (!originalId) return;
+        const original = document.querySelector(`.event[data-eid="${originalId}"]`);
+        if (!original) return;
+        const cs = getComputedStyle(original);
 
-    // Копируем вычисленные стили из оригинала
-    const originalId = el.dataset.eid;
-    if (!originalId) return;
 
-    const original = document.querySelector(`.event[data-eid="${originalId}"]`);
-    if (!original) return;
+        const bgColor = cs.backgroundColor;
+        if (bgColor && bgColor !== "rgba(0, 0, 0, 0)" && bgColor !== "transparent") {
+            el.style.backgroundColor = bgColor;
+        }
 
-    const cs = getComputedStyle(original);
 
-    // 🔑 УБРАТЬ !important из переменных (ломает тему!)
-    const evBg = cs.getPropertyValue("--ev-bg").trim();
-    const evText = cs.getPropertyValue("--ev-text").trim();
+        const evText = cs.color;
+        if (evText) {
+            el.style.color = evText;
+        }
 
-    if (evBg) {
-      el.style.backgroundColor = evBg;
-      el.style.setProperty("--ev-bg", evBg); // ← БЕЗ !important
-    }
+        const borderColor = cs.borderColor;
+        if (borderColor && borderColor !== "rgba(0, 0, 0, 0)") {
+            el.style.borderColor = borderColor;
+            el.style.borderStyle = cs.borderStyle || "solid";
+            el.style.borderWidth = cs.borderWidth || "1px";
+        }
 
-    if (evText) {
-      el.style.color = evText;
-      el.style.setProperty("--ev-text", evText); // ← БЕЗ !important
-    }
-
-    // Копируем остальные стили
-    const borderColor = cs.borderColor;
-    if (borderColor && borderColor !== "rgba(0, 0, 0, 0)") {
-      el.style.borderColor = borderColor;
-      el.style.borderStyle = cs.borderStyle || "solid";
-      el.style.borderWidth = cs.borderWidth || "1px";
-    }
-
-    const boxShadow = cs.boxShadow;
-    if (boxShadow && boxShadow !== "none") {
-      el.style.boxShadow = boxShadow;
-    }
-  });
+        const boxShadow = cs.boxShadow;
+        if (boxShadow && boxShadow !== "none") {
+            el.style.boxShadow = boxShadow;
+        }
+    });
 }
 
 function applyCssVariablesToEventsForExport(targetElement) {
-  const eventEls = targetElement.querySelectorAll(".event");
-  const eventOpacity = state.settings.theme.alpha.event / 100;
-  const rootStyle = getComputedStyle(document.documentElement);
+    const eventEls = targetElement.querySelectorAll(".event");
+    const rootStyle = getComputedStyle(document.documentElement);
+    const lineHeight =
+      rootStyle.getPropertyValue("--evLineHeight").trim() || "1.12";
+    const titleClamp =
+      rootStyle.getPropertyValue("--evTitleClamp").trim() || "3";
 
-  eventEls.forEach((el) => {
-    const originalId = el.dataset.eid;
-    if (!originalId) return;
+    eventEls.forEach((el) => {
+        const originalId = el.dataset.eid;
+        if (!originalId) return;
+        const original = document.querySelector(`.event[data-eid="${originalId}"]`);
+        if (!original) return;
+        const cs = getComputedStyle(original);
 
-    const original = document.querySelector(`.event[data-eid="${originalId}"]`);
-    if (!original) return;
 
-    const cs = getComputedStyle(original);
-    let bgColor = cs.backgroundColor;
-    let finalBackgroundColor = bgColor;
+        el.style.opacity = "1";
+        el.classList.remove("dim");
 
-    // Обработка прозрачности фона
-    if (bgColor !== "transparent" && bgColor !== "rgba(0, 0, 0, 0)") {
-      const parsedColor = parseRgba(bgColor);
-      if (parsedColor) {
-        const baseAlpha = parsedColor.a;
-        const finalAlpha = baseAlpha * eventOpacity;
-        finalBackgroundColor = `rgba(${parsedColor.r}, ${parsedColor.g}, ${parsedColor.b}, ${finalAlpha})`;
-      }
-    }
 
-    // === 1. Базовые стили события ===
-    if (finalBackgroundColor) {
-      el.style.backgroundColor = finalBackgroundColor;
-    }
-    el.style.opacity = "1";
-    el.classList.remove("dim");
+        const isDouble = el.classList.contains("double");
+        const isCompact = el.classList.contains("compact-card");
+        const isList = el.classList.contains("list");
 
-    // === 2. Отступы и скругления ===
-    const isDouble = el.classList.contains("double");
-    const isCompact = el.classList.contains("compact-card");
-    const isList = el.classList.contains("list");
-
-    if (isDouble) {
-      // Для двойных событий - свои отступы
-      el.style.padding = "6px 7px";
-      el.style.gap = "2px";
-      el.style.lineHeight = "1.08";
-    } else if (isCompact) {
-      // Для компактного режима
-      el.style.padding = `${rootStyle.getPropertyValue("--evCardPadY").trim() || "7px"} 8px`;
-    } else {
-      // Обычные события
-      el.style.padding = "7px 8px";
-      el.style.paddingTop =
-        rootStyle.getPropertyValue("--evCardPadY").trim() || "7px";
-      el.style.paddingBottom =
-        rootStyle.getPropertyValue("--evCardPadY").trim() || "7px";
-    }
-
-    // Скругления
-    el.style.borderRadius =
-      rootStyle.getPropertyValue("--evCardRadius").trim() || "12px";
-
-    // === 3. Стили для внутренних элементов (.t, .m, .grab) ===
-    const titleEl = el.querySelector(".t");
-    const metaEl = el.querySelector(".m");
-    const grabEl = el.querySelector(".grab");
-
-    if (titleEl) {
-      const originalTitle = original.querySelector(".t");
-      if (originalTitle) {
-        const titleCs = getComputedStyle(originalTitle);
-
-        titleEl.style.fontWeight =
-          rootStyle.getPropertyValue("--evTitleW").trim() || "900";
-        titleEl.style.fontFamily =
-          rootStyle.getPropertyValue("--evTitleFont").trim() ||
-          rootStyle.getPropertyValue("--tableFont").trim();
-        titleEl.style.lineHeight = "1.3";
-        titleEl.style.letterSpacing =
-          rootStyle.getPropertyValue("--evLetterSpacing").trim() || "0em";
-        titleEl.style.textTransform =
-          rootStyle.getPropertyValue("--evTextTransform").trim() || "none";
-        titleEl.style.color = titleCs.color;
-        titleEl.style.margin = "0";
-        titleEl.style.padding = "0";
-        titleEl.style.display = "-webkit-box";
-        titleEl.style.webkitBoxOrient = "vertical";
-        titleEl.style.webkitLineClamp =
-          rootStyle.getPropertyValue("--evTitleClamp").trim() || "3";
-        titleEl.style.overflow = "hidden";
-        titleEl.style.textOverflow = "ellipsis";
-        titleEl.style.whiteSpace = "pre-wrap";
-        titleEl.style.wordBreak = "break-word";
-        titleEl.style.overflowWrap = "anywhere";
-
-        // Размер шрифта зависит от типа события
         if (isDouble) {
-          titleEl.style.fontSize =
-            rootStyle.getPropertyValue("--evTitleSize2").trim() || "10px";
-          titleEl.style.lineHeight = "1.25";
-          titleEl.style.webkitLineClamp = "3";
+            el.style.padding = "6px 7px";
+            el.style.gap = "2px";
+            el.style.lineHeight = lineHeight;
+        } else if (isCompact) {
+            el.style.padding = `${rootStyle.getPropertyValue("--evCardPadY").trim() || "7px"} 8px`;
         } else {
-          titleEl.style.fontSize =
-            rootStyle.getPropertyValue("--evTitleSize1").trim() || "12px";
+            el.style.padding = "7px 8px";
+            el.style.paddingTop = rootStyle.getPropertyValue("--evCardPadY").trim() || "7px";
+            el.style.paddingBottom = rootStyle.getPropertyValue("--evCardPadY").trim() || "7px";
         }
-      }
-    }
 
-    if (metaEl) {
-      const originalMeta = original.querySelector(".m");
-      if (originalMeta) {
-        const metaCs = getComputedStyle(originalMeta);
+        el.style.lineHeight = lineHeight;
 
-        metaEl.style.fontWeight =
-          rootStyle.getPropertyValue("--evMetaW").trim() || "600";
-        metaEl.style.fontFamily =
-          rootStyle.getPropertyValue("--evMetaFont").trim() ||
-          rootStyle.getPropertyValue("--tableFont").trim();
-        metaEl.style.color = metaCs.color;
-        metaEl.style.opacity = "0.95";
-        metaEl.style.margin = "0";
-        metaEl.style.padding = "0";
-        metaEl.style.whiteSpace = "pre-wrap";
-        metaEl.style.wordBreak = "break-word";
-        metaEl.style.overflowWrap = "anywhere";
+        el.style.borderRadius = rootStyle.getPropertyValue("--evCardRadius").trim() || "12px";
 
-        // Размер шрифта зависит от типа события
-        if (isDouble) {
-          metaEl.style.fontSize =
-            rootStyle.getPropertyValue("--evMetaSize2").trim() || "9px";
+
+        const titleEl = el.querySelector(".t");
+        const metaEl = el.querySelector(".m");
+        const grabEl = el.querySelector(".grab");
+
+        if (titleEl) {
+            const originalTitle = original.querySelector(".t");
+            if (originalTitle) {
+                const titleCs = getComputedStyle(originalTitle);
+                titleEl.style.fontWeight = rootStyle.getPropertyValue("--evTitleW").trim() || "900";
+                titleEl.style.fontFamily = rootStyle.getPropertyValue("--evTitleFont").trim() || rootStyle.getPropertyValue("--tableFont").trim();
+                titleEl.style.lineHeight = lineHeight;
+                titleEl.style.letterSpacing = rootStyle.getPropertyValue("--evLetterSpacing").trim() || "0em";
+                titleEl.style.textTransform = rootStyle.getPropertyValue("--evTextTransform").trim() || "none";
+                titleEl.style.color = titleCs.color;
+                titleEl.style.margin = "0";
+                titleEl.style.padding = "0";
+                titleEl.style.display = "-webkit-box";
+                titleEl.style.webkitBoxOrient = "vertical";
+                titleEl.style.webkitLineClamp = isDouble
+                  ? String(CELL_HEIGHT_CONFIG.DOUBLE_TITLE_LINES)
+                  : titleClamp;
+                titleEl.style.overflow = "hidden";
+                titleEl.style.textOverflow = "ellipsis";
+                titleEl.style.whiteSpace = "pre-wrap";
+                titleEl.style.wordBreak = "break-word";
+                titleEl.style.overflowWrap = "anywhere";
+
+                if (isDouble) {
+                    titleEl.style.fontSize = rootStyle.getPropertyValue("--evTitleSize2").trim() || "10px";
+                } else {
+                    titleEl.style.fontSize = rootStyle.getPropertyValue("--evTitleSize1").trim() || "12px";
+                }
+            }
+        }
+
+        if (metaEl) {
+            const originalMeta = original.querySelector(".m");
+            if (originalMeta) {
+                const metaCs = getComputedStyle(originalMeta);
+                metaEl.style.fontWeight = rootStyle.getPropertyValue("--evMetaW").trim() || "600";
+                metaEl.style.fontFamily = rootStyle.getPropertyValue("--evMetaFont").trim() || rootStyle.getPropertyValue("--tableFont").trim();
+                metaEl.style.lineHeight = lineHeight;
+                metaEl.style.color = metaCs.color;
+                metaEl.style.opacity = "0.95";
+                metaEl.style.margin = "0";
+                metaEl.style.padding = "0";
+                metaEl.style.whiteSpace = "pre-wrap";
+                metaEl.style.wordBreak = "break-word";
+                metaEl.style.overflowWrap = "anywhere";
+
+                if (isDouble) {
+                    metaEl.style.fontSize = rootStyle.getPropertyValue("--evMetaSize2").trim() || "9px";
+                } else {
+                    metaEl.style.fontSize = rootStyle.getPropertyValue("--evMetaSize1").trim() || "11px";
+                }
+            }
+        }
+
+        if (grabEl) {
+            grabEl.style.position = "absolute";
+            grabEl.style.right = isDouble ? "6px" : "8px";
+            grabEl.style.top = isDouble ? "6px" : "8px";
+            grabEl.style.opacity = "0";
+            grabEl.style.pointerEvents = "none";
+            grabEl.style.fontSize = isDouble ? "11px" : "12px";
+        }
+
+
+        const borderColor = cs.borderColor;
+        if (borderColor && borderColor !== "rgba(0, 0, 0, 0)") {
+            el.style.borderColor = borderColor;
+            el.style.borderStyle = cs.borderStyle || "solid";
+            el.style.borderWidth = cs.borderWidth || "1px";
+        }
+        const boxShadow = cs.boxShadow;
+        if (boxShadow && boxShadow !== "none") {
+            el.style.boxShadow = boxShadow;
+        }
+
+
+        if (isList || isCompact) {
+            el.style.position = "relative";
+            el.style.left = "auto";
+            el.style.top = "auto";
+            el.style.width = "100%";
+            el.style.height = "auto";
+            el.style.flex = "0 0 auto";
+        } else if (!isDouble) {
+            el.style.position = "absolute";
+            el.style.flex = "1 1 auto";
+        }
+    });
+
+
+    targetElement.querySelectorAll(".slot-inner").forEach((inner) => {
+        const originalInner = document.querySelector(".slot-inner");
+        if (!originalInner) return;
+        const innerCs = getComputedStyle(originalInner);
+
+        if (inner.closest(".slot")?.classList.contains("two")) {
+            inner.style.display = "grid";
+            inner.style.gridTemplateRows = "1fr 1fr";
+            inner.style.gap = "2px";
+            inner.style.alignItems = "stretch";
+            inner.style.justifyItems = "stretch";
+            inner.style.height = "100%";
         } else {
-          metaEl.style.fontSize =
-            rootStyle.getPropertyValue("--evMetaSize1").trim() || "11px";
+            inner.style.display = innerCs.display;
+            inner.style.flexDirection = innerCs.flexDirection;
+            inner.style.gap = innerCs.gap;
         }
-      }
+        inner.style.position = "relative";
+        inner.style.boxSizing = "border-box";
+        inner.style.minHeight = "0";
+    });
+
+
+    targetElement.querySelectorAll(".slot").forEach((slot) => {
+        const originalSlot = document.querySelector(".slot");
+        if (!originalSlot) return;
+        const slotCs = getComputedStyle(originalSlot);
+        slot.style.position = "relative";
+        slot.style.width = "100%";
+        slot.style.fontFamily = slotCs.fontFamily;
+        slot.style.boxSizing = "border-box";
+
+        if (slot.classList.contains("two") && slot.classList.contains("tl-fill")) {
+            slot.style.height = "100%";
+            slot.style.minHeight = "0";
+        }
+    });
+}
+
+function applyHeaderStylesForExport(targetElement) {
+    const origSchedule = document.querySelector(".schedule");
+    if (!origSchedule) return;
+
+    const props = [
+        "font-family",
+        "font-size",
+        "font-weight",
+        "color",
+        "background-color",
+        "padding",
+        "text-align",
+        "line-height",
+        "writing-mode",
+        "transform",
+        "align-items",
+        "justify-content",
+    ];
+
+    const origHeads = origSchedule.querySelectorAll(".cell.head");
+    const cloneHeads = targetElement.querySelectorAll(".cell.head");
+    const headLen = Math.min(origHeads.length, cloneHeads.length);
+    for (let i = 0; i < headLen; i++) {
+        const cs = getComputedStyle(origHeads[i]);
+        props.forEach((p) => {
+            cloneHeads[i].style.setProperty(p, cs.getPropertyValue(p));
+        });
     }
 
-    if (grabEl) {
-      grabEl.style.position = "absolute";
-      grabEl.style.right = isDouble ? "6px" : "8px";
-      grabEl.style.top = isDouble ? "6px" : "8px";
-      grabEl.style.opacity = "0";
-      grabEl.style.pointerEvents = "none";
-      grabEl.style.fontSize = isDouble ? "11px" : "12px";
+    const origTimes = origSchedule.querySelectorAll(".cell.time");
+    const cloneTimes = targetElement.querySelectorAll(".cell.time");
+    const timeLen = Math.min(origTimes.length, cloneTimes.length);
+    for (let i = 0; i < timeLen; i++) {
+        const cs = getComputedStyle(origTimes[i]);
+        props.forEach((p) => {
+            cloneTimes[i].style.setProperty(p, cs.getPropertyValue(p));
+        });
+    }
+}
+
+function applyCellSpacingForExport(targetElement) {
+    const origSchedule = document.querySelector(".schedule");
+    if (!origSchedule) return;
+
+    const copyBoxStyles = (src, dst) => {
+        const cs = getComputedStyle(src);
+        dst.style.boxSizing = cs.boxSizing;
+        dst.style.paddingTop = cs.paddingTop;
+        dst.style.paddingRight = cs.paddingRight;
+        dst.style.paddingBottom = cs.paddingBottom;
+        dst.style.paddingLeft = cs.paddingLeft;
+        dst.style.gap = cs.gap;
+        dst.style.borderTopWidth = cs.borderTopWidth;
+        dst.style.borderRightWidth = cs.borderRightWidth;
+        dst.style.borderBottomWidth = cs.borderBottomWidth;
+        dst.style.borderLeftWidth = cs.borderLeftWidth;
+        dst.style.borderStyle = cs.borderStyle;
+        dst.style.borderColor = cs.borderColor;
+    };
+
+    const origCells = origSchedule.querySelectorAll(".cell");
+    const cloneCells = targetElement.querySelectorAll(".cell");
+    const cellLen = Math.min(origCells.length, cloneCells.length);
+    for (let i = 0; i < cellLen; i++) {
+        copyBoxStyles(origCells[i], cloneCells[i]);
     }
 
-    // === 4. Бордер и тени ===
-    const borderColor = cs.borderColor;
-    if (borderColor && borderColor !== "rgba(0, 0, 0, 0)") {
-      el.style.borderColor = borderColor;
-      el.style.borderStyle = cs.borderStyle || "solid";
-      el.style.borderWidth = cs.borderWidth || "1px";
+    const origSlots = origSchedule.querySelectorAll(".slot");
+    const cloneSlots = targetElement.querySelectorAll(".slot");
+    const slotLen = Math.min(origSlots.length, cloneSlots.length);
+    for (let i = 0; i < slotLen; i++) {
+        copyBoxStyles(origSlots[i], cloneSlots[i]);
     }
 
-    const boxShadow = cs.boxShadow;
-    if (boxShadow && boxShadow !== "none") {
-      el.style.boxShadow = boxShadow;
+    const origInners = origSchedule.querySelectorAll(".slot-inner");
+    const cloneInners = targetElement.querySelectorAll(".slot-inner");
+    const innerLen = Math.min(origInners.length, cloneInners.length);
+    for (let i = 0; i < innerLen; i++) {
+        copyBoxStyles(origInners[i], cloneInners[i]);
     }
-
-    // === 5. Позиционирование для разных режимов ===
-    if (isList || isCompact) {
-      // В list и compact режимах события не абсолютные
-      el.style.position = "relative";
-      el.style.left = "auto";
-      el.style.top = "auto";
-      el.style.width = "100%";
-      el.style.height = "auto";
-      el.style.flex = "0 0 auto";
-    } else if (!isDouble) {
-      // Обычные события в timeline
-      el.style.position = "absolute";
-      el.style.flex = "1 1 auto";
-    }
-  });
-
-  // === 6. Стили для контейнеров слотов ===
-  targetElement.querySelectorAll(".slot-inner").forEach((inner) => {
-    const originalInner = document.querySelector(".slot-inner");
-    if (!originalInner) return;
-
-    const innerCs = getComputedStyle(originalInner);
-
-    // Для двойных событий в timeline
-    if (inner.closest(".slot")?.classList.contains("two")) {
-      inner.style.display = "grid";
-      inner.style.gridTemplateRows = "1fr 1fr";
-      inner.style.gap = "2px";
-      inner.style.alignItems = "stretch";
-      inner.style.justifyItems = "stretch";
-      inner.style.height = "100%";
-    } else {
-      inner.style.display = innerCs.display;
-      inner.style.flexDirection = innerCs.flexDirection;
-      inner.style.gap = innerCs.gap;
-    }
-
-    inner.style.position = "relative";
-    inner.style.boxSizing = "border-box";
-    inner.style.minHeight = "0";
-  });
-
-  // === 7. Стили для слотов ===
-  targetElement.querySelectorAll(".slot").forEach((slot) => {
-    const originalSlot = document.querySelector(".slot");
-    if (!originalSlot) return;
-
-    const slotCs = getComputedStyle(originalSlot);
-
-    slot.style.position = "relative";
-    slot.style.width = "100%";
-    slot.style.fontFamily = slotCs.fontFamily;
-    slot.style.boxSizing = "border-box";
-
-    // Для двойных слотов в timeline
-    if (slot.classList.contains("two") && slot.classList.contains("tl-fill")) {
-      slot.style.height = "100%";
-      slot.style.minHeight = "0";
-    }
-  });
 }
 
 function parseRgba(colorString) {
@@ -9302,3 +11286,7 @@ if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./sw.js").catch(console.error);
   });
 }
+
+
+
+
