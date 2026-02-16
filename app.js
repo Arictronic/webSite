@@ -6,6 +6,28 @@ import {
 
 // ===================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И КОНСТАНТЫ =====================
 const $ = (id) => document.getElementById(id);
+const USER_AGENT = navigator.userAgent || "";
+const IS_IOS_DEVICE =
+  /iPad|iPhone|iPod/.test(USER_AGENT) ||
+  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const IS_WEBKIT_ENGINE =
+  /AppleWebKit/i.test(USER_AGENT) &&
+  !/CriOS|FxiOS|EdgiOS|OPiOS|YaBrowser/i.test(USER_AGENT);
+const IS_SAFARI_BROWSER =
+  IS_WEBKIT_ENGINE &&
+  !/Chrome|Chromium|Android/i.test(USER_AGENT) &&
+  /Safari/i.test(USER_AGENT);
+// On iOS all browsers run on WebKit, so iOS-specific download handling
+// should not be limited to Safari UA only.
+const IS_IOS_WEBKIT = IS_IOS_DEVICE;
+const SUPPORTS_HAS_SELECTOR =
+  typeof CSS !== "undefined" &&
+  typeof CSS.supports === "function" &&
+  CSS.supports("selector(:has(*))");
+if (IS_SAFARI_BROWSER) document.documentElement.classList.add("is-safari");
+if (!SUPPORTS_HAS_SELECTOR) {
+  document.documentElement.classList.add("no-has-selector");
+}
 const DAYS = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"];
 const LOGO_URLS = {
   1: "./src/Logo.svg",
@@ -80,14 +102,23 @@ const FONT_PRESETS = {
   },
 };
 const EXPORT_PRESETS = [
-  { id: "vk_square", name: "VK пост 1:1 (1080×1080)", w: 1080, h: 1080 },
-  { id: "vk_wide", name: "VK обложка 1.91:1 (1200×630)", w: 1200, h: 630 },
-  { id: "tg_16_9", name: "Telegram 16:9 (1280×720)", w: 1280, h: 720 },
-  { id: "tg_square", name: "Telegram 1:1 (1080×1080)", w: 1080, h: 1080 },
-  { id: "a4_portrait", name: "A4 портрет (2480×3508)", w: 2480, h: 3508 },
+  // { id: "vk_square", name: "VK пост 1:1 (1080×1080)", w: 1080, h: 1080 },
+  // { id: "vk_wide", name: "VK обложка 1.91:1 (1200×630)", w: 1200, h: 630 },
+  // { id: "tg_16_9", name: "Telegram 16:9 (1280×720)", w: 1280, h: 720 },
+  // { id: "tg_square", name: "Telegram 1:1 (1080×1080)", w: 1080, h: 1080 },
+  // { id: "a4_portrait", name: "A4 портрет (2480×3508)", w: 2480, h: 3508 },
+  { id: "a3_land", name: "A3 альбом (4961×3508)", w: 4961, h: 3508 },
   { id: "a4_land", name: "A4 альбом (3508×2480)", w: 3508, h: 2480 },
-  { id: "auto", name: "Auto (по размеру расписания)", w: 0, h: 0 },
+  // { id: "auto", name: "Auto (по размеру расписания)", w: 0, h: 0 },
 ];
+const EXPORT_MODE_WEEK = "week";
+const EXPORT_MODE_DAY = "day";
+const DAY_EXPORT_PRESET = {
+  id: "day_1080x1980",
+  name: "День (1080×1980)",
+  w: 1080,
+  h: 1980,
+};
 const GENERIC_FAMILIES = new Set([
   "serif",
   "sans-serif",
@@ -114,6 +145,21 @@ const THEME_PRESETS = [
       accent: "#ef4444",
       now: "#fff7c2",
       today: "#fff5f5",
+    },
+  },
+  {
+    id: "sand",
+    name: "Sand",
+    tokens: {
+      bg: "#faf7f2",
+      card: "#fffdf9",
+      text: "#1f2937",
+      muted: "#6b7280",
+      border: "#eadfcf",
+      gridHead: "#f5ede2",
+      accent: "#c2410c",
+      now: "#ffe6c7",
+      today: "#fff2df",
     },
   },
   {
@@ -162,18 +208,108 @@ const THEME_PRESETS = [
     },
   },
   {
+    id: "sunset",
+    name: "Sunset",
+    tokens: {
+      bg: "#fff7f4",
+      card: "#ffffff",
+      text: "#1f2937",
+      muted: "#6b7280",
+      border: "#ffd9cc",
+      gridHead: "#fff0ea",
+      accent: "#f97316",
+      now: "#ffe0d3",
+      today: "#fff0ea",
+    },
+  },
+  {
+    id: "mint",
+    name: "Mint",
+    tokens: {
+      bg: "#f4fbf8",
+      card: "#ffffff",
+      text: "#102a22",
+      muted: "#4f6f64",
+      border: "#cdeee2",
+      gridHead: "#e8f8f2",
+      accent: "#10b981",
+      now: "#d5f5e7",
+      today: "#e6faf2",
+    },
+  },
+  {
+    id: "lavender",
+    name: "Lavender",
+    tokens: {
+      bg: "#f8f7ff",
+      card: "#ffffff",
+      text: "#1f2440",
+      muted: "#636a8a",
+      border: "#e4e2ff",
+      gridHead: "#efefff",
+      accent: "#7c3aed",
+      now: "#e7e4ff",
+      today: "#f1efff",
+    },
+  },
+  {
     id: "graphite-dark",
     name: "Graphite Dark",
     tokens: {
       bg: "#0b1220",
       card: "#0f172a",
-      text: "#e5e7eb",
+      text: "#f8fafc",
       muted: "#94a3b8",
       border: "#1f2a44",
       gridHead: "#0b1220",
       accent: "#f59e0b",
       now: "#3a2f00",
       today: "#2a1212",
+    },
+  },
+  {
+    id: "slate-dark",
+    name: "Slate Dark",
+    tokens: {
+      bg: "#0f172a",
+      card: "#131d33",
+      text: "#f8fafc",
+      muted: "#a5b4c7",
+      border: "#2a3a56",
+      gridHead: "#111b30",
+      accent: "#38bdf8",
+      now: "#1e293b",
+      today: "#172036",
+    },
+  },
+  {
+    id: "forest-dark",
+    name: "Forest Dark",
+    tokens: {
+      bg: "#08130f",
+      card: "#0d1b16",
+      text: "#f3fff9",
+      muted: "#9fc8ba",
+      border: "#1f3a30",
+      gridHead: "#0a1713",
+      accent: "#22c55e",
+      now: "#173326",
+      today: "#10271e",
+    },
+  },
+  {
+    id: "berry-dark",
+    name: "Berry Dark",
+    tokens: {
+      bg: "#140f1f",
+      card: "#1b1430",
+      text: "#f7f3ff",
+      muted: "#b8abc9",
+      border: "#2e2550",
+      gridHead: "#171129",
+      accent: "#f472b6",
+      now: "#3a2052",
+      today: "#2b1b44",
     },
   },
 ];
@@ -271,6 +407,14 @@ function DEFAULT_STATE() {
         tileOffsetX: LOGO_CONSTANTS.DEFAULT_OFFSET,
         tileOffsetY: LOGO_CONSTANTS.DEFAULT_OFFSET,
         uploadedFileData: null,
+      },
+      exportDay: {
+        dayIndex: 0,
+        overlay: 45,
+        topOffset: 190,
+        titleColor: "#ff7ccc",
+        backgroundDataUrl: "",
+        backgroundName: "",
       },
     },
     // exportPresets должен быть на корневом уровне!
@@ -454,6 +598,9 @@ let isUpdating = false;
 let saveIndicatorStyleAdded = false;
 let filterCache = new Map();
 let lastPreview = null;
+let exportWeekPresetId = "";
+let exportMode = EXPORT_MODE_WEEK;
+let exportDayBackgroundDataUrl = "";
 let cachedMetrics = null;
 let metricsTimestamp = 0;
 let lastLogoState = null;
@@ -488,6 +635,15 @@ const MAX_NAME_LINES = 3;
 const MAX_NAME_CHARS = 150;
 const MAX_NAME_LINE_LEN = 50;
 const HISTORY_LIMIT = 60;
+const TOAST_MAX_VISIBLE = 4;
+const TOAST_DEDUPE_MS = 1200;
+const recentToastTimestamps = new Map();
+const SW_SCRIPT_URL = new URL("./sw.js", window.location.href).href;
+const SW_EXPECTED_SCOPE = new URL("./", window.location.href).href;
+const SW_CACHE_PREFIX = "studio-schedule-cache";
+const SW_RELOAD_MARK = "studio_sw_reloaded_after_update";
+const SW_FORCE_REFRESH_VERSION = "2026-02-16-utf8-1";
+const SW_FORCE_REFRESH_MARK = "studio_sw_force_refresh_version";
 
 // ===================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И КОНСТАНТЫ =====================
 
@@ -500,6 +656,22 @@ const expQuality = $("expQuality");
 const expQualityVal = $("expQualityVal");
 const expJpegWrap = $("expJpegWrap");
 const expPreviewImg = $("expPreviewImg");
+const expTabWeek = $("expTabWeek");
+const expTabDay = $("expTabDay");
+const expPresetWrap = $("expPresetWrap");
+const expWeekOptions = $("expWeekOptions");
+const expDayOptions = $("expDayOptions");
+const expRasterOptions = $("expRasterOptions");
+const expBgWrap = $("expBgWrap");
+const expHideEmptyWrap = $("expHideEmptyWrap");
+const expHint = $("expHint");
+const expDaySelect = $("expDaySelect");
+const expDayBgFile = $("expDayBgFile");
+const expDayBgStatus = $("expDayBgStatus");
+const expDayOverlay = $("expDayOverlay");
+const expDayOverlayVal = $("expDayOverlayVal");
+const expDayTopOffset = $("expDayTopOffset");
+const expDayTitleColor = $("expDayTitleColor");
 const fontPreset = $("fontPreset");
 const fontQuickTightness = $("fontQuickTightness");
 const fontLetterSpacing = $("fontLetterSpacing");
@@ -616,8 +788,7 @@ const btnDeleteLogoPreset = $("btnDeleteLogoPreset");
 // ================== Пусиые слоты (да нет) ============================
 
 expHideEmpty.addEventListener("change", () => {
-  lastPreview = null;
-  expPreviewImg.removeAttribute("src");
+  invalidateExportPreview();
 });
 
 if (document.readyState === "loading") {
@@ -628,7 +799,6 @@ if (document.readyState === "loading") {
 
 window.clearPreviewCache = clearPreviewCache;
 window.buildExportPreview = buildExportPreview;
-window.downloadFromExportModal = downloadFromExportModal;
 
 
 function isAuthorized() {
@@ -846,6 +1016,23 @@ function bestTextOn(bgHex) {
     : light;
 }
 
+function bestTextOnSurfaces(bgHex, cardHex) {
+  const candidates = ["#ffffff", "#f8fafc", "#e5e7eb", "#0f172a", "#111827"];
+  let best = candidates[0];
+  let bestScore = -1;
+  for (const candidate of candidates) {
+    const score = Math.min(
+      contrastRatio(candidate, bgHex),
+      contrastRatio(candidate, cardHex),
+    );
+    if (score > bestScore) {
+      bestScore = score;
+      best = candidate;
+    }
+  }
+  return best;
+}
+
 function updateUndoRedoButtons() {
   $("btnUndo").disabled = history.length === 0;
   $("btnRedo").disabled = future.length === 0;
@@ -971,14 +1158,30 @@ function getWeekStartDate(baseDate, weekOffset = 0) {
   return d;
 }
 
-function getScheduleDayLabel(dayIndex) {
-  if (dayIndex < 0 || dayIndex >= DAYS.length) return "";
+function getScheduleDayDate(dayIndex) {
+  if (dayIndex < 0 || dayIndex >= DAYS.length) return null;
   const sch = state.settings.schedule || {};
-  const showDate = sch.showDate !== false;
   const offset = clamp(Math.round(Number(sch.weekOffset ?? 0)), 0, 4);
   const monday = getWeekStartDate(new Date(), offset);
   const cur = new Date(monday);
   cur.setDate(monday.getDate() + dayIndex);
+  return cur;
+}
+
+function formatDayMonthRu(date) {
+  if (!(date instanceof Date)) return "";
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "numeric",
+    month: "long",
+  }).format(date);
+}
+
+function getScheduleDayLabel(dayIndex) {
+  if (dayIndex < 0 || dayIndex >= DAYS.length) return "";
+  const sch = state.settings.schedule || {};
+  const showDate = sch.showDate !== false;
+  const cur = getScheduleDayDate(dayIndex);
+  if (!cur) return DAYS[dayIndex];
   const datePart = formatDateDDMM(cur);
   return showDate ? `${DAYS[dayIndex]}\u00A0${datePart}` : DAYS[dayIndex];
 }
@@ -1000,11 +1203,25 @@ function updateDayHeaders(scheduleEl) {
   });
 }
 
-function toast(kind, title, text) {
+function toast(kind, title, text, duration = 4500) {
   const toasts = document.querySelector("#toasts");
   if (!toasts) {
-    console.warn("Контейнер для тостов не найден");
+    console.warn("Toast container not found");
     return;
+  }
+
+  const safeText = text || "";
+  const toastKey = `${kind}|${title}|${safeText}`;
+  const now = Date.now();
+  const lastShownAt = recentToastTimestamps.get(toastKey);
+  if (lastShownAt && now - lastShownAt < TOAST_DEDUPE_MS) {
+    return;
+  }
+  recentToastTimestamps.set(toastKey, now);
+  for (const [key, ts] of recentToastTimestamps.entries()) {
+    if (now - ts > TOAST_DEDUPE_MS * 10) {
+      recentToastTimestamps.delete(key);
+    }
   }
 
   const el = document.createElement("div");
@@ -1012,7 +1229,7 @@ function toast(kind, title, text) {
 
   const icon = document.createElement("div");
   icon.className = "icon";
-  icon.textContent = kind === "OK" ? "✓" : kind === "WARN" ? "!" : "×";
+  icon.textContent = kind === "OK" ? "+" : kind === "WARN" ? "!" : "x";
   icon.style.background =
     kind === "OK"
       ? "var(--ok)"
@@ -1027,7 +1244,7 @@ function toast(kind, title, text) {
   t.textContent = title;
   const d = document.createElement("div");
   d.className = "text";
-  d.textContent = text || "";
+  d.textContent = safeText;
   content.appendChild(t);
   content.appendChild(d);
 
@@ -1035,7 +1252,7 @@ function toast(kind, title, text) {
   actions.className = "actions";
   const close = document.createElement("button");
   close.className = "close";
-  close.textContent = "×";
+  close.textContent = "x";
   close.addEventListener("click", () => el.remove());
   actions.appendChild(close);
 
@@ -1043,13 +1260,18 @@ function toast(kind, title, text) {
   el.appendChild(content);
   el.appendChild(actions);
 
+  while (toasts.children.length >= TOAST_MAX_VISIBLE) {
+    const oldest = toasts.firstElementChild;
+    if (!oldest) break;
+    oldest.remove();
+  }
+
   toasts.appendChild(el);
 
   setTimeout(() => {
     if (el.isConnected) el.remove();
-  }, 4500);
+  }, Number.isFinite(duration) ? duration : 4500);
 }
-
 function pushHistory(reason) {
   history.push({ snapshot: deepCopy(state), reason, ts: Date.now() });
   if (history.length > HISTORY_LIMIT) history.shift();
@@ -1121,17 +1343,27 @@ function prefersDark() {
 function ensureThemeContrast(tokens) {
   const out = { ...tokens };
   const minRatio = 4.5;
+  const bgL = relLuminance(out.bg);
+  const cardL = relLuminance(out.card);
+  const isDarkSurfaces = bgL < 0.32 && cardL < 0.38;
 
-  if (contrastRatio(out.text, out.bg) < minRatio) out.text = bestTextOn(out.bg);
-  if (contrastRatio(out.text, out.card) < minRatio)
-    out.text = bestTextOn(out.card);
+  if (
+    contrastRatio(out.text, out.bg) < minRatio ||
+    contrastRatio(out.text, out.card) < minRatio
+  ) {
+    out.text = bestTextOnSurfaces(out.bg, out.card);
+  }
+  if (isDarkSurfaces && relLuminance(out.text) < 0.65) {
+    out.text = "#f8fafc";
+  }
 
-  if (!out.muted) out.muted = out.text === "#ffffff" ? "#94a3b8" : "#64748b";
-  if (contrastRatio(out.muted, out.card) < 3)
-    out.muted = out.text === "#ffffff" ? "#94a3b8" : "#64748b";
+  if (!out.muted) out.muted = relLuminance(out.text) > 0.6 ? "#94a3b8" : "#64748b";
+  if (contrastRatio(out.muted, out.card) < 3) {
+    out.muted = relLuminance(out.text) > 0.6 ? "#94a3b8" : "#64748b";
+  }
 
   if (contrastRatio(out.border, out.card) < 1.25) {
-    out.border = out.text === "#ffffff" ? "#1f2a44" : "#e2e8f0";
+    out.border = relLuminance(out.text) > 0.6 ? "#334155" : "#e2e8f0";
   }
   return out;
 }
@@ -1205,7 +1437,7 @@ function applyTheme() {
     const t = state.settings.theme;
     let tokens;
 
-    if (t.mode === "auto") tokens = DEFAULT_LIGHT;
+    if (t.mode === "auto") tokens = prefersDark() ? DEFAULT_DARK : DEFAULT_LIGHT;
     else if (t.mode === "light") tokens = DEFAULT_LIGHT;
     else if (t.mode === "dark") tokens = DEFAULT_DARK;
     else tokens = t.customTokens;
@@ -1428,10 +1660,23 @@ function metaCoachRoom(ev, includeTime = false) {
   return parts.join(" | ");
 }
 
+function metaCoachOnly(ev) {
+  return ev.coach ? fixTypography(ev.coach) : "";
+}
+
+function metaTimeCoach(ev) {
+  const parts = [];
+  parts.push(`${minToHHMM(ev.startMin)}–${minToHHMM(ev.startMin + ev.durationMin)}`);
+  if (ev.coach) parts.push(fixTypography(ev.coach));
+  return parts.join(" | ");
+}
+
 function metaFullByMode(ev) {
   const mode = state.settings.display.cardMode;
 
   if (mode === "name") return "";
+  if (mode === "namecoach") return metaCoachOnly(ev);
+  if (mode === "nametimecoach") return metaTimeCoach(ev);
   if (mode === "namecoachroom") return metaCoachRoom(ev, false);
   if (mode === "nametimecoachroom") return metaCoachRoom(ev, true);
 
@@ -1468,11 +1713,15 @@ function hardenState() {
     state.settings.display = deepCopy(defaultState.settings.display);
   if (!state.settings.theme)
     state.settings.theme = deepCopy(defaultState.settings.theme);
+  if (!state.settings.exportDay)
+    state.settings.exportDay = deepCopy(defaultState.settings.exportDay);
 
+  fillMissing(state.settings, defaultState.settings);
   fillMissing(state.settings.schedule, defaultState.settings.schedule);
   fillMissing(state.settings.display, defaultState.settings.display);
   fillMissing(state.settings.font, defaultState.settings.font);
   fillMissing(state.settings.theme, defaultState.settings.theme);
+  fillMissing(state.settings.exportDay, defaultState.settings.exportDay);
   if (!state.exportPresets) {
     state.exportPresets = deepCopy(defaultState.exportPresets);
   }
@@ -1485,8 +1734,13 @@ function hardenState() {
   if (!state.settings.logo) {
     state.settings.logo = deepCopy(defaultState.settings.logo);
   }
+  if (!state.settings.exportDay) {
+    state.settings.exportDay = deepCopy(defaultState.settings.exportDay);
+  }
 
   const lg = state.settings.logo;
+  const exportDaySettings = state.settings.exportDay;
+  const displaySettings = state.settings.display;
 
   lg.enabled = !!lg.enabled;
   lg.variant = clamp(Math.round(Number(lg.variant ?? 1)), 1, 3);
@@ -1533,6 +1787,56 @@ function hardenState() {
   if (typeof lg.tileGap !== "undefined") {
     delete lg.tileGap;
   }
+
+  const allowedCardModes = new Set([
+    "name",
+    "namecoach",
+    "nametimecoach",
+    "namecoachroom",
+    "nametimecoachroom",
+  ]);
+  if (!allowedCardModes.has(displaySettings.cardMode)) {
+    displaySettings.cardMode = defaultState.settings.display.cardMode;
+  }
+
+  exportDaySettings.dayIndex = clamp(
+    Math.round(
+      Number(exportDaySettings.dayIndex ?? defaultState.settings.exportDay.dayIndex),
+    ),
+    0,
+    DAYS.length - 1,
+  );
+  exportDaySettings.overlay = clamp(
+    Math.round(
+      Number(exportDaySettings.overlay ?? defaultState.settings.exportDay.overlay),
+    ),
+    0,
+    90,
+  );
+  exportDaySettings.topOffset = clamp(
+    Math.round(
+      Number(
+        exportDaySettings.topOffset ?? defaultState.settings.exportDay.topOffset,
+      ),
+    ),
+    0,
+    900,
+  );
+  exportDaySettings.titleColor = normalizeHexColor(
+    exportDaySettings.titleColor ?? defaultState.settings.exportDay.titleColor,
+    defaultState.settings.exportDay.titleColor,
+  );
+  if (
+    typeof exportDaySettings.backgroundDataUrl !== "string" ||
+    !exportDaySettings.backgroundDataUrl.startsWith("data:image/")
+  ) {
+    exportDaySettings.backgroundDataUrl =
+      defaultState.settings.exportDay.backgroundDataUrl;
+  }
+  exportDaySettings.backgroundName =
+    typeof exportDaySettings.backgroundName === "string"
+      ? exportDaySettings.backgroundName.trim().slice(0, 160)
+      : "";
 
   if (typeof f.preset !== "string" || !f.preset.trim()) f.preset = "custom";
   if (typeof f.tightness !== "string" || !f.tightness.trim())
@@ -1778,7 +2082,7 @@ function showSaveIndicator() {
 function handleStorageFull() {
   toast(
     "ERR",
-    "⛔",
+    "Хранилище",
     "Недостаточно места в хранилище. Удалите старые события или экспортируйте данные.",
     5000,
   );
@@ -2384,16 +2688,24 @@ function saveSettings() {
 }
 
 function exportJson() {
-  const blob = new Blob([JSON.stringify(state, null, 2)], {
+  hardenState();
+  const snapshot = deepCopy(state);
+  snapshot.version = 13;
+  const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
     type: "application/json",
   });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `schedule_${new Date().toISOString().slice(0, 10)}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-  toast("OK", "Экспорт JSON", "Файл скачан.");
+  const fileName = `schedule_${new Date().toISOString().slice(0, 10)}.json`;
+  const mode = downloadFile(url, fileName);
+  if (mode === "new-tab") {
+    toast(
+      "INFO",
+      "Экспорт JSON",
+      "Открыто в новой вкладке. В Safari сохраните файл через «Поделиться».",
+    );
+  } else {
+    toast("OK", "Экспорт JSON", "Файл скачан.");
+  }
 }
 
 function importJson(file) {
@@ -2401,12 +2713,16 @@ function importJson(file) {
   r.onload = () => {
     try {
       const parsed = JSON.parse(r.result);
+      if (!isValidState(parsed)) {
+        throw new Error(
+          "Некорректный формат: ожидаются settings и массив events.",
+        );
+      }
 
       if (!confirm("Импортировать данные? Текущие данные будут заменены."))
         return;
       pushHistory("Импорт JSON");
-      state = parsed;
-      state.version = 13;
+      state = migrateState(parsed);
       hardenState();
       saveState();
       renderAll();
@@ -2415,7 +2731,7 @@ function importJson(file) {
       toast("ERR", "Импорт не удался", e.message || "Проверьте формат JSON.");
     }
   };
-  r.readAsText(file);
+  r.readAsText(file, "UTF-8");
 }
 
 function isValidState(parsed) {
@@ -5461,6 +5777,22 @@ function rerenderRowBySlotIndex(slotIndex) {
 function initializeAllRowHeights() {
   const scheduleEl = document.getElementById("schedule");
   if (!scheduleEl) return;
+  const isCompactView =
+    state.settings.display.cellView === "compact" ||
+    scheduleEl.classList.contains("compact-mode");
+  if (isCompactView) {
+    const allCells = scheduleEl.querySelectorAll(".cell.droppable");
+    allCells.forEach((cell) => {
+      cell.style.removeProperty("height");
+      cell.style.removeProperty("min-height");
+    });
+    const timeCells = scheduleEl.querySelectorAll(".cell.time");
+    timeCells.forEach((cell) => {
+      cell.style.removeProperty("height");
+      cell.style.removeProperty("min-height");
+    });
+    return;
+  }
 
   console.log("[TouchDnD] Инициализация высот строк");
 
@@ -5614,12 +5946,20 @@ document.addEventListener("DOMContentLoaded", () => {
   console.log("[TouchDnD] Загрузка системы Drag-and-Drop");
   setTimeout(() => {
     initTouchDragSafe();
-    requestRowHeightSync(true);
+    if (state.settings.display.cellView === "compact") {
+      markGeometryDirty();
+    } else {
+      requestRowHeightSync(true);
+    }
   }, 100);
 
   if (document.fonts && document.fonts.ready) {
     document.fonts.ready.then(() => {
-      requestRowHeightSync(true);
+      if (state.settings.display.cellView === "compact") {
+        markGeometryDirty();
+      } else {
+        requestRowHeightSync(true);
+      }
     });
   }
 });
@@ -5706,8 +6046,43 @@ function smartMoveEvent(id, toDay, toSlotStart, reason) {
 
         saveState(true);
 
-        // Вызываем перерисовку расписания
-        renderSchedule();
+        const movedInDom = moveEventInDOM(id, toDay, toSlotStart);
+        if (!movedInDom) {
+            // Fallback: если не удалось локально обновить DOM, делаем полную перерисовку.
+            renderSchedule();
+        } else {
+            clearFilterCache();
+
+            const movedEl = document.querySelector(`.event[data-eid="${id}"]`);
+            if (movedEl) {
+                movedEl.classList.toggle("dim", !eventVisible(ev));
+            }
+
+            const scheduleEl = document.getElementById("schedule");
+            if (scheduleEl) {
+                refreshSlotInnerLayoutClasses(scheduleEl);
+            }
+
+            if (view !== "compact") {
+                const fromSlotIndex = getSlotIndexForTime(oldStartMin);
+                const toSlotIndex = getSlotIndexForTime(toSlotStart);
+
+                if (fromSlotIndex >= 0) scheduleRowHeightUpdate(fromSlotIndex);
+                if (toSlotIndex >= 0 && toSlotIndex !== fromSlotIndex) {
+                    scheduleRowHeightUpdate(toSlotIndex);
+                }
+
+                if (scheduleEl) {
+                    updateEmptyTimeRowsVisibility(scheduleEl, {
+                        respectFilters: false,
+                        keepNowRow: true,
+                    });
+                }
+            }
+
+            renderStats();
+            markGeometryDirtyIfNeeded();
+        }
 
         const dayName = DAYS[toDay] || `День ${toDay + 1}`;
         const timeStr = minToHHMM(toSlotStart);
@@ -5740,6 +6115,71 @@ function getTargetCellForMove(toDay, toSlotStart) {
     );
 }
 
+function replaceChildrenCompat(node) {
+    if (!node) return;
+    if (typeof node.replaceChildren === "function") {
+        node.replaceChildren();
+        return;
+    }
+    while (node.firstChild) {
+        node.removeChild(node.firstChild);
+    }
+}
+
+function getDirectSlotEvents(slotInner) {
+    if (!slotInner) return [];
+    return Array.from(slotInner.children).filter(
+        (el) =>
+            el.classList &&
+            el.classList.contains("event") &&
+            !el.classList.contains("touch-drag-clone")
+    );
+}
+
+function updateSlotInnerLayoutClasses(slotInner) {
+    if (!slotInner || SUPPORTS_HAS_SELECTOR) return;
+
+    const events = getDirectSlotEvents(slotInner);
+    const hasSingle = events.length === 1 && !events[0].classList.contains("double");
+    const hasDouble = events.length >= 2 && events.some((ev) => ev.classList.contains("double"));
+
+    slotInner.classList.toggle("has-single-event", hasSingle);
+    slotInner.classList.toggle("has-double-event", hasDouble);
+}
+
+function refreshSlotInnerLayoutClasses(root) {
+    if (SUPPORTS_HAS_SELECTOR) return;
+    const scope = root || document;
+    scope.querySelectorAll(".slot-inner").forEach((slotInner) => {
+        updateSlotInnerLayoutClasses(slotInner);
+    });
+}
+
+function sortEventsInSlotInner(slotInner) {
+    if (!slotInner) return;
+    const events = Array.from(slotInner.children).filter(
+        (el) =>
+            el.classList &&
+            el.classList.contains("event") &&
+            !el.classList.contains("touch-drag-clone")
+    );
+    if (events.length <= 1) return;
+
+    events.sort((a, b) => {
+        const aId = a.dataset.eid || "";
+        const bId = b.dataset.eid || "";
+        const aEvent = state.events.find((ev) => ev.id === aId);
+        const bEvent = state.events.find((ev) => ev.id === bId);
+
+        const aStart = Number(aEvent?.startMin ?? 0);
+        const bStart = Number(bEvent?.startMin ?? 0);
+        if (aStart !== bStart) return aStart - bStart;
+        return aId.localeCompare(bId);
+    });
+
+    events.forEach((el) => slotInner.appendChild(el));
+}
+
 function ensureEmptyHintForCell(cell) {
     if (!cell) return;
     const slotInner = cell.querySelector(".slot-inner") || createSlotInner(cell);
@@ -5755,6 +6195,7 @@ function ensureEmptyHintForCell(cell) {
                 : "Клик для добавления";
         slotInner.appendChild(hint);
     }
+    updateSlotInnerLayoutClasses(slotInner);
 }
 
 function updateCellDoubleState(cell) {
@@ -5776,6 +6217,7 @@ function updateCellDoubleState(cell) {
     }
 
     updateDoubleEventClassesForCell(cell);
+    updateSlotInnerLayoutClasses(slotInner);
 }
 
 function moveEventInDOM(eventId, toDay, toSlotStart) {
@@ -5797,6 +6239,7 @@ function moveEventInDOM(eventId, toDay, toSlotStart) {
     targetInner.querySelectorAll(".empty-slot").forEach((el) => el.remove());
     eventEl.remove();
     targetInner.appendChild(eventEl);
+    sortEventsInSlotInner(targetInner);
 
     ensureEmptyHintForCell(sourceCell);
     ensureEmptyHintForCell(targetCell);
@@ -6005,10 +6448,9 @@ function syncGridGeometry() {
       }
 
       const cardH = Math.ceil(maxCardH) + 'px';
-
-
       for (const card of allCards) {
-        card.style.setProperty('height', cardH, 'important');
+        card.style.removeProperty("height");
+        card.style.setProperty("min-height", cardH, "important");
       }
 
 
@@ -6026,10 +6468,9 @@ function syncGridGeometry() {
       }
 
       const cellH = Math.ceil(maxCellH) + 'px';
-
-
       for (const cell of allCells) {
-        cell.style.height = cellH;
+        cell.style.removeProperty("height");
+        cell.style.minHeight = cellH;
       }
     });
 
@@ -6383,10 +6824,10 @@ function createCompactEventCard(ev) {
 
   const title = document.createElement("div");
   title.className = "t";
-  title.textContent = fixTypography(ev.name) || "Р‘РµР· РЅР°Р·РІР°РЅРёСЏ";
+  title.textContent = fixTypography(ev.name) || "Без названия";
   el.appendChild(title);
 
-  const metaText = metaCoachRoom(ev, true);
+  const metaText = metaFullByMode(ev);
   if (metaText) {
     const meta = document.createElement("div");
     meta.className = "m";
@@ -6399,17 +6840,17 @@ function createCompactEventCard(ev) {
 
   const grab = document.createElement("div");
   grab.className = "grab";
-  grab.textContent = "▲";
+  grab.textContent = "↕";
   el.appendChild(grab);
 
   if (state.settings.display.showNotes) {
     const tt = [];
-    tt.push(`${minToHHMM(ev.startMin)}▲“${minToHHMM(ev.startMin + ev.durationMin)}`);
+    tt.push(`${minToHHMM(ev.startMin)}–${minToHHMM(ev.startMin + ev.durationMin)}`);
     if (ev.coach) tt.push(ev.coach);
     if (ev.room) tt.push(ev.room);
     if (dir) tt.push(dir.name);
-    if (ev.notes) tt.push(`📍 ${ev.notes}`);
-    el.title = tt.join(" В· ");
+    if (ev.notes) tt.push(`Заметка: ${ev.notes}`);
+    el.title = tt.join(" | ");
   }
 
   return el;
@@ -6427,16 +6868,16 @@ function createListEventElement(ev, count) {
 
   const title = document.createElement("div");
   title.className = "t";
-  title.textContent = fixTypography(ev.name) || "Р‘РµР· РЅР°Р·РІР°РЅРёСЏ";
+  title.textContent = fixTypography(ev.name) || "Без названия";
 
-  const metaText = count >= 2 ? metaCoachRoom(ev, true) : metaFullByMode(ev);
+  const metaText = metaFullByMode(ev);
   const meta = document.createElement("div");
   meta.className = "m";
   meta.textContent = metaText;
 
   const grab = document.createElement("div");
   grab.className = "grab";
-  grab.textContent = "▲";
+  grab.textContent = "↕";
 
   el.appendChild(title);
   if (metaText) el.appendChild(meta);
@@ -6454,11 +6895,11 @@ function createListEventElement(ev, count) {
 
   if (state.settings.display.showNotes) {
     const tt = [];
-    tt.push(`${minToHHMM(ev.startMin)}вЂ“${minToHHMM(ev.startMin + ev.durationMin)}`);
+    tt.push(`${minToHHMM(ev.startMin)}–${minToHHMM(ev.startMin + ev.durationMin)}`);
     if (ev.coach) tt.push(ev.coach);
     if (ev.room) tt.push(ev.room);
     if (dir) tt.push(dir.name);
-    if (ev.notes) tt.push("вЂ” " + ev.notes);
+    if (ev.notes) tt.push("— " + ev.notes);
     el.title = tt.join("\n");
   }
 
@@ -6480,7 +6921,7 @@ function createTimelineEventElement(ev, isDouble) {
   title.textContent = fixTypography(ev.name);
   el.appendChild(title);
 
-  const metaText = isDouble ? metaCoachRoom(ev, true) : metaFullByMode(ev);
+  const metaText = metaFullByMode(ev);
   if (metaText) {
     if (isDouble) el.classList.add("title-3");
     const meta = document.createElement("div");
@@ -6500,17 +6941,17 @@ function createTimelineEventElement(ev, isDouble) {
 
   const grab = document.createElement("div");
   grab.className = "grab";
-  grab.textContent = "▲";
+  grab.textContent = "↕";
   el.appendChild(grab);
 
   if (state.settings.display.showNotes) {
     const tt = [];
-    tt.push(`${minToHHMM(ev.startMin)}вЂ“${minToHHMM(ev.startMin + ev.durationMin)}`);
+    tt.push(`${minToHHMM(ev.startMin)}–${minToHHMM(ev.startMin + ev.durationMin)}`);
     if (ev.coach) tt.push(ev.coach);
     if (ev.room) tt.push(ev.room);
     if (dir) tt.push(dir.name);
-    if (ev.notes) tt.push(`📍 ${ev.notes}`);
-    el.title = tt.join(" В· ");
+    if (ev.notes) tt.push(`Заметка: ${ev.notes}`);
+    el.title = tt.join(" | ");
   }
 
   return el;
@@ -6576,7 +7017,7 @@ function renderScheduleLegacy() {
     title.textContent = fixTypography(ev.name) || "Без названия";
     el.appendChild(title);
 
-    const metaText = metaCoachRoom(ev, true);
+    const metaText = metaFullByMode(ev);
     if (metaText) {
       const meta = document.createElement("div");
       meta.className = "m";
@@ -6598,8 +7039,8 @@ function renderScheduleLegacy() {
       if (ev.coach) tt.push(ev.coach);
       if (ev.room) tt.push(ev.room);
       if (dir) tt.push(dir.name);
-      if (ev.notes) tt.push(`📝 ${ev.notes}`);
-      el.title = tt.join(" · ");
+      if (ev.notes) tt.push(`Заметка: ${ev.notes}`);
+      el.title = tt.join(" | ");
     }
 
     return el;
@@ -6714,7 +7155,7 @@ function renderScheduleLegacy() {
             title.className = "t";
             title.textContent = fixTypography(ev.name) || "Без названия";
 
-            const metaText = count >= 2 ? metaCoachRoom(ev, true) : metaFullByMode(ev);
+            const metaText = metaFullByMode(ev);
             const meta = document.createElement("div");
             meta.className = "m";
             meta.textContent = metaText;
@@ -6765,7 +7206,7 @@ function renderScheduleLegacy() {
               title.textContent = fixTypography(ev.name);
               el.appendChild(title);
 
-              const metaText = metaCoachRoom(ev, true);
+              const metaText = metaFullByMode(ev);
               if (metaText) {
                 const meta = document.createElement("div");
                 el.classList.add("title-3");
@@ -6785,8 +7226,8 @@ function renderScheduleLegacy() {
                 if (ev.coach) tt.push(ev.coach);
                 if (ev.room) tt.push(ev.room);
                 if (dir) tt.push(dir.name);
-                if (ev.notes) tt.push(`📝 ${ev.notes}`);
-                el.title = tt.join(" · ");
+                if (ev.notes) tt.push(`Заметка: ${ev.notes}`);
+                el.title = tt.join(" | ");
               }
 
               slotInner.appendChild(el);
@@ -6831,8 +7272,8 @@ function renderScheduleLegacy() {
                 if (ev.coach) tt.push(ev.coach);
                 if (ev.room) tt.push(ev.room);
                 if (dir) tt.push(dir.name);
-                if (ev.notes) tt.push(`📝 ${ev.notes}`);
-                el.title = tt.join(" · ");
+                if (ev.notes) tt.push(`Заметка: ${ev.notes}`);
+                el.title = tt.join(" | ");
               }
 
               slotInner.appendChild(el);
@@ -6846,6 +7287,7 @@ function renderScheduleLegacy() {
     });
   }
 
+  refreshSlotInnerLayoutClasses(scheduleEl);
   $("emptyHint").hidden = state.events.length !== 0;
   const heightSig = getRowHeightSignature(structureKey);
   if (heightSig !== lastHeightSyncKey) {
@@ -6871,6 +7313,10 @@ function renderSchedule() {
   const { step, start } = getBounds();
   const slots = buildSlots();
   const view = state.settings.display.cellView;
+  const scheduleWrap = scheduleEl.closest(".schedule-wrap");
+  if (scheduleWrap) {
+    scheduleWrap.classList.toggle("compact-view", view === "compact");
+  }
 
   const todayIndex = (new Date().getDay() + 6) % 7;
   const nowHour = pad2(new Date().getHours());
@@ -6993,13 +7439,13 @@ function renderSchedule() {
 
       if (slotInner.dataset.renderKey !== renderKey) {
         slotInner.dataset.renderKey = renderKey;
-        slotInner.replaceChildren();
+        replaceChildrenCompat(slotInner);
 
         if (!dayEvents.length) {
           if (state.settings.display.showEmptyHint) {
             const hint = document.createElement("div");
             hint.className = "empty-slot";
-            hint.textContent = "??? ???????";
+            hint.textContent = "Нет занятий";
             slotInner.appendChild(hint);
           }
         } else {
@@ -7065,13 +7511,13 @@ function renderSchedule() {
 
         if (slotInner.dataset.renderKey !== renderKey) {
           slotInner.dataset.renderKey = renderKey;
-          slotInner.replaceChildren();
+          replaceChildrenCompat(slotInner);
 
           if (!count) {
             if (state.settings.display.showEmptyHint) {
               const hint = document.createElement("div");
               hint.className = "empty-slot";
-              hint.textContent = "Добавить занятие";
+              hint.textContent = "Клик для добавления";
               slotInner.appendChild(hint);
             }
             if (slot && view === "timeline") slot.classList.remove("two");
@@ -7105,6 +7551,7 @@ function renderSchedule() {
     }
   }
 
+  refreshSlotInnerLayoutClasses(scheduleEl);
   $("emptyHint").hidden = state.events.length !== 0;
   if (view !== "compact") {
     if (needsRebuild) {
@@ -7387,7 +7834,7 @@ function renderDirSelect(selectedId) {
 
   const separator = document.createElement("option");
   separator.disabled = true;
-  separator.textContent = "────────────────────";
+  separator.textContent = "--------------------";
   evDir.appendChild(separator);
 
   const manageOption = document.createElement("option");
@@ -7418,7 +7865,7 @@ function renderCoachSelect(selectedCoach) {
 
   const separator = document.createElement("option");
   separator.disabled = true;
-  separator.textContent = "─────────────────";
+  separator.textContent = "--------------------";
   evCoach.appendChild(separator);
 
   const newOption = document.createElement("option");
@@ -7907,7 +8354,10 @@ function initFontPicker(cfg) {
       list.appendChild(b);
     }
 
-    if (filtered.length > visible.length) {
+    const hasMoreItems = filtered.length > visible.length;
+    list.classList.toggle("has-font-more", hasMoreItems);
+
+    if (hasMoreItems) {
       const more = document.createElement("div");
       more.className = "font-more-hover";
       more.textContent = `Ещё ${Math.min(PAGE, filtered.length - visible.length)}…`;
@@ -8252,7 +8702,7 @@ function openCoachManager() {
     const count = state.events.filter((e) => e.coach === coach).length;
     message += `${idx + 1}. ${coach} (занятий: ${count})\n`;
   });
-  message += "\n━━━━━━━━━━━━━━━━━━━━━━\n";
+  message += "\n--------------------\n";
   message += "Введите номер тренера для удаления\nили 0 для отмены:";
 
   const choice = prompt(message, "0");
@@ -8424,24 +8874,102 @@ exportBackdrop.addEventListener("click", (e) => {
 
 expFormat.addEventListener("change", () => {
   syncExportModalUI();
-  lastPreview = null;
-  expPreviewImg.removeAttribute("src");
+  invalidateExportPreview();
 });
 
 expPreset.addEventListener("change", () => {
-  lastPreview = null;
-  expPreviewImg.removeAttribute("src");
+  if (exportMode === EXPORT_MODE_WEEK) {
+    exportWeekPresetId = expPreset.value || exportWeekPresetId;
+  }
+  invalidateExportPreview();
 });
 expBg.addEventListener("change", () => {
-  lastPreview = null;
-  expPreviewImg.removeAttribute("src");
+  invalidateExportPreview();
 });
 
 expQuality.addEventListener("input", () => {
   expQualityVal.textContent = String(expQuality.value);
-  lastPreview = null;
-  expPreviewImg.removeAttribute("src");
+  invalidateExportPreview();
 });
+
+if (expTabWeek) {
+  expTabWeek.addEventListener("click", () => {
+    setExportMode(EXPORT_MODE_WEEK);
+  });
+}
+if (expTabDay) {
+  expTabDay.addEventListener("click", () => {
+    setExportMode(EXPORT_MODE_DAY);
+  });
+}
+if (expDaySelect) {
+  expDaySelect.addEventListener("change", () => {
+    persistExportDaySettings();
+    invalidateExportPreview();
+  });
+}
+if (expDayOverlay) {
+  expDayOverlay.addEventListener("input", () => {
+    persistExportDaySettings({ save: false });
+    updateExportDayOverlayLabel();
+    invalidateExportPreview();
+  });
+  expDayOverlay.addEventListener("change", () => {
+    persistExportDaySettings();
+  });
+}
+if (expDayTopOffset) {
+  expDayTopOffset.addEventListener("input", () => {
+    persistExportDaySettings({ save: false });
+    invalidateExportPreview();
+  });
+  expDayTopOffset.addEventListener("change", () => {
+    persistExportDaySettings();
+    invalidateExportPreview();
+  });
+}
+if (expDayTitleColor) {
+  expDayTitleColor.addEventListener("input", () => {
+    persistExportDaySettings({ save: false });
+    invalidateExportPreview();
+  });
+  expDayTitleColor.addEventListener("change", () => {
+    persistExportDaySettings();
+    invalidateExportPreview();
+  });
+}
+if (expDayBgFile) {
+  expDayBgFile.addEventListener("change", () => {
+    const file = expDayBgFile.files && expDayBgFile.files[0];
+    if (!file) {
+      syncExportDayBackgroundFromSettings();
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = String(reader.result || "");
+      if (!dataUrl.startsWith("data:")) {
+        toast("ERR", "Экспорт", "Не удалось прочитать выбранное изображение.");
+        syncExportDayBackgroundFromSettings();
+        return;
+      }
+      const preparedDataUrl = await prepareDayBackgroundForExport(dataUrl);
+      exportDayBackgroundDataUrl = preparedDataUrl;
+      const exportDaySettings = getExportDaySettings();
+      exportDaySettings.backgroundDataUrl = preparedDataUrl || "";
+      exportDaySettings.backgroundName = file.name || "";
+      saveState(true);
+      setExportDayBackgroundStatus(`Файл: ${file.name}`);
+      invalidateExportPreview();
+    };
+    reader.onerror = () => {
+      toast("ERR", "Экспорт", "Ошибка чтения изображения.");
+      syncExportDayBackgroundFromSettings();
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 document
   .getElementById("btnExpPreview")
@@ -8465,6 +8993,126 @@ $("btnClearAll").addEventListener("click", () => {
   toast("OK", "Очищено", "Все занятия удалены.");
 });
 
+// Обработчик кнопки обновления кэша
+async function getAppServiceWorkerRegistrations() {
+  if (!("serviceWorker" in navigator)) return [];
+  const registrations = await navigator.serviceWorker.getRegistrations();
+  return registrations.filter((registration) => {
+    const workerUrl =
+      registration.active?.scriptURL ||
+      registration.waiting?.scriptURL ||
+      registration.installing?.scriptURL ||
+      "";
+    return workerUrl === SW_SCRIPT_URL;
+  });
+}
+
+async function getServiceWorkerDiagnostics() {
+  if (!("serviceWorker" in navigator)) {
+    return { supported: false };
+  }
+
+  const registrations = await navigator.serviceWorker.getRegistrations();
+  const appRegistrations = await getAppServiceWorkerRegistrations();
+  const cacheNames = "caches" in window ? await caches.keys() : [];
+
+  return {
+    supported: true,
+    scope: SW_EXPECTED_SCOPE,
+    scriptURL: SW_SCRIPT_URL,
+    controller: !!navigator.serviceWorker.controller,
+    registrationCount: registrations.length,
+    appRegistrationCount: appRegistrations.length,
+    registrations: registrations.map((registration) => ({
+      scope: registration.scope,
+      scriptURL:
+        registration.active?.scriptURL ||
+        registration.waiting?.scriptURL ||
+        registration.installing?.scriptURL ||
+        null,
+      active: !!registration.active,
+      waiting: !!registration.waiting,
+      installing: !!registration.installing,
+    })),
+    cacheNames,
+  };
+}
+
+window.getServiceWorkerDiagnostics = getServiceWorkerDiagnostics;
+
+function hardReloadPage() {
+  const url = new URL(window.location.href);
+  url.searchParams.set("_cb", String(Date.now()));
+  window.location.replace(url.toString());
+}
+
+async function clearAppCacheAndReload() {
+  const appRegistrations = await getAppServiceWorkerRegistrations();
+
+  for (const registration of appRegistrations) {
+    [registration.waiting, registration.active, registration.installing]
+      .filter(Boolean)
+      .forEach((worker) => {
+        try {
+          worker.postMessage({ type: "CLEAR_APP_CACHE" });
+        } catch (error) {
+          console.warn("Service Worker CLEAR_APP_CACHE message failed:", error);
+        }
+      });
+  }
+
+  if ("caches" in window) {
+    const cacheNames = await caches.keys();
+    const appCacheNames = cacheNames.filter((name) =>
+      name.startsWith(SW_CACHE_PREFIX),
+    );
+    await Promise.all(appCacheNames.map((name) => caches.delete(name)));
+  }
+
+  for (const registration of appRegistrations) {
+    await registration.unregister();
+  }
+
+  clearPreviewCache();
+  hardReloadPage();
+}
+
+async function forceServiceWorkerRefreshOnce() {
+  if (!isServiceWorkerAllowed()) return false;
+  if (localStorage.getItem(SW_FORCE_REFRESH_MARK) === SW_FORCE_REFRESH_VERSION) {
+    return false;
+  }
+
+  try {
+    localStorage.setItem(SW_FORCE_REFRESH_MARK, SW_FORCE_REFRESH_VERSION);
+    await clearAppCacheAndReload();
+    return true;
+  } catch (error) {
+    localStorage.removeItem(SW_FORCE_REFRESH_MARK);
+    console.warn("One-time Service Worker refresh failed:", error);
+    return false;
+  }
+}
+
+const btnClearCache = document.getElementById("btnClearCache");
+if (btnClearCache) {
+  btnClearCache.addEventListener("click", async () => {
+    if (!confirm("Обновить кэш приложения? Страница будет перезагружена.")) {
+      return;
+    }
+
+    try {
+      await clearAppCacheAndReload();
+    } catch (error) {
+      console.error("Cache refresh failed:", error);
+      toast(
+        "ERR",
+        "Кэш",
+        "Не удалось обновить кэш: " + (error?.message || String(error)),
+      );
+    }
+  });
+}
 $("btnCloseEvent").addEventListener("click", closeEventModal);
 $("btnCancel").addEventListener("click", closeEventModal);
 $("btnSave").addEventListener("click", saveEventFromModal);
@@ -8567,6 +9215,23 @@ if (themeMode) {
     }
   });
 }
+
+const systemThemeMedia =
+  typeof window !== "undefined" && typeof window.matchMedia === "function"
+    ? window.matchMedia("(prefers-color-scheme: dark)")
+    : null;
+const handleSystemThemeChange = () => {
+  if (state?.settings?.theme?.mode !== "auto") return;
+  applyTheme();
+};
+if (systemThemeMedia) {
+  if (typeof systemThemeMedia.addEventListener === "function") {
+    systemThemeMedia.addEventListener("change", handleSystemThemeChange);
+  } else if (typeof systemThemeMedia.addListener === "function") {
+    systemThemeMedia.addListener(handleSystemThemeChange);
+  }
+}
+
 themePreset.addEventListener("change", () =>
   applyPresetToCustom(themePreset.value),
 );
@@ -8621,7 +9286,7 @@ function openDirectionManager() {
     const count = state.events.filter((e) => e.directionId === dir.id).length;
     message += `${idx + 1}. ${dir.name} (занятий: ${count})\n`;
   });
-  message += "\n━━━━━━━━━━━━━━━━━━━━━━\n";
+  message += "\n--------------------\n";
   message += "Действия:\n";
   message += "• Введите номер для РЕДАКТИРОВАНИЯ\n";
   message += "• Номер с минусом (-3) для УДАЛЕНИЯ\n";
@@ -8983,17 +9648,224 @@ function updateLogoCSSVariables() {
   style.setProperty("--day-head-height", dayHeadHeight);
 }
 
-function openExportModal() {
-  expPreset.innerHTML = "";
-  EXPORT_PRESETS.forEach((p) => {
-    const o = document.createElement("option");
-    o.value = p.id;
-    o.textContent = p.name;
-    expPreset.appendChild(o);
+function invalidateExportPreview() {
+  clearPreviewCache();
+}
+
+function getExportDaySettings() {
+  if (!state.settings.exportDay) {
+    state.settings.exportDay = deepCopy(DEFAULT_STATE().settings.exportDay);
+  }
+  return state.settings.exportDay;
+}
+
+function setExportDayBackgroundStatus(text) {
+  if (!expDayBgStatus) return;
+  expDayBgStatus.textContent = text || "Файл не выбран";
+}
+
+function syncExportDayBackgroundFromSettings() {
+  const exportDaySettings = getExportDaySettings();
+  const savedDataUrl =
+    typeof exportDaySettings.backgroundDataUrl === "string"
+      ? exportDaySettings.backgroundDataUrl
+      : "";
+  const savedName =
+    typeof exportDaySettings.backgroundName === "string"
+      ? exportDaySettings.backgroundName.trim()
+      : "";
+
+  exportDayBackgroundDataUrl = savedDataUrl.startsWith("data:image/")
+    ? savedDataUrl
+    : "";
+  if (expDayBgFile) {
+    expDayBgFile.value = "";
+  }
+  if (exportDayBackgroundDataUrl) {
+    setExportDayBackgroundStatus(
+      savedName ? `Файл: ${savedName}` : "Фон из памяти",
+    );
+  } else {
+    setExportDayBackgroundStatus("Файл не выбран");
+  }
+}
+
+function resetExportDayBackground({ save = true } = {}) {
+  exportDayBackgroundDataUrl = "";
+  const exportDaySettings = getExportDaySettings();
+  exportDaySettings.backgroundDataUrl = "";
+  exportDaySettings.backgroundName = "";
+  if (expDayBgFile) {
+    expDayBgFile.value = "";
+  }
+  setExportDayBackgroundStatus("Файл не выбран");
+  if (save) {
+    saveState(true);
+  }
+}
+
+function updateExportDayOverlayLabel() {
+  if (!expDayOverlay || !expDayOverlayVal) return;
+  expDayOverlayVal.textContent = `${expDayOverlay.value}%`;
+}
+
+function toFiniteNumber(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function normalizeHexColor(value, fallback = "#ff7ccc") {
+  const normalized = normalizeHex(value);
+  return /^#[0-9a-f]{6}$/i.test(normalized) ? normalized : fallback;
+}
+
+function getActiveExportMode() {
+  if (expDayOptions && !expDayOptions.hidden) return EXPORT_MODE_DAY;
+  return exportMode === EXPORT_MODE_DAY ? EXPORT_MODE_DAY : EXPORT_MODE_WEEK;
+}
+
+function persistExportDaySettings({ save = true } = {}) {
+  const exportDaySettings = getExportDaySettings();
+  const dayIndex = clamp(
+    Math.round(
+      toFiniteNumber(expDaySelect?.value ?? exportDaySettings.dayIndex ?? 0, 0),
+    ),
+    0,
+    DAYS.length - 1,
+  );
+  const overlay = clamp(
+    Math.round(
+      toFiniteNumber(expDayOverlay?.value ?? exportDaySettings.overlay ?? 45, 45),
+    ),
+    0,
+    90,
+  );
+  const topOffset = clamp(
+    Math.round(
+      toFiniteNumber(
+        expDayTopOffset?.value ?? exportDaySettings.topOffset ?? 190,
+        190,
+      ),
+    ),
+    0,
+    900,
+  );
+  const titleColor = normalizeHexColor(
+    expDayTitleColor?.value ?? exportDaySettings.titleColor ?? "#ff7ccc",
+    "#ff7ccc",
+  );
+
+  exportDaySettings.dayIndex = dayIndex;
+  exportDaySettings.overlay = overlay;
+  exportDaySettings.topOffset = topOffset;
+  exportDaySettings.titleColor = titleColor;
+  if (expDayTopOffset) {
+    expDayTopOffset.value = String(topOffset);
+  }
+  if (expDayTitleColor) {
+    expDayTitleColor.value = titleColor;
+  }
+  if (save) {
+    saveState(true);
+  }
+}
+
+function buildExportDaySelectLabel(dayIndex) {
+  const dayName = DAYS[dayIndex] || `День ${dayIndex + 1}`;
+  const showDate = state.settings.schedule?.showDate !== false;
+  if (!showDate) return dayName;
+  const date = getScheduleDayDate(dayIndex);
+  if (!date) return dayName;
+  return `${dayName} (${formatDateDDMM(date)})`;
+}
+
+function populateExportDaySelect() {
+  if (!expDaySelect) return;
+  const selected = clamp(
+    Math.round(Number(getExportDaySettings().dayIndex ?? 0)),
+    0,
+    DAYS.length - 1,
+  );
+  expDaySelect.innerHTML = "";
+  DAYS.forEach((_, dayIndex) => {
+    const option = document.createElement("option");
+    option.value = String(dayIndex);
+    option.textContent = buildExportDaySelectLabel(dayIndex);
+    expDaySelect.appendChild(option);
   });
-  expPreset.value = "vk_square";
+  expDaySelect.value = String(selected);
+}
+
+function populateExportPresetOptions(mode) {
+  if (!expPreset) return;
+  const isDayMode = mode === EXPORT_MODE_DAY;
+  const presets = isDayMode ? [DAY_EXPORT_PRESET] : EXPORT_PRESETS;
+
+  expPreset.innerHTML = "";
+  presets.forEach((preset) => {
+    const option = document.createElement("option");
+    option.value = preset.id;
+    option.textContent = preset.name;
+    expPreset.appendChild(option);
+  });
+
+  if (isDayMode) {
+    expPreset.value = DAY_EXPORT_PRESET.id;
+    return;
+  }
+
+  const fallbackWeekPresetId = EXPORT_PRESETS.some((p) => p.id === "a4_land")
+    ? "a4_land"
+    : EXPORT_PRESETS[0]?.id || "";
+  const savedWeekPresetId = exportWeekPresetId || fallbackWeekPresetId;
+  const resolvedWeekPresetId = EXPORT_PRESETS.some((p) => p.id === savedWeekPresetId)
+    ? savedWeekPresetId
+    : fallbackWeekPresetId;
+  expPreset.value = resolvedWeekPresetId;
+  exportWeekPresetId = resolvedWeekPresetId;
+}
+
+function syncExportModeTabs() {
+  const isWeek = exportMode === EXPORT_MODE_WEEK;
+  if (expTabWeek) {
+    expTabWeek.classList.toggle("active", isWeek);
+    expTabWeek.setAttribute("aria-selected", isWeek ? "true" : "false");
+  }
+  if (expTabDay) {
+    expTabDay.classList.toggle("active", !isWeek);
+    expTabDay.setAttribute("aria-selected", isWeek ? "false" : "true");
+  }
+}
+
+function setExportMode(mode, { preservePreview = false } = {}) {
+  const nextMode = mode === EXPORT_MODE_DAY ? EXPORT_MODE_DAY : EXPORT_MODE_WEEK;
+  if (nextMode === EXPORT_MODE_WEEK && exportMode === EXPORT_MODE_DAY) {
+    populateExportPresetOptions(EXPORT_MODE_WEEK);
+  } else if (nextMode === EXPORT_MODE_DAY) {
+    if (exportMode === EXPORT_MODE_WEEK && expPreset?.value) {
+      exportWeekPresetId = expPreset.value;
+    }
+    populateExportPresetOptions(EXPORT_MODE_DAY);
+  }
+
+  exportMode = nextMode;
+  syncExportModeTabs();
+  syncExportModalUI();
+  if (!preservePreview) {
+    invalidateExportPreview();
+  }
+}
+
+function openExportModal() {
+  const fallbackWeekPresetId = EXPORT_PRESETS.some((p) => p.id === "a4_land")
+    ? "a4_land"
+    : EXPORT_PRESETS[0]?.id || "";
+  if (!exportWeekPresetId) {
+    exportWeekPresetId = fallbackWeekPresetId;
+  }
+  populateExportPresetOptions(EXPORT_MODE_WEEK);
   expFormat.value = "png";
-  expBg.value = "auto";
+  expBg.value = "white";
   expQuality.value = "92";
   expQualityVal.textContent = "92";
 
@@ -9002,24 +9874,68 @@ function openExportModal() {
     expHideEmpty.value = "no"; // По умолчанию НЕ скрывать
   }
 
-  expPreviewImg.removeAttribute("src");
-  lastPreview = null;
+  const exportDaySettings = getExportDaySettings();
+  populateExportDaySelect();
+  if (expDaySelect) {
+    expDaySelect.value = String(
+      clamp(Math.round(Number(exportDaySettings.dayIndex ?? 0)), 0, DAYS.length - 1),
+    );
+  }
+  if (expDayOverlay) {
+    expDayOverlay.value = String(
+      clamp(Math.round(Number(exportDaySettings.overlay ?? 45)), 0, 90),
+    );
+  }
+  if (expDayTopOffset) {
+    expDayTopOffset.value = String(
+      clamp(Math.round(Number(exportDaySettings.topOffset ?? 190)), 0, 900),
+    );
+  }
+  if (expDayTitleColor) {
+    expDayTitleColor.value = normalizeHexColor(
+      exportDaySettings.titleColor ?? "#ff7ccc",
+      "#ff7ccc",
+    );
+  }
+  updateExportDayOverlayLabel();
+  syncExportDayBackgroundFromSettings();
+
+  setExportMode(EXPORT_MODE_WEEK, { preservePreview: true });
+  invalidateExportPreview();
   syncExportModalUI();
   exportBackdrop.classList.add("show");
 }
 
 function closeExportModal() {
   exportBackdrop.classList.remove("show");
+  invalidateExportPreview();
 }
 
 function syncExportModalUI() {
   const fmt = expFormat.value;
-  expJpegWrap.style.display = fmt === "jpeg" ? "block" : "none";
+  const isJpeg = fmt === "jpeg";
+  const isDayMode = exportMode === EXPORT_MODE_DAY;
+
+  if (expWeekOptions) expWeekOptions.hidden = isDayMode;
+  if (expDayOptions) expDayOptions.hidden = !isDayMode;
+  if (expPresetWrap) expPresetWrap.hidden = false;
+  if (expPreset) expPreset.disabled = false;
+  if (expHideEmptyWrap) expHideEmptyWrap.hidden = isDayMode;
+  if (expHint) expHint.hidden = isDayMode;
+
+  if (expBgWrap) expBgWrap.style.display = isDayMode ? "none" : "";
+  if (expJpegWrap) expJpegWrap.style.display = isJpeg ? "block" : "none";
+  if (expRasterOptions) {
+    if (isDayMode) {
+      expRasterOptions.style.display = isJpeg ? "block" : "none";
+    } else {
+      expRasterOptions.style.display = "grid";
+    }
+  }
 
   const optTransparent = expBg.querySelector('option[value="transparent"]');
   if (!optTransparent) return;
-
-  const isJpeg = fmt === "jpeg";
+  if (isDayMode) return;
 
   optTransparent.hidden = isJpeg;
   optTransparent.disabled = isJpeg;
@@ -9028,7 +9944,7 @@ function syncExportModalUI() {
     expBg.dataset.prevBg = expBg.value;
     expBg.value = "white";
   } else {
-    expBg.value = expBg.dataset.prevBg || "transparent";
+    expBg.value = expBg.dataset.prevBg || "white";
     delete expBg.dataset.prevBg;
   }
 }
@@ -9279,15 +10195,78 @@ async function buildExportPreview() {
   }
 }
 
+function decodeSvgDataUrl(svgDataUrl) {
+  if (typeof svgDataUrl !== "string" || !svgDataUrl.startsWith("data:")) {
+    throw new Error("Invalid SVG data URL");
+  }
+
+  const commaIndex = svgDataUrl.indexOf(",");
+  if (commaIndex < 0) {
+    throw new Error("Malformed SVG data URL");
+  }
+
+  const meta = svgDataUrl.slice(0, commaIndex);
+  const payload = svgDataUrl.slice(commaIndex + 1);
+
+  if (/;base64/i.test(meta)) {
+    const binary = atob(payload);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    if (typeof TextDecoder !== "undefined") {
+      return new TextDecoder("utf-8").decode(bytes);
+    }
+    let text = "";
+    for (let i = 0; i < bytes.length; i++) {
+      text += String.fromCharCode(bytes[i]);
+    }
+    return text;
+  }
+
+  return decodeURIComponent(payload);
+}
+
+function getSvgPreviewSize(svgText) {
+  let svgWidth = 800;
+  let svgHeight = 600;
+
+  const sizeMatchW = svgText.match(/width="([\d.]+)(px)?"/i);
+  const sizeMatchH = svgText.match(/height="([\d.]+)(px)?"/i);
+  if (sizeMatchW && sizeMatchH) {
+    svgWidth = Number(sizeMatchW[1]) || svgWidth;
+    svgHeight = Number(sizeMatchH[1]) || svgHeight;
+    return {
+      width: Math.ceil(svgWidth),
+      height: Math.ceil(svgHeight),
+    };
+  }
+
+  const viewBoxMatch = svgText.match(/viewBox="([\d.\s-]+)"/i);
+  if (viewBoxMatch) {
+    const parts = viewBoxMatch[1]
+      .trim()
+      .split(/\s+/)
+      .map((part) => Number(part));
+    if (parts.length === 4) {
+      svgWidth = parts[2] || svgWidth;
+      svgHeight = parts[3] || svgHeight;
+    }
+  }
+
+  return {
+    width: Math.ceil(svgWidth),
+    height: Math.ceil(svgHeight),
+  };
+}
+
 function displaySvgPreview(svgDataUrl) {
   const previewFrame = document.querySelector(".export-preview-frame");
   if (!previewFrame) return;
   if (expPreviewImg) expPreviewImg.style.display = "none";
 
-  // Удаляем старый предпросмотр и освобождаем память
   const oldPreview = previewFrame.querySelector("#expPreviewObject");
   if (oldPreview) {
-    // Освобождаем object URL если он используется
     if (oldPreview.data && currentPreviewObjectUrl) {
       URL.revokeObjectURL(currentPreviewObjectUrl);
       currentPreviewObjectUrl = null;
@@ -9295,74 +10274,39 @@ function displaySvgPreview(svgDataUrl) {
     oldPreview.remove();
   }
 
-  // Для SVG создаем object URL для отображения
   try {
-    // Декодируем SVG из data URL для создания чистого object URL
-    if (svgDataUrl.startsWith("data:image/svg+xml;base64,")) {
-      const base64Data = svgDataUrl.split(",")[1];
-      const svgText = atob(base64Data);
-      const svgBlob = new Blob([svgText], {
-        type: "image/svg+xml;charset=utf-8",
-      });
-      const objectUrl = URL.createObjectURL(svgBlob);
-      currentPreviewObjectUrl = objectUrl;
+    const svgText = decodeSvgDataUrl(svgDataUrl);
+    const svgBlob = new Blob([svgText], {
+      type: "image/svg+xml;charset=utf-8",
+    });
+    currentPreviewObjectUrl = URL.createObjectURL(svgBlob);
 
-      // Создаем object для отображения SVG
-      const previewObject = document.createElement("object");
-      previewObject.id = "expPreviewObject";
-      previewObject.type = "image/svg+xml";
-      previewObject.data = objectUrl;
-      let svgWidth = 800;
-      let svgHeight = 600;
-      const sizeMatchW = svgText.match(/width="([\d.]+)(px)?"/i);
-      const sizeMatchH = svgText.match(/height="([\d.]+)(px)?"/i);
-      if (sizeMatchW && sizeMatchH) {
-        svgWidth = Number(sizeMatchW[1]) || svgWidth;
-        svgHeight = Number(sizeMatchH[1]) || svgHeight;
-      } else {
-        const viewBoxMatch = svgText.match(/viewBox="([\d.\s-]+)"/i);
-        if (viewBoxMatch) {
-          const parts = viewBoxMatch[1].trim().split(/\s+/).map(Number);
-          if (parts.length === 4) {
-            svgWidth = parts[2] || svgWidth;
-            svgHeight = parts[3] || svgHeight;
-          }
-        }
-      }
+    const previewObject = document.createElement("object");
+    previewObject.id = "expPreviewObject";
+    previewObject.type = "image/svg+xml";
+    previewObject.data = currentPreviewObjectUrl;
 
-      previewObject.style.cssText = `
-                width: ${Math.ceil(svgWidth)}px;
-                height: ${Math.ceil(svgHeight)}px;
-                display: block;
-            `;
+    const { width, height } = getSvgPreviewSize(svgText);
+    previewObject.style.cssText = `
+      width: ${width}px;
+      height: ${height}px;
+      display: block;
+    `;
 
-      // Освобождаем object URL после загрузки
-      previewObject.onload = function () {
-        setTimeout(() => {
-          // Мы сохраняем URL для последующего освобождения при закрытии
-        }, 1000);
-      };
-
-      previewFrame.appendChild(previewObject);
-    } else {
-      // Если не base64, используем как есть (но это менее безопасно для памяти)
-      const previewObject = document.createElement("object");
-      previewObject.id = "expPreviewObject";
-      previewObject.type = "image/svg+xml";
-      previewObject.data = svgDataUrl;
-      previewObject.style.cssText = `
-                width: auto;
-                height: auto;
-                display: block;
-            `;
-
-      previewFrame.appendChild(previewObject);
-    }
+    previewFrame.appendChild(previewObject);
     previewFrame.scrollTop = 0;
     previewFrame.scrollLeft = 0;
   } catch (error) {
     console.error("Ошибка отображения предпросмотра:", error);
-    // Fallback: отображаем сообщение
+
+    if (expPreviewImg) {
+      expPreviewImg.src = svgDataUrl;
+      expPreviewImg.style.display = "block";
+      previewFrame.scrollTop = 0;
+      previewFrame.scrollLeft = 0;
+      return;
+    }
+
     previewFrame.innerHTML = `
             <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #666;">
                 Не удалось загрузить предпросмотр
@@ -9392,6 +10336,11 @@ function clearPreviewCache() {
       }
       oldPreview.remove();
     }
+  }
+
+  if (expPreviewImg) {
+    expPreviewImg.removeAttribute("src");
+    expPreviewImg.style.display = "";
   }
 
   // Очищаем данные предпросмотра
@@ -9435,8 +10384,254 @@ function setupExportModalEventListeners() {
   console.log("Обработчики очистки кэша установлены");
 }
 
+function escapeSvgText(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function normalizeSvgFontFamily(fontFamily) {
+  const fallback = "sans-serif";
+  const value = String(fontFamily || "").trim();
+  if (!value) return fallback;
+  return value.replace(/"/g, "'");
+}
+
+function truncateDayExportText(text, maxChars) {
+  const value = String(text || "").trim();
+  if (!value) return "";
+  if (value.length <= maxChars) return value;
+  return `${value.slice(0, Math.max(1, maxChars - 1)).trim()}…`;
+}
+
+function buildDayExportRows(dayIndex) {
+  const events = state.events
+    .filter((ev) => Number(ev.dayIndex) === dayIndex)
+    .sort((a, b) => {
+      const startDiff = Number(a.startMin) - Number(b.startMin);
+      if (startDiff !== 0) return startDiff;
+      return String(a.name || "").localeCompare(String(b.name || ""), "ru");
+    });
+
+  const rows = [];
+  let prevStart = null;
+  for (const ev of events) {
+    const startMin = Number(ev.startMin);
+    if (!Number.isFinite(startMin)) continue;
+    const title = truncateDayExportText(fixTypography(ev.name) || "Без названия", 34);
+    const coach = truncateDayExportText(fixTypography(ev.coach || ev.room || ""), 30);
+    rows.push({
+      time: startMin === prevStart ? "" : minToHHMM(startMin),
+      title,
+      coach,
+    });
+    prevStart = startMin;
+  }
+  return rows;
+}
+
+function encodeSvgToDataUrl(svgText) {
+  const base64 = btoa(unescape(encodeURIComponent(svgText)));
+  return `data:image/svg+xml;base64,${base64}`;
+}
+
+async function prepareDayBackgroundForExport(rawDataUrl) {
+  if (!rawDataUrl || typeof rawDataUrl !== "string") return "";
+  const targetW = DAY_EXPORT_PRESET.w;
+  const targetH = DAY_EXPORT_PRESET.h;
+
+  try {
+    const img = await loadImageFromDataUrl(rawDataUrl);
+    const srcW = img.naturalWidth || img.width;
+    const srcH = img.naturalHeight || img.height;
+    if (!srcW || !srcH) return rawDataUrl;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = targetW;
+    canvas.height = targetH;
+    const ctx = canvas.getContext("2d", { alpha: false });
+    if (!ctx) return rawDataUrl;
+
+    const scale = Math.max(targetW / srcW, targetH / srcH);
+    const drawW = srcW * scale;
+    const drawH = srcH * scale;
+    const dx = (targetW - drawW) / 2;
+    const dy = (targetH - drawH) / 2;
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.fillStyle = "#10141d";
+    ctx.fillRect(0, 0, targetW, targetH);
+    ctx.drawImage(img, dx, dy, drawW, drawH);
+
+    return canvas.toDataURL("image/jpeg", 0.92);
+  } catch (error) {
+    console.warn("Day export background preprocess failed:", error);
+    return rawDataUrl;
+  }
+}
+
+function applySvgTextTransform(text, transformMode) {
+  const textValue = String(text || "");
+  const mode = String(transformMode || "none").toLowerCase();
+  if (mode === "uppercase") return textValue.toLocaleUpperCase("ru-RU");
+  if (mode === "lowercase") return textValue.toLocaleLowerCase("ru-RU");
+  if (mode === "capitalize") {
+    return textValue.replace(
+      /(^|[\s-])[^\s-]/g,
+      (match) => match.toLocaleUpperCase("ru-RU"),
+    );
+  }
+  return textValue;
+}
+
+function buildDayExportSvg(opts) {
+  const width = DAY_EXPORT_PRESET.w;
+  const height = DAY_EXPORT_PRESET.h;
+  const dayIndex = clamp(
+    Math.round(toFiniteNumber(opts.dayIndex ?? 0, 0)),
+    0,
+    DAYS.length - 1,
+  );
+  const overlayOpacity = clamp(toFiniteNumber(opts.dayOverlay ?? 0.45, 0.45), 0, 0.9);
+  const bgDataUrl =
+    typeof opts.dayBackgroundDataUrl === "string" ? opts.dayBackgroundDataUrl : "";
+
+  const dayDate = getScheduleDayDate(dayIndex) || new Date();
+  const dayName = (DAYS[dayIndex] || "").toLocaleLowerCase("ru-RU");
+  const dateLabel = formatDayMonthRu(dayDate);
+  const rows = buildDayExportRows(dayIndex);
+
+  const rootStyle = getComputedStyle(document.documentElement);
+  const titleFont = normalizeSvgFontFamily(
+    rootStyle.getPropertyValue("--evTitleFont") ||
+      rootStyle.getPropertyValue("--tableFont") ||
+      "sans-serif",
+  );
+  const metaFont = normalizeSvgFontFamily(
+    rootStyle.getPropertyValue("--evMetaFont") ||
+      rootStyle.getPropertyValue("--tableFont") ||
+      "sans-serif",
+  );
+  const accentColor = normalizeHexColor(
+    opts.dayTitleColor || rootStyle.getPropertyValue("--accent") || "#ff7ccc",
+    "#ff7ccc",
+  );
+  const textColor = "#ffffff";
+
+  const fontSettings = state.settings.font || {};
+  const headerTitleSize = 112;
+  const headerDateSize = 78;
+  const headerDaySize = 30;
+  const headerTitleWeight = clamp(
+    Math.round(Number(fontSettings.weightTitle || 900)),
+    100,
+    900,
+  );
+  const headerMetaWeight = clamp(
+    Math.round(Number(fontSettings.weightMeta || 600)),
+    100,
+    900,
+  );
+  const titleTextTransform = String(fontSettings.textTransform || "none");
+  const titleLetterSpacing = Number(fontSettings.letterSpacing || 0);
+  const titleLetterSpacingPx = Number.isFinite(titleLetterSpacing)
+    ? Math.round(headerTitleSize * titleLetterSpacing * 100) / 100
+    : 1;
+
+  const headTitleY = clamp(
+    Math.round(toFiniteNumber(opts.dayTopOffset ?? 190, 190)),
+    0,
+    900,
+  );
+  const headDateY = headTitleY + 130;
+  const headDayY = headTitleY + 200;
+  const listStartY = Math.max(610, headDayY + 220);
+  const listBottomPadding = 120;
+  const availableHeight = Math.max(120, height - listStartY - listBottomPadding);
+  const rowHeight = rows.length
+    ? clamp(Math.floor(availableHeight / rows.length), 54, 112)
+    : 72;
+
+  const timeFontSize = clamp(Math.round(rowHeight * 0.34), 18, 34);
+  const rowTitleSize = clamp(Math.round(rowHeight * 0.35), 19, 36);
+  const rowMetaSize = clamp(Math.round(rowHeight * 0.3), 16, 30);
+  const metaOffset = Math.round(rowHeight * 0.5);
+
+  const dividerX = 288;
+  const timeX = 192;
+  const textX = 358;
+
+  const rowSvg = [];
+  rows.forEach((row, index) => {
+    const y = listStartY + index * rowHeight;
+    if (row.time) {
+      rowSvg.push(
+        `<text x="${timeX}" y="${y}" class="day-time">${escapeSvgText(row.time)}</text>`,
+      );
+    }
+    rowSvg.push(
+      `<text x="${textX}" y="${y}" class="day-row-title">${escapeSvgText(row.title)}</text>`,
+    );
+    if (row.coach) {
+      rowSvg.push(
+        `<text x="${textX}" y="${y + metaOffset}" class="day-row-meta">${escapeSvgText(row.coach)}</text>`,
+      );
+    }
+  });
+
+  const dividerTop = listStartY - 20;
+  const dividerBottom = rows.length
+    ? Math.min(height - 90, listStartY + rows.length * rowHeight - 8)
+    : listStartY + 120;
+
+  const emptyStateSvg = rows.length
+    ? ""
+    : `<text x="${width / 2}" y="${listStartY + 40}" class="day-empty">Нет занятий на выбранный день</text>`;
+  const imageLayer = bgDataUrl
+    ? `<image href="${escapeSvgText(bgDataUrl)}" x="0" y="0" width="${width}" height="${height}" preserveAspectRatio="xMidYMid slice" />`
+    : "";
+  const headingTitleText = applySvgTextTransform("РАСПИСАНИЕ", titleTextTransform);
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <defs>
+    <style><![CDATA[
+      .day-head-title { font-family: ${titleFont}; font-size: ${headerTitleSize}px; font-weight: ${headerTitleWeight}; letter-spacing: ${titleLetterSpacingPx}px; text-anchor: middle; fill: ${accentColor}; }
+      .day-head-date { font-family: ${titleFont}; font-size: ${headerDateSize}px; font-weight: ${headerTitleWeight}; text-anchor: middle; fill: ${accentColor}; }
+      .day-head-weekday { font-family: ${metaFont}; font-size: ${headerDaySize}px; font-weight: ${headerMetaWeight}; text-anchor: middle; fill: ${accentColor}; }
+      .day-time { font-family: ${titleFont}; font-size: ${timeFontSize}px; font-weight: 700; text-anchor: end; dominant-baseline: hanging; fill: ${textColor}; }
+      .day-row-title { font-family: ${titleFont}; font-size: ${rowTitleSize}px; font-weight: 700; dominant-baseline: hanging; fill: ${textColor}; }
+      .day-row-meta { font-family: ${metaFont}; font-size: ${rowMetaSize}px; font-weight: 500; dominant-baseline: hanging; fill: ${textColor}; }
+      .day-empty { font-family: ${metaFont}; font-size: ${rowMetaSize + 6}px; font-weight: 600; text-anchor: middle; fill: ${textColor}; }
+    ]]></style>
+  </defs>
+  <rect x="0" y="0" width="${width}" height="${height}" fill="#151b25" />
+  ${imageLayer}
+  <rect x="0" y="0" width="${width}" height="${height}" fill="#000000" opacity="${overlayOpacity.toFixed(2)}" />
+  <text x="${width / 2}" y="${headTitleY}" class="day-head-title">${escapeSvgText(headingTitleText)}</text>
+  <text x="${width / 2}" y="${headDateY}" class="day-head-date">${escapeSvgText(dateLabel)}</text>
+  <text x="${width / 2}" y="${headDayY}" class="day-head-weekday">(${escapeSvgText(dayName)})</text>
+  <line x1="${dividerX}" y1="${dividerTop}" x2="${dividerX}" y2="${dividerBottom}" stroke="${textColor}" stroke-width="3" opacity="0.85" />
+  ${rowSvg.join("\n  ")}
+  ${emptyStateSvg}
+</svg>`;
+}
+
+async function exportDayToSvg(opts) {
+  const svgText = buildDayExportSvg(opts);
+  return {
+    dataUrl: encodeSvgToDataUrl(svgText),
+  };
+}
+
 async function executeExport(opts) {
-  // Всегда используем SVG экспорт
+  if (opts.mode === EXPORT_MODE_DAY) {
+    return await exportDayToSvg(opts);
+  }
   return await exportToSvg(opts);
 }
 
@@ -9572,6 +10767,25 @@ async function prepareDomForExport({
   if (hideEmpty) {
     // Дополнительно, по DOM: если строка пустая визуально — скрываем
     hideEmptyTimeRowsByDom(clone, { keepNowRow: false });
+  }
+
+  if (hideEmpty && scheduleEl) {
+    clone.style.height = "auto";
+    clone.style.minHeight = "0";
+    scheduleEl.style.height = "auto";
+
+    await new Promise((r) => requestAnimationFrame(r));
+
+    const reRect = scheduleEl.getBoundingClientRect();
+    const reWidth = scheduleEl.scrollWidth || reRect.width || width;
+    const reHeight = scheduleEl.scrollHeight || reRect.height || height;
+    width = Math.max(100, Math.ceil(reWidth));
+    height = Math.max(100, Math.ceil(reHeight));
+
+    clone.style.width = `${width}px`;
+    clone.style.height = `${height}px`;
+    scheduleEl.style.width = `${width}px`;
+    scheduleEl.style.height = `${height}px`;
   }
 
   
@@ -9711,22 +10925,82 @@ async function exportToSvg(opts) {
 }
 
 function getExportOptsFromUI() {
-  const preset = getExportPresetById(expPreset.value);
   const fmt = expFormat.value;
+  const mode = getActiveExportMode();
   const imageFormat = fmt === "jpeg" ? "image/jpeg" : "image/png";
   const quality =
     fmt === "jpeg"
       ? Math.min(1, Math.max(0.6, Number(expQuality.value || 92) / 100))
       : 1.0;
 
-  const background =
-    fmt === "svg" ? null : resolveExportBackground(expBg.value);
+  if (mode === EXPORT_MODE_DAY) {
+    const exportDaySettings = getExportDaySettings();
+    const dayIndex = clamp(
+      Math.round(
+        toFiniteNumber(expDaySelect?.value ?? exportDaySettings.dayIndex ?? 0, 0),
+      ),
+      0,
+      DAYS.length - 1,
+    );
+    const overlayPercent = clamp(
+      Math.round(
+        toFiniteNumber(expDayOverlay?.value ?? exportDaySettings.overlay ?? 45, 45),
+      ),
+      0,
+      90,
+    );
+    const topOffset = clamp(
+      Math.round(
+        toFiniteNumber(
+          expDayTopOffset?.value ?? exportDaySettings.topOffset ?? 190,
+          190,
+        ),
+      ),
+      0,
+      900,
+    );
+    const dayTitleColor = normalizeHexColor(
+      expDayTitleColor?.value ?? exportDaySettings.titleColor ?? "#ff7ccc",
+      "#ff7ccc",
+    );
+
+    return {
+      mode,
+      preset: DAY_EXPORT_PRESET,
+      fmt,
+      imageFormat,
+      quality,
+      background: null,
+      compact: false,
+      hideEmpty: false,
+      dayIndex,
+      dayOverlay: overlayPercent / 100,
+      dayTopOffset: topOffset,
+      dayTitleColor,
+      dayBackgroundDataUrl:
+        exportDayBackgroundDataUrl ||
+        (typeof exportDaySettings.backgroundDataUrl === "string"
+          ? exportDaySettings.backgroundDataUrl
+          : ""),
+    };
+  }
+
+  const preset = getExportPresetById(expPreset.value);
+  const background = fmt === "svg" ? null : resolveExportBackground(expBg.value);
   const compact = state.settings.display.cellView === "compact";
 
-  // Добавляем параметр скрытия пустых слотов
   const hideEmpty = expHideEmpty.value === "yes";
 
-  return { preset, fmt, imageFormat, quality, background, compact, hideEmpty };
+  return {
+    mode,
+    preset,
+    fmt,
+    imageFormat,
+    quality,
+    background,
+    compact,
+    hideEmpty,
+  };
 }
 
 function makeExportClone({ compact = false } = {}) {
@@ -10491,41 +11765,25 @@ async function downloadFromExportModal() {
   const opts = getExportOptsFromUI();
 
   try {
-    toast("INFO", "Экспорт", "Создаем изображение…");
+    toast("INFO", "Export", "Preparing file...");
 
-    // ВСЕГДА создаем новый SVG при скачивании (чтобы скачивалось актуальное)
-    try {
-      const svgOpts = { ...opts, fmt: "svg" };
-      const exportResult = await executeExport(svgOpts);
+    const svgOpts = { ...opts, fmt: "svg" };
+    const exportResult = await executeExport(svgOpts);
 
-      if (!exportResult || !exportResult.dataUrl) {
-        toast("ERR", "Экспорт", "Не удалось создать изображение");
-        return;
-      }
-
-      // Сохраняем для будущих скачиваний (кэш)
-      lastPreview = {
-        dataUrl: exportResult.dataUrl,
-        originalOpts: opts,
-        ...svgOpts,
-        timestamp: Date.now(),
-      };
-
-      // КРИТИЧНО: ОТОБРАЖАЕМ предпросмотр перед скачиванием!
-      displaySvgPreview(exportResult.dataUrl);
-
-      toast("OK", "Экспорт", "Изображение создано, начинаем скачивание…");
-    } catch (error) {
-      console.error("Ошибка создания изображения:", error);
-      toast("ERR", "Экспорт", "Не удалось создать изображение для скачивания");
+    if (!exportResult || !exportResult.dataUrl) {
+      toast("ERR", "Export", "Failed to render export image");
       return;
     }
 
-    // Даем время на отображение предпросмотра (один кадр анимации)
-    await new Promise((resolve) => requestAnimationFrame(resolve));
+    lastPreview = {
+      dataUrl: exportResult.dataUrl,
+      originalOpts: opts,
+      ...svgOpts,
+      timestamp: Date.now(),
+    };
 
-    // Дальше идет процесс скачивания...
-    toast("INFO", "Экспорт", "Подготовка скачивания…");
+    displaySvgPreview(exportResult.dataUrl);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
 
     let finalDataUrl;
     let fileName;
@@ -10533,22 +11791,14 @@ async function downloadFromExportModal() {
     const timestamp = new Date().toISOString().slice(11, 19).replace(/:/g, "-");
 
     if (opts.fmt === "svg") {
-      // SVG — скачиваем как есть
       finalDataUrl = lastPreview.dataUrl;
       fileName = `schedule-${opts.preset.id}-${stamp}_${timestamp}.svg`;
-      toast("INFO", "Экспорт", "Подготавливаем SVG файл…");
     } else {
-      // PNG/JPEG — конвертируем из SVG
-      toast("INFO", "Экспорт", `Конвертация в ${opts.fmt.toUpperCase()}…`);
-
       try {
-        // Конвертируем SVG в Canvas
         const canvas = await svgToCanvas(lastPreview.dataUrl, opts);
 
-        // Применяем пресет если нужно
         let finalCanvas = canvas;
         if (opts.preset.id !== "auto") {
-          toast("INFO", "Экспорт", "Применяем размеры пресета…");
           const target = {
             w: opts.preset.w,
             h: opts.preset.h,
@@ -10561,27 +11811,34 @@ async function downloadFromExportModal() {
           );
         }
 
-        // Конвертируем в нужный формат
-        toast("INFO", "Экспорт", "Завершаем конвертацию…");
         finalDataUrl = finalCanvas.toDataURL(opts.imageFormat, opts.quality);
         fileName = `schedule-${opts.preset.id}-${stamp}_${timestamp}.${opts.fmt === "jpeg" ? "jpg" : "png"}`;
       } catch (error) {
-        console.error("Ошибка конвертации:", error);
-        toast("ERR", "Экспорт", "Ошибка конвертации изображения");
+        console.error("Export conversion error:", error);
+        toast("ERR", "Export", "Failed to convert image");
         return;
       }
     }
 
-    // Скачиваем файл
-    downloadFile(finalDataUrl, fileName);
+    const mode = downloadFile(finalDataUrl, fileName);
+    if (mode === "new-tab") {
+      toast(
+        "INFO",
+        "Safari",
+        "Файл открыт в новой вкладке. Для сохранения используйте меню «Поделиться».",
+      );
+    } else {
+      toast("OK", "Export", `File \"${fileName}\" downloaded`);
+    }
 
-    toast("OK", "Экспорт", `Файл "${fileName}" скачан.`);
+    setTimeout(() => {
+      closeExportModal();
+    }, 500);
   } catch (error) {
     console.error("Download error:", error);
-    toast("ERR", "Скачивание", error?.message || "Ошибка при скачивании файла");
+    toast("ERR", "Download", error?.message || "Download failed");
   }
 }
-
 async function svgToCanvas(svgDataUrl, opts) {
   return new Promise(async (resolve, reject) => {
     try {
@@ -10686,6 +11943,17 @@ async function svgToCanvas(svgDataUrl, opts) {
 }
 
 function downloadFile(dataUrl, fileName) {
+  if (IS_IOS_WEBKIT) {
+    const opened = window.open(dataUrl, "_blank");
+    if (!opened) {
+      window.location.href = dataUrl;
+    }
+    if (dataUrl.startsWith("blob:")) {
+      setTimeout(() => URL.revokeObjectURL(dataUrl), 60000);
+    }
+    return "new-tab";
+  }
+
   const a = document.createElement("a");
   a.download = fileName;
   a.href = dataUrl;
@@ -10702,6 +11970,7 @@ function downloadFile(dataUrl, fileName) {
       URL.revokeObjectURL(dataUrl);
     }
   }, 100);
+  return "download";
 }
 
 function loadImageFromDataUrl(dataUrl) {
@@ -10748,30 +12017,6 @@ function loadImageFromDataUrl(dataUrl) {
         }
       }
     }, 15000);
-  });
-}
-
-function setupExportDownloadButton() {
-  const downloadBtn = document.querySelector("#btnExpDownload");
-  if (downloadBtn) {
-    downloadBtn.addEventListener("click", downloadFromExportModal);
-  }
-}
-
-window.downloadFromExportModal = downloadFromExportModal;
-window.setupExportDownloadButton = setupExportDownloadButton;
-
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", setupExportDownloadButton);
-} else {
-  setupExportDownloadButton();
-}
-
-// Добавляем обработчик для поля скрытия пустых слотов
-if (expHideEmpty) {
-  expHideEmpty.addEventListener("change", () => {
-    lastPreview = null;
-    expPreviewImg.removeAttribute("src");
   });
 }
 
@@ -11040,11 +12285,13 @@ function applyCellSpacingForExport(targetElement) {
         dst.style.paddingRight = cs.paddingRight;
         dst.style.paddingBottom = cs.paddingBottom;
         dst.style.paddingLeft = cs.paddingLeft;
-        dst.style.gap = cs.gap;
-        dst.style.borderTopWidth = cs.borderTopWidth;
-        dst.style.borderRightWidth = cs.borderRightWidth;
-        dst.style.borderBottomWidth = cs.borderBottomWidth;
-        dst.style.borderLeftWidth = cs.borderLeftWidth;
+        // УСТАНАВЛИВАЕМ gap: 0 для устранения интервалов между ячейками при экспорте
+        dst.style.gap = "0";
+        // УБИРАЕМ border для устранения интервалов между ячейками при экспорте
+        dst.style.borderTopWidth = "0";
+        dst.style.borderRightWidth = "0";
+        dst.style.borderBottomWidth = "0";
+        dst.style.borderLeftWidth = "0";
         dst.style.borderStyle = cs.borderStyle;
         dst.style.borderColor = cs.borderColor;
     };
@@ -11281,12 +12528,101 @@ function fixTypography(text) {
   return text.replace(pattern, "$1\u00A0");
 }
 
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js").catch(console.error);
-  });
+function isServiceWorkerAllowed() {
+  if (!("serviceWorker" in navigator)) return false;
+  if (window.location.protocol === "https:") return true;
+  return ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
 }
 
+async function cleanupDuplicateAppServiceWorkers() {
+  const appRegistrations = await getAppServiceWorkerRegistrations();
+  if (appRegistrations.length <= 1) {
+    return { total: appRegistrations.length, removed: 0 };
+  }
 
+  const currentRegistration = await navigator.serviceWorker.getRegistration();
+  const keepScope = currentRegistration?.scope || SW_EXPECTED_SCOPE;
+  let removed = 0;
+
+  for (const registration of appRegistrations) {
+    if (registration.scope === keepScope) continue;
+    try {
+      const ok = await registration.unregister();
+      if (ok) removed += 1;
+    } catch (error) {
+      console.warn("Failed to unregister duplicate Service Worker:", error);
+    }
+  }
+
+  return { total: appRegistrations.length, removed };
+}
+
+async function registerServiceWorker() {
+  if (!isServiceWorkerAllowed()) return;
+  sessionStorage.removeItem(SW_RELOAD_MARK);
+
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloadedAfterUpdate = false;
+
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController) return;
+    if (reloadedAfterUpdate) return;
+    if (sessionStorage.getItem(SW_RELOAD_MARK) === "1") return;
+    sessionStorage.setItem(SW_RELOAD_MARK, "1");
+    reloadedAfterUpdate = true;
+    window.location.reload();
+  });
+
+  try {
+    const registration = await navigator.serviceWorker.register("./sw.js", {
+      scope: "./",
+    });
+
+    const duplicateInfo = await cleanupDuplicateAppServiceWorkers();
+    if (duplicateInfo.removed > 0) {
+      console.warn(
+        "Removed duplicate Service Worker registrations:",
+        duplicateInfo.removed,
+      );
+    }
+    if (duplicateInfo.total > 1) {
+      console.warn(
+        "Multiple Service Worker registrations detected for this app:",
+        duplicateInfo.total,
+      );
+    }
+
+    registration.addEventListener("updatefound", () => {
+      const installing = registration.installing;
+      if (!installing) return;
+      installing.addEventListener("statechange", () => {
+        if (
+          installing.state === "installed" &&
+          navigator.serviceWorker.controller
+        ) {
+          installing.postMessage({ type: "SKIP_WAITING" });
+        }
+      });
+    });
+
+    if (registration.waiting) {
+      registration.waiting.postMessage({ type: "SKIP_WAITING" });
+    }
+
+    registration.update().catch((error) => {
+      console.warn("Service Worker update check failed:", error);
+    });
+  } catch (error) {
+    console.error("Service Worker registration failed:", error);
+  }
+}
+
+if (isServiceWorkerAllowed()) {
+  window.addEventListener("load", async () => {
+    const refreshed = await forceServiceWorkerRefreshOnce();
+    if (refreshed) return;
+    registerServiceWorker();
+  });
+}
 
 

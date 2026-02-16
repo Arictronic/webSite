@@ -533,6 +533,23 @@
                 </select>
               </div>
             </div>
+
+            <!-- Кнопка обновления кэша -->
+            <div class="field">
+              <label>Обновление кэша</label>
+              <button 
+                type="button" 
+                id="btnClearCache" 
+                class="primary"
+                style="width: 100%;"
+                title="Очистить кэш и перезапустить Service Worker"
+              >
+                🔄 Обновить кэш приложения
+              </button>
+              <div class="note" role="note" style="margin-top: 8px;">
+                Используйте эту кнопку, если после обновления приложения загружаются старые данные
+              </div>
+            </div>
           </div>
 
           <!-- DISPLAY -->
@@ -560,6 +577,8 @@
                 <label for="dispCardMode">Содержание карточки</label>
                 <select id="dispCardMode" aria-describedby="cardModeHelp">
                   <option value="name">Только название</option>
+                  <option value="namecoach">&#1053;&#1072;&#1079;&#1074;&#1072;&#1085;&#1080;&#1077; + &#1090;&#1088;&#1077;&#1085;&#1077;&#1088;</option>
+                  <option value="nametimecoach">&#1053;&#1072;&#1079;&#1074;&#1072;&#1085;&#1080;&#1077; + &#1074;&#1088;&#1077;&#1084;&#1103; + &#1090;&#1088;&#1077;&#1085;&#1077;&#1088;</option>
                   <option value="namecoachroom">
                     Название + тренер + каб.
                   </option>
@@ -1598,8 +1617,34 @@
         </header>
 
         <div class="modal-body">
+          <div
+            class="tabs export-tabs"
+            id="expModeTabs"
+            role="tablist"
+            aria-label="Режим экспорта"
+          >
+            <button
+              class="tab active"
+              id="expTabWeek"
+              type="button"
+              role="tab"
+              aria-selected="true"
+            >
+              Неделя
+            </button>
+            <button
+              class="tab"
+              id="expTabDay"
+              type="button"
+              role="tab"
+              aria-selected="false"
+            >
+              День
+            </button>
+          </div>
+
           <div class="grid2">
-            <div class="field">
+            <div class="field" id="expPresetWrap">
               <label for="expPreset">Пресет</label>
               <select id="expPreset"></select>
             </div>
@@ -1614,43 +1659,96 @@
             </div>
           </div>
 
-          <div class="grid2" id="expRasterOptions">
-            <div class="field">
-              <label for="expBg">Фон</label>
-              <select id="expBg">
-                <option value="auto">Авто (тема)</option>
-                <option value="transparent">Прозрачный</option>
-                <option value="white">Белый</option>
+          <div id="expWeekOptions">
+            <div class="grid2" id="expRasterOptions">
+              <div class="field" id="expBgWrap">
+                <label for="expBg">Фон</label>
+                <select id="expBg">
+                  <!-- <option value="auto">Авто (тема)</option> -->
+                  <!-- <option value="transparent">Прозрачный</option> -->
+                  <option value="white">Белый</option>
+                </select>
+              </div>
+
+              <div class="field" id="expJpegWrap" style="display: none">
+                <label for="expQuality">Качество JPEG</label>
+                <input
+                  id="expQuality"
+                  type="range"
+                  min="60"
+                  max="100"
+                  step="1"
+                  value="92"
+                />
+                <div class="mini" id="expQualityVal">92</div>
+              </div>
+            </div>
+
+            <div class="field" id="expHideEmptyWrap">
+              <label for="expHideEmpty">Убрать пустые слоты</label>
+              <select id="expHideEmpty">
+                <option value="no">Нет</option>
+                <option value="yes">Да</option>
               </select>
             </div>
 
-            <div class="field" id="expJpegWrap" style="display: none">
-              <label for="expQuality">Качество JPEG</label>
-              <input
-                id="expQuality"
-                type="range"
-                min="60"
-                max="100"
-                step="1"
-                value="92"
-              />
-              <div class="mini" id="expQualityVal">92</div>
+            <div class="note" id="expHint" role="note">
+              Экспортируется только расписание (без панели управления).
+              Предпросмотр может занять 1–2 секунды.
             </div>
           </div>
 
-          <!-- НОВЫЙ БЛОК: Убрать пустые слоты -->
-          <div class="field">
-            <label for="expHideEmpty">Убрать пустые слоты</label>
-            <select id="expHideEmpty">
-              <option value="no">Нет</option>
-              <option value="yes">Да</option>
-            </select>
-          </div>
-          <!-- КОНЕЦ НОВОГО БЛОКА -->
+          <div id="expDayOptions" hidden>
+            <div class="grid2">
+              <div class="field">
+                <label for="expDaySelect">День недели</label>
+                <select id="expDaySelect"></select>
+              </div>
 
-          <div class="note" id="expHint" role="note">
-            Экспортируется только расписание (без панели управления).
-            Предпросмотр может занять 1–2 секунды.
+              <div class="field">
+                <label for="expDayBgFile">Фоновое изображение</label>
+                <input
+                  id="expDayBgFile"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/heic,image/heif,image/svg+xml"
+                />
+                <div class="mini" id="expDayBgStatus">Файл не выбран</div>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="expDayOverlay">Затемнение фона</label>
+              <input
+                id="expDayOverlay"
+                type="range"
+                min="0"
+                max="90"
+                step="1"
+                value="45"
+              />
+              <div class="mini" id="expDayOverlayVal">45%</div>
+            </div>
+
+            <div class="field">
+              <label for="expDayTopOffset">Отступ сверху заголовка (px)</label>
+              <input
+                id="expDayTopOffset"
+                type="number"
+                min="0"
+                max="900"
+                step="1"
+                value="190"
+              />
+            </div>
+
+            <div class="field">
+              <label for="expDayTitleColor">Цвет заголовка</label>
+              <input id="expDayTitleColor" type="color" value="#ff7ccc" />
+            </div>
+
+            <div class="note" id="expDayHint" role="note">
+              Размер дневного изображения фиксирован: 1080 x 1980 px.
+            </div>
           </div>
 
           <div class="hr"></div>
@@ -1695,9 +1793,12 @@
     <script>
       // Добавляем атрибут hidden для модалок при загрузке
       document.addEventListener("DOMContentLoaded", function () {
-        document.getElementById("eventBackdrop")?.setAttribute('hidden', 'false');
-        document.getElementById("settingsBackdrop")?.setAttribute('hidden', 'false');
-        document.getElementById("exportBackdrop")?.setAttribute('hidden', 'false');
+        const eventBackdrop = document.getElementById("eventBackdrop");
+        const settingsBackdrop = document.getElementById("settingsBackdrop");
+        const exportBackdrop = document.getElementById("exportBackdrop");
+        if (eventBackdrop) eventBackdrop.hidden = true;
+        if (settingsBackdrop) settingsBackdrop.hidden = true;
+        if (exportBackdrop) exportBackdrop.hidden = true;
 
         // Добавляем CSS для мобильных/десктопных кнопок
         const style = document.createElement("style");
