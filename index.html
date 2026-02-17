@@ -491,7 +491,7 @@
             <div class="grid2">
               <div class="field">
                 <label for="setDefaultDur"
-                  >Длительность по умолчанию (мин)</label
+                  >Длительность нового занятия (мин)</label
                 >
                 <input
                   id="setDefaultDur"
@@ -504,19 +504,11 @@
                   Длительность нового занятия по умолчанию
                 </div>
               </div>
-
-              <div class="field">
-                <label>&nbsp;</label>
-                <div class="note" role="note">
-                  Правило: занятие должно полностью помещаться в одну клетку; в
-                  одной клетке максимум 2 занятия.
-                </div>
-              </div>
             </div>
 
             <div class="grid2">
               <div class="field">
-                <label for="setWeekOffset">Неделя</label>
+                <label for="setWeekOffset">Сдвиг недели</label>
                 <select id="setWeekOffset">
                   <option value="0">Текущая неделя</option>
                   <option value="1">Следующая неделя</option>
@@ -526,7 +518,7 @@
                 </select>
               </div>
               <div class="field">
-                <label for="setShowDate">Показывать дату</label>
+                <label for="setShowDate">Дата в заголовке дня</label>
                 <select id="setShowDate">
                   <option value="yes">Да</option>
                   <option value="no">Нет</option>
@@ -536,7 +528,7 @@
 
             <!-- Кнопка обновления кэша -->
             <div class="field">
-              <label>Обновление кэша</label>
+              <label>Кэш приложения</label>
               <button 
                 type="button" 
                 id="btnClearCache" 
@@ -544,11 +536,8 @@
                 style="width: 100%;"
                 title="Очистить кэш и перезапустить Service Worker"
               >
-                🔄 Обновить кэш приложения
+                🔄 Очистить кэш и перезагрузить
               </button>
-              <div class="note" role="note" style="margin-top: 8px;">
-                Используйте эту кнопку, если после обновления приложения загружаются старые данные
-              </div>
             </div>
           </div>
 
@@ -562,9 +551,9 @@
           >
             <div class="grid2">
               <div class="field">
-                <label for="dispCellView">Вид внутри клетки</label>
+                <label for="dispCellView">Вид карточек</label>
                 <select id="dispCellView" aria-describedby="cellViewHelp">
-                  <option value="timeline">Таймлайн</option>
+                  <option value="timeline">Сетка (таймлайн)</option>
                   <option value="list">Список</option>
                   <option value="compact">Компактный</option>
                 </select>
@@ -574,11 +563,17 @@
               </div>
 
               <div class="field">
-                <label for="dispCardMode">Содержание карточки</label>
+                <label for="dispCardMode">Что показывать в карточке</label>
                 <select id="dispCardMode" aria-describedby="cardModeHelp">
                   <option value="name">Только название</option>
                   <option value="namecoach">&#1053;&#1072;&#1079;&#1074;&#1072;&#1085;&#1080;&#1077; + &#1090;&#1088;&#1077;&#1085;&#1077;&#1088;</option>
                   <option value="nametimecoach">&#1053;&#1072;&#1079;&#1074;&#1072;&#1085;&#1080;&#1077; + &#1074;&#1088;&#1077;&#1084;&#1103; + &#1090;&#1088;&#1077;&#1085;&#1077;&#1088;</option>
+                  <option value="namestarttimecoach">
+                    Название + время (начало) + тренер
+                  </option>
+                  <option value="namestarttimeroom">
+                    Название + время (начало) + каб.
+                  </option>
                   <option value="namecoachroom">
                     Название + тренер + каб.
                   </option>
@@ -594,7 +589,7 @@
 
             <div class="grid2">
               <div class="field">
-                <label for="dispShowNotes">Заметки (tooltip)</label>
+                <label for="dispShowNotes">Заметки и уведомления</label>
                 <select id="dispShowNotes" aria-describedby="notesHelp">
                   <option value="yes">Показывать</option>
                   <option value="no">Скрыть</option>
@@ -606,7 +601,7 @@
 
               <div class="field">
                 <label for="dispShowEmptyHint"
-                  >Подсказка "Клик для добавления"</label
+                  >Подсказка в пустой ячейке</label
                 >
                 <select id="dispShowEmptyHint" aria-describedby="hintHelp">
                   <option value="yes">Показывать</option>
@@ -621,7 +616,7 @@
             <!-- NEW: show today + day width -->
             <div class="grid2">
               <div class="field">
-                <label for="dispShowToday">Подсветка "сегодня"</label>
+                <label for="dispShowToday">Подсветка текущего дня и времени</label>
                 <select id="dispShowToday" aria-describedby="todayHelp">
                   <option value="yes">Показывать</option>
                   <option value="no">Скрыть</option>
@@ -632,7 +627,7 @@
               </div>
 
               <div class="field">
-                <label for="dispDayWidth">Ширина слота (px)</label>
+                <label for="dispDayWidth">Ширина дня (px)</label>
                 <input
                   id="dispDayWidth"
                   type="number"
@@ -648,27 +643,17 @@
             </div>
 
             <!-- NEW: padding -->
-            <div class="grid2">
-              <div class="field">
-                <label for="dispCellPad">Отступ внутри ячейки (px)</label>
-                <input
-                  id="dispCellPad"
-                  type="number"
-                  min="0"
-                  step="1"
-                  aria-describedby="padHelp"
-                />
-                <div class="sr-only" id="padHelp">
-                  Отступы внутри ячейки/слота (влияет на плотность сетки)
-                </div>
-              </div>
-
-              <div class="field">
-                <label>&nbsp;</label>
-                <div class="note" role="note">
-                  Авто‑размер текста: если в клетке 1 занятие — крупнее; если 2
-                  — меньше (см. "Шрифты").
-                </div>
+            <div class="field">
+              <label for="dispCellPad">Внутренний отступ ячейки (px)</label>
+              <input
+                id="dispCellPad"
+                type="number"
+                min="0"
+                step="1"
+                aria-describedby="padHelp"
+              />
+              <div class="sr-only" id="padHelp">
+                Отступы внутри ячейки/слота (влияет на плотность сетки)
               </div>
             </div>
           </div>
@@ -1300,7 +1285,7 @@
 
               <div class="grid2">
                 <div class="field">
-                  <label for="logoPresetSelect">Выберите пресет</label>
+                  <label for="logoPresetSelect">Пресет</label>
                   <select id="logoPresetSelect">
                     <option value="preset1">Сейчас</option>
                     <option value="preset2">Середина</option>
@@ -1332,8 +1317,7 @@
               </div>
 
               <div class="note" id="logoPresetNote" role="note">
-                Пресеты сохраняют все настройки логотипа: включение, вариант,
-                прозрачность, цвет, макет, размеры, отступы, поворот и смещение.
+                Пресет сохраняет все параметры логотипа.
               </div>
             </div>
 
@@ -1371,9 +1355,6 @@
                 <option value="tile" selected>Плитка</option>
                 <option value="diagonal">Диагональная плитка</option>
               </select>
-              <div class="note">
-                Диагональные режимы поворачивают логотип на 45°
-              </div>
             </div>
 
             <div class="grid2">
@@ -1426,7 +1407,7 @@
               "
             >
               <div class="field">
-                <label for="logoUpload">Загрузить свой файл:</label>
+                <label for="logoUpload">Файл логотипа</label>
                 <div class="file-upload">
                   <input
                     type="file"
@@ -1439,8 +1420,7 @@
                   class="note"
                   style="font-size: 11px; margin-top: 5px; color: var(--muted)"
                 >
-                  Поддерживаются: SVG, PNG, JPG, GIF, WebP. Рекомендуется SVG
-                  для лучшего качества.
+                  Поддерживаются SVG, PNG, JPG, GIF, WebP. Лучше использовать SVG.
                 </div>
               </div>
 
@@ -1754,6 +1734,12 @@
           <div class="hr"></div>
 
           <div class="export-preview">
+            <div class="export-preview-toolbar" aria-label="Масштаб предпросмотра">
+              <button class="ghost small" id="btnExpZoomOut" type="button" title="Уменьшить">−</button>
+              <button class="ghost small" id="btnExpZoomFit" type="button" title="Вписать">По размеру</button>
+              <button class="ghost small" id="btnExpZoomIn" type="button" title="Увеличить">+</button>
+              <span class="mini" id="expZoomVal">100%</span>
+            </div>
             <div class="export-preview-frame">
               <img id="expPreviewImg" />
             </div>

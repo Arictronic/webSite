@@ -598,6 +598,18 @@ let isUpdating = false;
 let saveIndicatorStyleAdded = false;
 let filterCache = new Map();
 let lastPreview = null;
+let currentPreviewObjectUrl = null;
+let exportPreviewZoomBound = false;
+let exportPreviewPinch = { active: false, startDistance: 0, startScale: 1 };
+let exportPreviewView = {
+  element: null,
+  width: 0,
+  height: 0,
+  fitScale: 1,
+  scale: 1,
+  minScale: 0.1,
+  maxScale: 8,
+};
 let exportWeekPresetId = "";
 let exportMode = EXPORT_MODE_WEEK;
 let exportDayBackgroundDataUrl = "";
@@ -656,6 +668,11 @@ const expQuality = $("expQuality");
 const expQualityVal = $("expQualityVal");
 const expJpegWrap = $("expJpegWrap");
 const expPreviewImg = $("expPreviewImg");
+const expPreviewFrame = document.querySelector(".export-preview-frame");
+const btnExpZoomOut = $("btnExpZoomOut");
+const btnExpZoomFit = $("btnExpZoomFit");
+const btnExpZoomIn = $("btnExpZoomIn");
+const expZoomVal = $("expZoomVal");
 const expTabWeek = $("expTabWeek");
 const expTabDay = $("expTabDay");
 const expPresetWrap = $("expPresetWrap");
@@ -852,6 +869,19 @@ function initSettingsTabs() {
   }
 }
 
+function syncModalPageScrollLock() {
+  const hasOpenModal = !!document.querySelector(".backdrop.show:not([hidden])");
+  document.documentElement.classList.toggle("modal-open", hasOpenModal);
+  document.body.classList.toggle("modal-open", hasOpenModal);
+}
+
+function setBackdropVisible(backdropEl, isVisible) {
+  if (!backdropEl) return;
+  backdropEl.hidden = !isVisible;
+  backdropEl.classList.toggle("show", isVisible);
+  syncModalPageScrollLock();
+}
+
 function renderAuthGate(onSuccess) {
   const appRoot = $("appRoot");
   if (appRoot) appRoot.style.display = "none";
@@ -889,6 +919,7 @@ function renderAuthGate(onSuccess) {
   `;
 
   document.body.appendChild(wrap);
+  syncModalPageScrollLock();
 
   const passEl = wrap.querySelector("#authPass");
   const btn = wrap.querySelector("#authBtn");
@@ -903,6 +934,7 @@ function renderAuthGate(onSuccess) {
       if (appRoot) appRoot.style.display = "";
 
       wrap.remove();
+      syncModalPageScrollLock();
       onSuccess();
     } else {
       err.style.display = "block";
@@ -1203,7 +1235,17 @@ function updateDayHeaders(scheduleEl) {
   });
 }
 
+function clearToasts() {
+  const toasts = document.querySelector("#toasts");
+  if (!toasts) return;
+  while (toasts.firstChild) {
+    toasts.firstChild.remove();
+  }
+}
+
 function toast(kind, title, text, duration = 4500) {
+  if (state?.settings?.display?.showNotes === false) return;
+
   const toasts = document.querySelector("#toasts");
   if (!toasts) {
     console.warn("Toast container not found");
@@ -1671,12 +1713,26 @@ function metaTimeCoach(ev) {
   return parts.join(" | ");
 }
 
+function metaStartTimeCoach(ev) {
+  const parts = [minToHHMM(ev.startMin)];
+  if (ev.coach) parts.push(fixTypography(ev.coach));
+  return parts.join(" | ");
+}
+
+function metaStartTimeRoom(ev) {
+  const parts = [minToHHMM(ev.startMin)];
+  if (ev.room) parts.push(fixTypography(ev.room));
+  return parts.join(" | ");
+}
+
 function metaFullByMode(ev) {
   const mode = state.settings.display.cardMode;
 
   if (mode === "name") return "";
   if (mode === "namecoach") return metaCoachOnly(ev);
   if (mode === "nametimecoach") return metaTimeCoach(ev);
+  if (mode === "namestarttimecoach") return metaStartTimeCoach(ev);
+  if (mode === "namestarttimeroom") return metaStartTimeRoom(ev);
   if (mode === "namecoachroom") return metaCoachRoom(ev, false);
   if (mode === "nametimecoachroom") return metaCoachRoom(ev, true);
 
@@ -1792,6 +1848,8 @@ function hardenState() {
     "name",
     "namecoach",
     "nametimecoach",
+    "namestarttimecoach",
+    "namestarttimeroom",
     "namecoachroom",
     "nametimecoachroom",
   ]);
@@ -2401,7 +2459,7 @@ function openSettings() {
   renderThemePresetUI();
   fillThemeInputsFromState();
 
-  settingsBackdrop.classList.add("show");
+  setBackdropVisible(settingsBackdrop, true);
 
   // ✅ Синхронизируем значения контролов логотипа
   if (window.logoManager) {
@@ -2421,7 +2479,7 @@ function openSettings() {
 }
 
 function closeSettings() {
-  settingsBackdrop.classList.remove("show");
+  setBackdropVisible(settingsBackdrop, false);
 }
 
 function saveSettings() {
@@ -2465,29 +2523,6 @@ function saveSettings() {
     settingsWarn.style.display = "block";
     settingsWarn.textContent = issues.join(" ");
     return;
-  }
-
-  const oldStart = state.settings.schedule.start;
-  const oldEnd = state.settings.schedule.end;
-
-  const timeParamsChanged = oldStart !== startStr || oldEnd !== endStr;
-  let removed = 0;
-
-  if (timeParamsChanged) {
-    const before = state.events.length;
-    const { start, end, step } = getBounds();
-    const startBound = start;
-    const endBound = end;
-
-    state.events = state.events.filter((ev) => {
-      if (ev.startMin < startBound || ev.startMin >= endBound) return false;
-      const ss = slotStartFor(ev.startMin);
-      const se = ss + step;
-      if (ev.startMin + ev.durationMin > se) return false;
-      return true;
-    });
-
-    removed = before - state.events.length;
   }
 
   // ✅ Тема
@@ -2601,6 +2636,9 @@ function saveSettings() {
   if (dispCardMode) state.settings.display.cardMode = dispCardMode.value;
   if (dispShowNotes)
     state.settings.display.showNotes = dispShowNotes.value === "yes";
+  if (state.settings.display.showNotes === false) {
+    clearToasts();
+  }
   if (dispShowEmptyHint)
     state.settings.display.showEmptyHint = dispShowEmptyHint.value === "yes";
 
@@ -2678,13 +2716,7 @@ function saveSettings() {
   }
 
   // ✅ Уведомления
-  if (removed > 0)
-    toast(
-      "WARN",
-      "Применено",
-      `Удалено занятий вне диапазона/слота: ${removed}.`,
-    );
-  else toast("OK", "", "Настройки сохранены.");
+  toast("OK", "", "Настройки сохранены.");
 }
 
 function exportJson() {
@@ -7089,9 +7121,10 @@ function renderScheduleLegacy() {
     // ===== timeline / list =====
     slots.forEach((slotStart, slotIndex) => {
       const isNow = minToHHMM(slotStart).startsWith(nowHour + ":");
+      const showToday = !!state.settings.display.showTodayHighlight;
       const tCell = mkCell("cell time", minToHHMM(slotStart));
       tCell.dataset.slotIndex = slotIndex;
-      if (isNow) tCell.classList.add("now");
+      if (isNow && showToday) tCell.classList.add("now");
       scheduleEl.appendChild(tCell);
 
       const slotEnd = slotStart + step;
@@ -7460,7 +7493,7 @@ function renderSchedule() {
     const timeCells = scheduleEl.querySelectorAll(".cell.time");
     timeCells.forEach((tCell) => {
       const isNow = tCell.textContent.startsWith(nowHour + ":");
-      tCell.classList.toggle("now", isNow);
+      tCell.classList.toggle("now", isNow && state.settings.display.showTodayHighlight);
     });
 
     const eventsByCell = new Map();
@@ -8017,13 +8050,13 @@ function setEventModal(ev, title) {
   btnDelete.style.display = isEdit ? "inline-flex" : "none";
   btnDuplicate.style.display = isEdit ? "inline-flex" : "none";
 
-  eventBackdrop.classList.add("show");
+  setBackdropVisible(eventBackdrop, true);
   setTimeout(() => evName.focus(), 20);
   updateConflictsLive();
 }
 
 function closeEventModal() {
-  eventBackdrop.classList.remove("show");
+  setBackdropVisible(eventBackdrop, false);
 }
 
 function updateConflictsLive() {
@@ -9272,6 +9305,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     if (eventBackdrop.classList.contains("show")) closeEventModal();
     if (settingsBackdrop.classList.contains("show")) closeSettings();
+    if (exportBackdrop.classList.contains("show")) closeExportModal();
   }
 });
 
@@ -9903,11 +9937,25 @@ function openExportModal() {
   setExportMode(EXPORT_MODE_WEEK, { preservePreview: true });
   invalidateExportPreview();
   syncExportModalUI();
-  exportBackdrop.classList.add("show");
+  setBackdropVisible(exportBackdrop, true);
+  setTimeout(() => {
+    const firstControl = expPreset || expFormat || $("btnExpPreview");
+    if (firstControl && typeof firstControl.focus === "function") {
+      firstControl.focus({ preventScroll: true });
+    }
+  }, 20);
+  setTimeout(() => {
+    if (!exportBackdrop.classList.contains("show")) return;
+    if (typeof buildExportPreview === "function") {
+      buildExportPreview().catch((error) => {
+        console.error("Auto export preview build failed:", error);
+      });
+    }
+  }, 80);
 }
 
 function closeExportModal() {
-  exportBackdrop.classList.remove("show");
+  setBackdropVisible(exportBackdrop, false);
   invalidateExportPreview();
 }
 
@@ -10120,7 +10168,196 @@ function matchWeight(ruleWeight, wantedWeight) {
 
 // Выгрузка изображения
 
-let currentPreviewObjectUrl = null;
+function updateExportZoomLabel() {
+  if (!expZoomVal) return;
+  const scale = Number(exportPreviewView.scale) || 1;
+  expZoomVal.textContent = `${Math.round(scale * 100)}%`;
+}
+
+function getExportPreviewFitScale(width, height) {
+  if (!expPreviewFrame || !width || !height) return 1;
+  const fitX = expPreviewFrame.clientWidth / width;
+  const fitY = expPreviewFrame.clientHeight / height;
+  const fit = Math.min(fitX, fitY);
+  if (!Number.isFinite(fit) || fit <= 0) return 1;
+  return fit;
+}
+
+function applyExportPreviewScale(nextScale, { anchorX = null, anchorY = null } = {}) {
+  const viewEl = exportPreviewView.element;
+  if (!viewEl || !expPreviewFrame) return;
+  if (!exportPreviewView.width || !exportPreviewView.height) return;
+
+  const oldScale = Number(exportPreviewView.scale) || 1;
+  const minScale = Number(exportPreviewView.minScale) || 0.1;
+  const maxScale = Number(exportPreviewView.maxScale) || 8;
+  const clamped = Math.max(minScale, Math.min(maxScale, Number(nextScale) || oldScale));
+
+  const oldW = exportPreviewView.width * oldScale;
+  const oldH = exportPreviewView.height * oldScale;
+
+  const focusOffsetX =
+    anchorX == null ? expPreviewFrame.clientWidth / 2 : Number(anchorX);
+  const focusOffsetY =
+    anchorY == null ? expPreviewFrame.clientHeight / 2 : Number(anchorY);
+
+  const focusX = expPreviewFrame.scrollLeft + focusOffsetX;
+  const focusY = expPreviewFrame.scrollTop + focusOffsetY;
+
+  const ratioX = oldW > 0 ? focusX / oldW : 0.5;
+  const ratioY = oldH > 0 ? focusY / oldH : 0.5;
+
+  exportPreviewView.scale = clamped;
+
+  const newW = Math.max(1, Math.round(exportPreviewView.width * clamped));
+  const newH = Math.max(1, Math.round(exportPreviewView.height * clamped));
+  viewEl.style.width = `${newW}px`;
+  viewEl.style.height = `${newH}px`;
+
+  const nextScrollLeft = Math.max(0, newW * ratioX - focusOffsetX);
+  const nextScrollTop = Math.max(0, newH * ratioY - focusOffsetY);
+  expPreviewFrame.scrollLeft = nextScrollLeft;
+  expPreviewFrame.scrollTop = nextScrollTop;
+
+  updateExportZoomLabel();
+}
+
+function fitExportPreviewToFrame(width, height) {
+  const viewEl = exportPreviewView.element;
+  if (!viewEl) return;
+
+  exportPreviewView.width = Math.max(1, Math.ceil(Number(width) || 1));
+  exportPreviewView.height = Math.max(1, Math.ceil(Number(height) || 1));
+  exportPreviewView.fitScale = getExportPreviewFitScale(
+    exportPreviewView.width,
+    exportPreviewView.height,
+  );
+  exportPreviewView.minScale = Math.max(0.05, exportPreviewView.fitScale * 0.5);
+  exportPreviewView.maxScale = Math.max(2, exportPreviewView.fitScale * 12);
+  applyExportPreviewScale(exportPreviewView.fitScale, { anchorX: 0, anchorY: 0 });
+  if (expPreviewFrame) {
+    expPreviewFrame.scrollLeft = 0;
+    expPreviewFrame.scrollTop = 0;
+  }
+}
+
+function getTouchDistance(a, b) {
+  const dx = Number(b?.clientX || 0) - Number(a?.clientX || 0);
+  const dy = Number(b?.clientY || 0) - Number(a?.clientY || 0);
+  return Math.hypot(dx, dy);
+}
+
+function setupExportPreviewZoomControls() {
+  if (exportPreviewZoomBound) return;
+  exportPreviewZoomBound = true;
+
+  if (btnExpZoomIn) {
+    btnExpZoomIn.addEventListener("click", () => {
+      const current = Number(exportPreviewView.scale) || 1;
+      applyExportPreviewScale(current * 1.2);
+    });
+  }
+  if (btnExpZoomOut) {
+    btnExpZoomOut.addEventListener("click", () => {
+      const current = Number(exportPreviewView.scale) || 1;
+      applyExportPreviewScale(current / 1.2);
+    });
+  }
+  if (btnExpZoomFit) {
+    btnExpZoomFit.addEventListener("click", () => {
+      applyExportPreviewScale(exportPreviewView.fitScale || 1, {
+        anchorX: 0,
+        anchorY: 0,
+      });
+      if (expPreviewFrame) {
+        expPreviewFrame.scrollLeft = 0;
+        expPreviewFrame.scrollTop = 0;
+      }
+    });
+  }
+
+  if (!expPreviewFrame) return;
+
+  expPreviewFrame.addEventListener(
+    "wheel",
+    (e) => {
+      if (!exportPreviewView.element) return;
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+
+      const rect = expPreviewFrame.getBoundingClientRect();
+      const factor = Math.exp(-e.deltaY * 0.002);
+      const current = Number(exportPreviewView.scale) || 1;
+      applyExportPreviewScale(current * factor, {
+        anchorX: e.clientX - rect.left,
+        anchorY: e.clientY - rect.top,
+      });
+    },
+    { passive: false },
+  );
+
+  expPreviewFrame.addEventListener(
+    "touchstart",
+    (e) => {
+      if (!exportPreviewView.element) return;
+      if (e.touches.length !== 2) return;
+      exportPreviewPinch.active = true;
+      exportPreviewPinch.startDistance = getTouchDistance(e.touches[0], e.touches[1]);
+      exportPreviewPinch.startScale = Number(exportPreviewView.scale) || 1;
+      e.preventDefault();
+    },
+    { passive: false },
+  );
+
+  expPreviewFrame.addEventListener(
+    "touchmove",
+    (e) => {
+      if (!exportPreviewPinch.active || e.touches.length !== 2) return;
+      const distance = getTouchDistance(e.touches[0], e.touches[1]);
+      if (!distance || !exportPreviewPinch.startDistance) return;
+
+      const rect = expPreviewFrame.getBoundingClientRect();
+      const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+      const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+      const ratio = distance / exportPreviewPinch.startDistance;
+      applyExportPreviewScale(exportPreviewPinch.startScale * ratio, {
+        anchorX: centerX,
+        anchorY: centerY,
+      });
+      e.preventDefault();
+    },
+    { passive: false },
+  );
+
+  const stopPinch = () => {
+    exportPreviewPinch.active = false;
+    exportPreviewPinch.startDistance = 0;
+  };
+  expPreviewFrame.addEventListener("touchend", stopPinch);
+  expPreviewFrame.addEventListener("touchcancel", stopPinch);
+
+  window.addEventListener("resize", () => {
+    if (!exportPreviewView.element || !expPreviewFrame) return;
+    const oldFit = exportPreviewView.fitScale || 1;
+    const oldScale = exportPreviewView.scale || oldFit;
+    const wasFitted = Math.abs(oldScale - oldFit) < 0.02;
+
+    exportPreviewView.fitScale = getExportPreviewFitScale(
+      exportPreviewView.width,
+      exportPreviewView.height,
+    );
+    exportPreviewView.minScale = Math.max(0.05, exportPreviewView.fitScale * 0.5);
+    exportPreviewView.maxScale = Math.max(2, exportPreviewView.fitScale * 12);
+
+    if (wasFitted) {
+      applyExportPreviewScale(exportPreviewView.fitScale, { anchorX: 0, anchorY: 0 });
+    } else {
+      applyExportPreviewScale(oldScale);
+    }
+  });
+
+  updateExportZoomLabel();
+}
 
 async function embedFontAsDataUri(cssText, baseHref) {
   // Извлекаем URL шрифта из CSS
@@ -10261,7 +10498,7 @@ function getSvgPreviewSize(svgText) {
 }
 
 function displaySvgPreview(svgDataUrl) {
-  const previewFrame = document.querySelector(".export-preview-frame");
+  const previewFrame = expPreviewFrame || document.querySelector(".export-preview-frame");
   if (!previewFrame) return;
   if (expPreviewImg) expPreviewImg.style.display = "none";
 
@@ -10293,17 +10530,21 @@ function displaySvgPreview(svgDataUrl) {
       display: block;
     `;
 
+    exportPreviewView.element = previewObject;
     previewFrame.appendChild(previewObject);
-    previewFrame.scrollTop = 0;
-    previewFrame.scrollLeft = 0;
+    fitExportPreviewToFrame(width, height);
   } catch (error) {
     console.error("Ошибка отображения предпросмотра:", error);
 
     if (expPreviewImg) {
       expPreviewImg.src = svgDataUrl;
       expPreviewImg.style.display = "block";
-      previewFrame.scrollTop = 0;
-      previewFrame.scrollLeft = 0;
+      expPreviewImg.onload = () => {
+        const imgW = expPreviewImg.naturalWidth || expPreviewImg.width || 1;
+        const imgH = expPreviewImg.naturalHeight || expPreviewImg.height || 1;
+        exportPreviewView.element = expPreviewImg;
+        fitExportPreviewToFrame(imgW, imgH);
+      };
       return;
     }
 
@@ -10342,6 +10583,17 @@ function clearPreviewCache() {
     expPreviewImg.removeAttribute("src");
     expPreviewImg.style.display = "";
   }
+
+  exportPreviewView = {
+    element: null,
+    width: 0,
+    height: 0,
+    fitScale: 1,
+    scale: 1,
+    minScale: 0.1,
+    maxScale: 8,
+  };
+  updateExportZoomLabel();
 
   // Очищаем данные предпросмотра
   lastPreview = null;
@@ -11389,6 +11641,7 @@ function initExportModule() {
 
   // Устанавливаем обработчики для модального окна
   setupExportModalEventListeners();
+  setupExportPreviewZoomControls();
 
   // Настраиваем кнопки скачивания
   setupDownloadButtons();

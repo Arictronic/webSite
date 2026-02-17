@@ -105,6 +105,12 @@ body {
   transition: padding 0.3s ease;
 }
 
+html.modal-open,
+body.modal-open {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 .app {
   max-width: 1280px;
   width: 100%;
@@ -2175,6 +2181,7 @@ html[data-scheme="dark"] .event:hover {
 .export-preview-frame {
   height: 60vh;
   max-height: 60vh;
+  width: 100%;
   overflow: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
@@ -2183,6 +2190,26 @@ html[data-scheme="dark"] .event:hover {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--card);
+}
+
+.export-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.export-preview-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.export-preview-toolbar .mini {
+  min-width: 54px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .export-preview-frame img,
