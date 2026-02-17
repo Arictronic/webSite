@@ -1058,6 +1058,7 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
   padding-right: calc(14px + env(safe-area-inset-right, 0px));
   padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
   padding-left: calc(14px + env(safe-area-inset-left, 0px));
+  overscroll-behavior: contain;
   z-index: 100;
 }
 
@@ -1116,6 +1117,7 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
 
   overflow: auto;
   min-height: 0;
+  -webkit-overflow-scrolling: touch;
 
   overscroll-behavior: contain;
 }

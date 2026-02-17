@@ -7,9 +7,11 @@ import {
 // ===================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И КОНСТАНТЫ =====================
 const $ = (id) => document.getElementById(id);
 const USER_AGENT = navigator.userAgent || "";
-const IS_IOS_DEVICE =
-  /iPad|iPhone|iPod/.test(USER_AGENT) ||
+const IS_IPHONE_DEVICE = /iPhone|iPod/.test(USER_AGENT);
+const IS_IPAD_DEVICE =
+  /iPad/.test(USER_AGENT) ||
   (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const IS_IOS_DEVICE = IS_IPHONE_DEVICE || IS_IPAD_DEVICE;
 const IS_WEBKIT_ENGINE =
   /AppleWebKit/i.test(USER_AGENT) &&
   !/CriOS|FxiOS|EdgiOS|OPiOS|YaBrowser/i.test(USER_AGENT);
@@ -107,6 +109,7 @@ const EXPORT_PRESETS = [
   // { id: "tg_16_9", name: "Telegram 16:9 (1280×720)", w: 1280, h: 720 },
   // { id: "tg_square", name: "Telegram 1:1 (1080×1080)", w: 1080, h: 1080 },
   // { id: "a4_portrait", name: "A4 портрет (2480×3508)", w: 2480, h: 3508 },
+  { id: "mobile_land", name: "Mobile 16:9 (1920x1080)", w: 1920, h: 1080 },
   { id: "a3_land", name: "A3 альбом (4961×3508)", w: 4961, h: 3508 },
   { id: "a4_land", name: "A4 альбом (3508×2480)", w: 3508, h: 2480 },
   // { id: "auto", name: "Auto (по размеру расписания)", w: 0, h: 0 },
@@ -599,6 +602,16 @@ let saveIndicatorStyleAdded = false;
 let filterCache = new Map();
 let lastPreview = null;
 let currentPreviewObjectUrl = null;
+let pendingIosDownloadWindow = null;
+let modalScrollLockState = {
+  active: false,
+  scrollY: 0,
+  bodyPosition: "",
+  bodyTop: "",
+  bodyLeft: "",
+  bodyRight: "",
+  bodyWidth: "",
+};
 let exportPreviewZoomBound = false;
 let exportPreviewPinch = { active: false, startDistance: 0, startScale: 1 };
 let exportPreviewView = {
@@ -804,9 +817,11 @@ const btnDeleteLogoPreset = $("btnDeleteLogoPreset");
 
 // ================== Пусиые слоты (да нет) ============================
 
-expHideEmpty.addEventListener("change", () => {
-  invalidateExportPreview();
-});
+if (expHideEmpty) {
+  expHideEmpty.addEventListener("change", () => {
+    invalidateExportPreview();
+  });
+}
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", initExportModule);
@@ -871,8 +886,43 @@ function initSettingsTabs() {
 
 function syncModalPageScrollLock() {
   const hasOpenModal = !!document.querySelector(".backdrop.show:not([hidden])");
-  document.documentElement.classList.toggle("modal-open", hasOpenModal);
-  document.body.classList.toggle("modal-open", hasOpenModal);
+  const docEl = document.documentElement;
+  const body = document.body;
+  if (!docEl || !body) return;
+
+  docEl.classList.toggle("modal-open", hasOpenModal);
+  body.classList.toggle("modal-open", hasOpenModal);
+
+  if (hasOpenModal) {
+    if (modalScrollLockState.active) return;
+    modalScrollLockState.active = true;
+    modalScrollLockState.scrollY =
+      window.scrollY || window.pageYOffset || docEl.scrollTop || 0;
+    modalScrollLockState.bodyPosition = body.style.position || "";
+    modalScrollLockState.bodyTop = body.style.top || "";
+    modalScrollLockState.bodyLeft = body.style.left || "";
+    modalScrollLockState.bodyRight = body.style.right || "";
+    modalScrollLockState.bodyWidth = body.style.width || "";
+
+    body.style.position = "fixed";
+    body.style.top = `-${modalScrollLockState.scrollY}px`;
+    body.style.left = "0";
+    body.style.right = "0";
+    body.style.width = "100%";
+    return;
+  }
+
+  if (!modalScrollLockState.active) return;
+  body.style.position = modalScrollLockState.bodyPosition;
+  body.style.top = modalScrollLockState.bodyTop;
+  body.style.left = modalScrollLockState.bodyLeft;
+  body.style.right = modalScrollLockState.bodyRight;
+  body.style.width = modalScrollLockState.bodyWidth;
+
+  const restoreScrollY = modalScrollLockState.scrollY || 0;
+  modalScrollLockState.active = false;
+  modalScrollLockState.scrollY = 0;
+  window.scrollTo(0, restoreScrollY);
 }
 
 function setBackdropVisible(backdropEl, isVisible) {
@@ -9830,6 +9880,21 @@ function populateExportDaySelect() {
   expDaySelect.value = String(selected);
 }
 
+function getDefaultWeekExportPresetId() {
+  const preferredPresetIds = [];
+  if (IS_IOS_DEVICE) {
+    preferredPresetIds.push("mobile_land");
+  }
+  preferredPresetIds.push("a4_land");
+
+  for (const presetId of preferredPresetIds) {
+    if (EXPORT_PRESETS.some((p) => p.id === presetId)) {
+      return presetId;
+    }
+  }
+  return EXPORT_PRESETS[0]?.id || "";
+}
+
 function populateExportPresetOptions(mode) {
   if (!expPreset) return;
   const isDayMode = mode === EXPORT_MODE_DAY;
@@ -9848,9 +9913,7 @@ function populateExportPresetOptions(mode) {
     return;
   }
 
-  const fallbackWeekPresetId = EXPORT_PRESETS.some((p) => p.id === "a4_land")
-    ? "a4_land"
-    : EXPORT_PRESETS[0]?.id || "";
+  const fallbackWeekPresetId = getDefaultWeekExportPresetId();
   const savedWeekPresetId = exportWeekPresetId || fallbackWeekPresetId;
   const resolvedWeekPresetId = EXPORT_PRESETS.some((p) => p.id === savedWeekPresetId)
     ? savedWeekPresetId
@@ -9891,9 +9954,7 @@ function setExportMode(mode, { preservePreview = false } = {}) {
 }
 
 function openExportModal() {
-  const fallbackWeekPresetId = EXPORT_PRESETS.some((p) => p.id === "a4_land")
-    ? "a4_land"
-    : EXPORT_PRESETS[0]?.id || "";
+  const fallbackWeekPresetId = getDefaultWeekExportPresetId();
   if (!exportWeekPresetId) {
     exportWeekPresetId = fallbackWeekPresetId;
   }
@@ -10244,7 +10305,10 @@ function fitExportPreviewToFrame(width, height) {
 function getTouchDistance(a, b) {
   const dx = Number(b?.clientX || 0) - Number(a?.clientX || 0);
   const dy = Number(b?.clientY || 0) - Number(a?.clientY || 0);
-  return Math.hypot(dx, dy);
+  if (typeof Math.hypot === "function") {
+    return Math.hypot(dx, dy);
+  }
+  return Math.sqrt(dx * dx + dy * dy);
 }
 
 function setupExportPreviewZoomControls() {
@@ -10335,6 +10399,33 @@ function setupExportPreviewZoomControls() {
   };
   expPreviewFrame.addEventListener("touchend", stopPinch);
   expPreviewFrame.addEventListener("touchcancel", stopPinch);
+
+  let gestureStartScale = 1;
+  expPreviewFrame.addEventListener(
+    "gesturestart",
+    (e) => {
+      if (!exportPreviewView.element) return;
+      gestureStartScale = Number(exportPreviewView.scale) || 1;
+      e.preventDefault();
+    },
+    { passive: false },
+  );
+  expPreviewFrame.addEventListener(
+    "gesturechange",
+    (e) => {
+      if (!exportPreviewView.element) return;
+      const rect = expPreviewFrame.getBoundingClientRect();
+      applyExportPreviewScale(gestureStartScale * Number(e.scale || 1), {
+        anchorX: (e.clientX || rect.width / 2) - rect.left,
+        anchorY: (e.clientY || rect.height / 2) - rect.top,
+      });
+      e.preventDefault();
+    },
+    { passive: false },
+  );
+  expPreviewFrame.addEventListener("gestureend", () => {
+    gestureStartScale = Number(exportPreviewView.scale) || 1;
+  });
 
   window.addEventListener("resize", () => {
     if (!exportPreviewView.element || !expPreviewFrame) return;
@@ -10602,38 +10693,28 @@ function clearPreviewCache() {
 }
 
 function setupExportModalEventListeners() {
-  // Находим модальное окно экспорта
-  const exportModal = document.querySelector('.modal[data-modal="export"]');
-  if (!exportModal) {
-    console.warn("Модальное окно экспорта не найдено");
-    return;
-  }
+  const exportModal = document.querySelector("#exportBackdrop .modal");
+  if (!exportModal) return;
+  if (exportModal.getAttribute("data-cleanup-bound") === "1") return;
+  exportModal.setAttribute("data-cleanup-bound", "1");
 
-  // Обработчик закрытия модального окна
   const handleModalClose = () => {
-    console.log("Модальное окно экспорта закрыто, очищаем кэш");
     clearPreviewCache();
   };
 
-  // Находим кнопку закрытия
   const closeButtons = exportModal.querySelectorAll(
-    '[data-dismiss="modal"], .modal-close, .btn-close',
+    '#btnCloseExport, #btnExpCancel, [data-dismiss="modal"], .modal-close, .btn-close',
   );
   closeButtons.forEach((btn) => {
     btn.addEventListener("click", handleModalClose);
   });
 
-  // Обработчик клика вне модального окна (если есть backdrop)
-  exportModal.addEventListener("click", function (event) {
-    if (event.target === this && this.classList.contains("modal")) {
-      handleModalClose();
+  if (typeof window.jQuery === "function") {
+    const jqModal = window.jQuery(exportModal);
+    if (jqModal && typeof jqModal.on === "function") {
+      jqModal.on("hidden.bs.modal", handleModalClose);
     }
-  });
-
-  // Также очищаем кэш при скрытии модального окна через Bootstrap (если используется)
-  $(exportModal).on("hidden.bs.modal", handleModalClose);
-
-  console.log("Обработчики очистки кэша установлены");
+  }
 }
 
 function escapeSvgText(value) {
@@ -10704,7 +10785,7 @@ async function prepareDayBackgroundForExport(rawDataUrl) {
     const canvas = document.createElement("canvas");
     canvas.width = targetW;
     canvas.height = targetH;
-    const ctx = canvas.getContext("2d", { alpha: false });
+    const ctx = getCanvas2dContext(canvas, { alpha: false });
     if (!ctx) return rawDataUrl;
 
     const scale = Math.max(targetW / srcW, targetH / srcH);
@@ -10714,7 +10795,9 @@ async function prepareDayBackgroundForExport(rawDataUrl) {
     const dy = (targetH - drawH) / 2;
 
     ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
+    if ("imageSmoothingQuality" in ctx) {
+      ctx.imageSmoothingQuality = "high";
+    }
     ctx.fillStyle = "#10141d";
     ctx.fillRect(0, 0, targetW, targetH);
     ctx.drawImage(img, dx, dy, drawW, drawH);
@@ -11958,15 +12041,104 @@ function applyLogoStyle(
   }
 }
 
+function getCanvas2dContext(canvas, options = null) {
+  if (!canvas || typeof canvas.getContext !== "function") return null;
+  if (options) {
+    try {
+      const ctxWithOptions = canvas.getContext("2d", options);
+      if (ctxWithOptions) return ctxWithOptions;
+    } catch (_) {}
+  }
+  try {
+    return canvas.getContext("2d");
+  } catch (_) {
+    return null;
+  }
+}
+
+function getSafeMaxCanvasArea() {
+  if (IS_IPHONE_DEVICE) return 5000000;
+  if (IS_IPAD_DEVICE) return 8000000;
+  if (IS_IOS_DEVICE) return 7000000;
+  if (IS_WEBKIT_ENGINE) return 14000000;
+  if (/Firefox/i.test(USER_AGENT)) return 18000000;
+  return 26000000;
+}
+
+function fitCanvasSizeToLimit(width, height, maxArea = getSafeMaxCanvasArea()) {
+  const w = Math.max(1, Math.floor(Number(width) || 1));
+  const h = Math.max(1, Math.floor(Number(height) || 1));
+  const area = w * h;
+  if (!Number.isFinite(area) || area <= 0) {
+    return { width: 1, height: 1, scaled: false, ratio: 1 };
+  }
+  if (area <= maxArea) {
+    return { width: w, height: h, scaled: false, ratio: 1 };
+  }
+  const ratio = Math.sqrt(maxArea / area);
+  return {
+    width: Math.max(1, Math.floor(w * ratio)),
+    height: Math.max(1, Math.floor(h * ratio)),
+    scaled: true,
+    ratio,
+  };
+}
+
+function canvasToDataUrlWithFallback(canvas, mimeType, quality = 1) {
+  let currentCanvas = canvas;
+  let totalScale = 1;
+  let lastError = null;
+
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      return {
+        dataUrl: currentCanvas.toDataURL(mimeType, quality),
+        scaled: totalScale < 1,
+        scale: totalScale,
+      };
+    } catch (error) {
+      lastError = error;
+    }
+
+    const ratio = attempt === 0 ? 0.85 : 0.72;
+    const nextScale = totalScale * ratio;
+    const nextW = Math.max(1, Math.floor(canvas.width * nextScale));
+    const nextH = Math.max(1, Math.floor(canvas.height * nextScale));
+    if (nextW === currentCanvas.width && nextH === currentCanvas.height) {
+      break;
+    }
+
+    const reduced = document.createElement("canvas");
+    reduced.width = nextW;
+    reduced.height = nextH;
+    const reducedCtx = getCanvas2dContext(reduced, {
+      alpha: mimeType !== "image/jpeg",
+    });
+    if (!reducedCtx) break;
+    reducedCtx.imageSmoothingEnabled = true;
+    if ("imageSmoothingQuality" in reducedCtx) {
+      reducedCtx.imageSmoothingQuality = "high";
+    }
+    reducedCtx.drawImage(canvas, 0, 0, nextW, nextH);
+    currentCanvas = reduced;
+    totalScale = nextScale;
+  }
+
+  throw lastError || new Error("Canvas toDataURL failed");
+}
+
 function createFinalCanvas(sourceCanvas, fmt, background = null) {
   const final = document.createElement("canvas");
   final.width = fmt.w;
   final.height = fmt.h;
 
-  const ctx = final.getContext("2d", {
+  const ctx = getCanvas2dContext(final, {
     alpha: background === null,
     willReadFrequently: false,
   });
+  if (!ctx) {
+    throw new Error("Canvas 2D context unavailable");
+  }
 
   // Заливаем фон если нужно
   if (background) {
@@ -11986,7 +12158,9 @@ function createFinalCanvas(sourceCanvas, fmt, background = null) {
 
   // Включаем сглаживание
   ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
+  if ("imageSmoothingQuality" in ctx) {
+    ctx.imageSmoothingQuality = "high";
+  }
 
   // Рисуем исходный canvas на целевом
   ctx.drawImage(sourceCanvas, x, y, dw, dh);
@@ -12014,8 +12188,35 @@ function getThemeBgCssColor() {
   return `#${bg}`;
 }
 
+function openPendingIosDownloadWindow() {
+  if (!IS_IOS_WEBKIT) return null;
+  if (pendingIosDownloadWindow && !pendingIosDownloadWindow.closed) {
+    return pendingIosDownloadWindow;
+  }
+  try {
+    pendingIosDownloadWindow = window.open("", "_blank");
+    return pendingIosDownloadWindow || null;
+  } catch (_) {
+    pendingIosDownloadWindow = null;
+    return null;
+  }
+}
+
+function resetPendingIosDownloadWindow({ close = false } = {}) {
+  if (!pendingIosDownloadWindow) return;
+  if (close) {
+    try {
+      if (!pendingIosDownloadWindow.closed) pendingIosDownloadWindow.close();
+    } catch (_) {}
+  }
+  pendingIosDownloadWindow = null;
+}
+
 async function downloadFromExportModal() {
   const opts = getExportOptsFromUI();
+  if (IS_IOS_WEBKIT) {
+    openPendingIosDownloadWindow();
+  }
 
   try {
     toast("INFO", "Export", "Preparing file...");
@@ -12025,6 +12226,7 @@ async function downloadFromExportModal() {
 
     if (!exportResult || !exportResult.dataUrl) {
       toast("ERR", "Export", "Failed to render export image");
+      resetPendingIosDownloadWindow({ close: true });
       return;
     }
 
@@ -12051,7 +12253,14 @@ async function downloadFromExportModal() {
         const canvas = await svgToCanvas(lastPreview.dataUrl, opts);
 
         let finalCanvas = canvas;
-        if (opts.preset.id !== "auto") {
+        const isDownscaledByLimit =
+          canvas.__downscaledByLimit === true ||
+          (canvas.dataset && canvas.dataset.downscaledByLimit === "1");
+        if (
+          opts.preset.id !== "auto" &&
+          !isDownscaledByLimit &&
+          (canvas.width !== opts.preset.w || canvas.height !== opts.preset.h)
+        ) {
           const target = {
             w: opts.preset.w,
             h: opts.preset.h,
@@ -12064,12 +12273,32 @@ async function downloadFromExportModal() {
           );
         }
 
-        finalDataUrl = finalCanvas.toDataURL(opts.imageFormat, opts.quality);
+        const converted = canvasToDataUrlWithFallback(
+          finalCanvas,
+          opts.imageFormat,
+          opts.quality,
+        );
+        finalDataUrl = converted.dataUrl;
         fileName = `schedule-${opts.preset.id}-${stamp}_${timestamp}.${opts.fmt === "jpeg" ? "jpg" : "png"}`;
+
+        if (isDownscaledByLimit || converted.scaled) {
+          toast(
+            "WARN",
+            "Export",
+            "Image saved with reduced resolution for compatibility.",
+            3200,
+          );
+        }
       } catch (error) {
         console.error("Export conversion error:", error);
-        toast("ERR", "Export", "Failed to convert image");
-        return;
+        finalDataUrl = lastPreview.dataUrl;
+        fileName = `schedule-${opts.preset.id}-${stamp}_${timestamp}.svg`;
+        toast(
+          "WARN",
+          "Export",
+          "PNG/JPEG conversion failed in this browser. Downloaded SVG instead.",
+          3800,
+        );
       }
     }
 
@@ -12090,119 +12319,118 @@ async function downloadFromExportModal() {
   } catch (error) {
     console.error("Download error:", error);
     toast("ERR", "Download", error?.message || "Download failed");
+    resetPendingIosDownloadWindow({ close: true });
   }
 }
 async function svgToCanvas(svgDataUrl, opts) {
-  return new Promise(async (resolve, reject) => {
-    try {
-      // 1. Загружаем SVG как изображение
-      const img = await loadImageFromDataUrl(svgDataUrl);
+  try {
+    const img = await loadImageFromDataUrl(svgDataUrl);
 
-      // 2. Получаем размеры SVG
-      let svgWidth = img.naturalWidth || img.width;
-      let svgHeight = img.naturalHeight || img.height;
-
-      // Если размеры нулевые, устанавливаем значения по умолчанию
-      if (svgWidth === 0 || svgHeight === 0) {
-        svgWidth = 800;
-        svgHeight = 600;
-        console.warn(
-          "SVG имеет нулевой размер, используем размеры по умолчанию",
-        );
-      }
-
-      console.log(`Размеры SVG: ${svgWidth}x${svgHeight}`);
-
-      // 3. Создаем Canvas
-      const canvas = document.createElement("canvas");
-
-      // Устанавливаем размеры в зависимости от пресета
-      if (opts.preset.id === "auto") {
-        canvas.width = svgWidth;
-        canvas.height = svgHeight;
-      } else {
-        canvas.width = opts.preset.w;
-        canvas.height = opts.preset.h;
-      }
-
-      const ctx = canvas.getContext("2d", {
-        alpha: opts.fmt !== "jpeg",
-        willReadFrequently: false,
-      });
-
-      // 4. Для JPEG заливаем фон
-      if (opts.fmt === "jpeg") {
-        ctx.fillStyle = opts.background || "#ffffff";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-      }
-
-      // 5. Включаем сглаживание
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-
-      // 6. Рисуем SVG на Canvas
-      if (opts.preset.id === "auto") {
-        // Если пресет "auto", рисуем в оригинальном размере
-        ctx.drawImage(img, 0, 0);
-      } else {
-        // Если выбран пресет, масштабируем
-        const scale = Math.min(
-          canvas.width / svgWidth,
-          canvas.height / svgHeight,
-        );
-        const width = svgWidth * scale;
-        const height = svgHeight * scale;
-        const x = (canvas.width - width) / 2;
-        const y = (canvas.height - height) / 2;
-
-        ctx.drawImage(img, x, y, width, height);
-      }
-
-      resolve(canvas);
-    } catch (error) {
-      console.error("Ошибка в svgToCanvas:", error);
-
-      // Fallback: создаем простой canvas с сообщением об ошибке
-      try {
-        const canvas = document.createElement("canvas");
-        canvas.width = 800;
-        canvas.height = 600;
-        const ctx = canvas.getContext("2d");
-
-        // Фон
-        ctx.fillStyle =
-          opts.fmt === "jpeg" ? opts.background || "#ffffff" : "transparent";
-        ctx.fillRect(0, 0, 800, 600);
-
-        // Сообщение об ошибке
-        ctx.fillStyle = "#ff0000";
-        ctx.font = "20px Arial";
-        ctx.fillText("Ошибка конвертации SVG", 50, 50);
-        ctx.fillStyle = "#000000";
-        ctx.font = "16px Arial";
-        ctx.fillText("Не удалось преобразовать SVG в изображение", 50, 100);
-        ctx.fillText(
-          "Попробуйте сохранить как SVG или пересоздать предпросмотр",
-          50,
-          130,
-        );
-
-        resolve(canvas);
-      } catch (fallbackError) {
-        reject(new Error("Не удалось создать изображение: " + error.message));
-      }
+    let svgWidth = img.naturalWidth || img.width;
+    let svgHeight = img.naturalHeight || img.height;
+    if (svgWidth === 0 || svgHeight === 0) {
+      svgWidth = 800;
+      svgHeight = 600;
     }
-  });
+
+    const targetWidth = opts.preset.id === "auto" ? svgWidth : opts.preset.w;
+    const targetHeight = opts.preset.id === "auto" ? svgHeight : opts.preset.h;
+    const limitedSize = fitCanvasSizeToLimit(targetWidth, targetHeight);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = limitedSize.width;
+    canvas.height = limitedSize.height;
+    canvas.__downscaledByLimit = !!limitedSize.scaled;
+    if (limitedSize.scaled && canvas.dataset) {
+      canvas.dataset.downscaledByLimit = "1";
+    }
+
+    const ctx = getCanvas2dContext(canvas, {
+      alpha: opts.fmt !== "jpeg",
+      willReadFrequently: false,
+    });
+    if (!ctx) {
+      throw new Error("Canvas 2D context unavailable");
+    }
+
+    if (opts.fmt === "jpeg") {
+      ctx.fillStyle = opts.background || "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    ctx.imageSmoothingEnabled = true;
+    if ("imageSmoothingQuality" in ctx) {
+      ctx.imageSmoothingQuality = "high";
+    }
+
+    const scale = Math.min(canvas.width / svgWidth, canvas.height / svgHeight);
+    const drawWidth = svgWidth * scale;
+    const drawHeight = svgHeight * scale;
+    const drawX = (canvas.width - drawWidth) / 2;
+    const drawY = (canvas.height - drawHeight) / 2;
+    ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
+
+    return canvas;
+  } catch (error) {
+    console.error("Ошибка в svgToCanvas:", error);
+
+    const fallback = document.createElement("canvas");
+    fallback.width = 800;
+    fallback.height = 600;
+    const fallbackCtx = getCanvas2dContext(fallback, {
+      alpha: opts.fmt !== "jpeg",
+    });
+    if (!fallbackCtx) {
+      throw new Error("Не удалось создать изображение: " + error.message);
+    }
+
+    fallbackCtx.fillStyle =
+      opts.fmt === "jpeg" ? opts.background || "#ffffff" : "transparent";
+    fallbackCtx.fillRect(0, 0, fallback.width, fallback.height);
+    fallbackCtx.fillStyle = "#ff0000";
+    fallbackCtx.font = "20px Arial";
+    fallbackCtx.fillText("Ошибка конвертации SVG", 50, 50);
+    fallbackCtx.fillStyle = "#000000";
+    fallbackCtx.font = "16px Arial";
+    fallbackCtx.fillText(
+      "Не удалось преобразовать SVG в изображение",
+      50,
+      100,
+    );
+    fallbackCtx.fillText("Попробуйте экспорт в формат SVG", 50, 130);
+    return fallback;
+  }
 }
 
 function downloadFile(dataUrl, fileName) {
   if (IS_IOS_WEBKIT) {
-    const opened = window.open(dataUrl, "_blank");
-    if (!opened) {
-      window.location.href = dataUrl;
+    let openUrl = dataUrl;
+    if (typeof dataUrl === "string" && dataUrl.startsWith("data:")) {
+      const objectUrl = dataUrlToObjectUrl(dataUrl);
+      if (objectUrl) {
+        openUrl = objectUrl;
+      }
     }
-    if (dataUrl.startsWith("blob:")) {
-      setTimeout(() => URL.revokeObjectURL(dataUrl), 60000);
+
+    let opened = null;
+    if (pendingIosDownloadWindow && !pendingIosDownloadWindow.closed) {
+      try {
+        pendingIosDownloadWindow.location.href = openUrl;
+        opened = pendingIosDownloadWindow;
+      } catch (_) {
+        opened = null;
+      }
+    }
+    if (!opened) {
+      opened = window.open(openUrl, "_blank");
+    }
+    if (!opened) {
+      window.location.href = openUrl;
+    }
+
+    resetPendingIosDownloadWindow();
+    if (typeof openUrl === "string" && openUrl.startsWith("blob:")) {
+      setTimeout(() => URL.revokeObjectURL(openUrl), 60000);
     }
     return "new-tab";
   }
@@ -12226,23 +12454,76 @@ function downloadFile(dataUrl, fileName) {
   return "download";
 }
 
+function isSvgDataUrl(value) {
+  return /^data:image\/svg\+xml/i.test(String(value || ""));
+}
+
+function dataUrlToObjectUrl(dataUrl) {
+  if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:")) return "";
+  const commaIndex = dataUrl.indexOf(",");
+  if (commaIndex < 0) return "";
+
+  const meta = dataUrl.slice(0, commaIndex);
+  const payload = dataUrl.slice(commaIndex + 1);
+  const mimeMatch = meta.match(/^data:([^;,]+)/i);
+  const mimeType = mimeMatch ? mimeMatch[1] : "application/octet-stream";
+
+  try {
+    if (/;base64/i.test(meta)) {
+      const binary = atob(payload);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+    }
+    const decoded = decodeURIComponent(payload);
+    return URL.createObjectURL(new Blob([decoded], { type: mimeType }));
+  } catch (_) {
+    return "";
+  }
+}
+
 function loadImageFromDataUrl(dataUrl) {
   return new Promise((resolve, reject) => {
     const img = new Image();
+    let settled = false;
+    let timeoutId = 0;
+    let objectUrl = "";
 
-    // Для SVG устанавливаем crossOrigin, если это не data URL
-    if (!dataUrl.startsWith("data:")) {
+    const settle = (resolver, value) => {
+      if (settled) return;
+      settled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+      if (objectUrl) {
+        try {
+          URL.revokeObjectURL(objectUrl);
+        } catch (_) {}
+      }
+      resolver(value);
+    };
+
+    if (typeof dataUrl !== "string" || !dataUrl) {
+      reject(new Error("Некорректный URL изображения"));
+      return;
+    }
+
+    let src = dataUrl;
+    if (isSvgDataUrl(dataUrl)) {
+      objectUrl = dataUrlToObjectUrl(dataUrl);
+      if (objectUrl) src = objectUrl;
+    }
+
+    // Для не data/blob URL устанавливаем crossOrigin
+    if (!/^data:|^blob:/i.test(src)) {
       img.crossOrigin = "anonymous";
     }
 
     img.onload = () => {
-      // Проверяем, загрузилось ли изображение
       if (img.width === 0 || img.height === 0) {
         console.warn("Изображение имеет нулевой размер, но загружено");
-        resolve(img); // Все равно разрешаем, размер будет установлен позже
-      } else {
-        resolve(img);
       }
+      settle(resolve, img);
     };
 
     img.onerror = (err) => {
@@ -12251,25 +12532,19 @@ function loadImageFromDataUrl(dataUrl) {
         err,
         dataUrl.substring(0, 100),
       );
-      reject(new Error("Не удалось загрузить изображение"));
+      settle(reject, new Error("Не удалось загрузить изображение"));
     };
 
-    img.src = dataUrl;
-
-    // Таймаут 15 секунд для больших SVG
-    setTimeout(() => {
-      if (!img.complete) {
-        console.warn(
-          "Таймаут загрузки изображения, проверяем текущее состояние",
-        );
-        // Проверяем, загрузилось ли частично
-        if (img.width > 0 || img.height > 0) {
-          resolve(img); // Частично загружено
-        } else {
-          reject(new Error("Таймаут загрузки изображения"));
-        }
+    timeoutId = setTimeout(() => {
+      if (settled) return;
+      if (img.complete && (img.width > 0 || img.height > 0)) {
+        settle(resolve, img);
+      } else {
+        settle(reject, new Error("Таймаут загрузки изображения"));
       }
     }, 15000);
+
+    img.src = src;
   });
 }
 
