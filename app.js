@@ -9961,8 +9961,8 @@ function openExportModal() {
   populateExportPresetOptions(EXPORT_MODE_WEEK);
   expFormat.value = "png";
   expBg.value = "white";
-  expQuality.value = "92";
-  expQualityVal.textContent = "92";
+  expQuality.value = "100";
+  expQualityVal.textContent = "100";
 
   // Устанавливаем значение по умолчанию для скрытия пустых слотов
   if (expHideEmpty) {
@@ -10750,18 +10750,18 @@ function buildDayExportRows(dayIndex) {
     });
 
   const rows = [];
-  let prevStart = null;
   for (const ev of events) {
     const startMin = Number(ev.startMin);
     if (!Number.isFinite(startMin)) continue;
     const title = truncateDayExportText(fixTypography(ev.name) || "Без названия", 34);
     const coach = truncateDayExportText(fixTypography(ev.coach || ev.room || ""), 30);
     rows.push({
-      time: startMin === prevStart ? "" : minToHHMM(startMin),
+      // В режиме дневного экспорта время показываем у каждой строки,
+      // даже если занятия стартуют одновременно.
+      time: minToHHMM(startMin),
       title,
       coach,
     });
-    prevStart = startMin;
   }
   return rows;
 }
@@ -10897,7 +10897,7 @@ function buildDayExportSvg(opts) {
   const metaOffset = Math.round(rowHeight * 0.5);
 
   const dividerX = 288;
-  const timeX = 192;
+  const timeX = 78;
   const textX = 358;
 
   const rowSvg = [];
@@ -10927,18 +10927,18 @@ function buildDayExportSvg(opts) {
     ? ""
     : `<text x="${width / 2}" y="${listStartY + 40}" class="day-empty">Нет занятий на выбранный день</text>`;
   const imageLayer = bgDataUrl
-    ? `<image href="${escapeSvgText(bgDataUrl)}" x="0" y="0" width="${width}" height="${height}" preserveAspectRatio="xMidYMid slice" />`
+    ? `<image href="${escapeSvgText(bgDataUrl)}" xlink:href="${escapeSvgText(bgDataUrl)}" x="0" y="0" width="${width}" height="${height}" preserveAspectRatio="xMidYMid slice" />`
     : "";
   const headingTitleText = applySvgTextTransform("РАСПИСАНИЕ", titleTextTransform);
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <defs>
     <style><![CDATA[
       .day-head-title { font-family: ${titleFont}; font-size: ${headerTitleSize}px; font-weight: ${headerTitleWeight}; letter-spacing: ${titleLetterSpacingPx}px; text-anchor: middle; fill: ${accentColor}; }
       .day-head-date { font-family: ${titleFont}; font-size: ${headerDateSize}px; font-weight: ${headerTitleWeight}; text-anchor: middle; fill: ${accentColor}; }
       .day-head-weekday { font-family: ${metaFont}; font-size: ${headerDaySize}px; font-weight: ${headerMetaWeight}; text-anchor: middle; fill: ${accentColor}; }
-      .day-time { font-family: ${titleFont}; font-size: ${timeFontSize}px; font-weight: 700; text-anchor: end; dominant-baseline: hanging; fill: ${textColor}; }
+      .day-time { font-family: ${titleFont}; font-size: ${timeFontSize}px; font-weight: 700; text-anchor: start; dominant-baseline: hanging; font-variant-numeric: tabular-nums; fill: ${textColor}; }
       .day-row-title { font-family: ${titleFont}; font-size: ${rowTitleSize}px; font-weight: 700; dominant-baseline: hanging; fill: ${textColor}; }
       .day-row-meta { font-family: ${metaFont}; font-size: ${rowMetaSize}px; font-weight: 500; dominant-baseline: hanging; fill: ${textColor}; }
       .day-empty { font-family: ${metaFont}; font-size: ${rowMetaSize + 6}px; font-weight: 600; text-anchor: middle; fill: ${textColor}; }
@@ -11229,8 +11229,11 @@ async function exportToSvg(opts) {
       fontEmbedCSS.substring(0, 200) + "...",
     );
 
-    // 9. Получаем цвет фона из темы
-    const bgColor = getThemeBgCssColor() || "#ffffff";
+    // 9. Получаем цвет фона из настроек экспорта (или темы как fallback)
+    const bgColor =
+      typeof opts.background === "string" && opts.background
+        ? opts.background
+        : getThemeBgCssColor() || "#ffffff";
 
     console.log(`SVG экспорт: размеры ${exportWidth}x${exportHeight}, фон ${bgColor}`);
 
@@ -11265,7 +11268,7 @@ function getExportOptsFromUI() {
   const imageFormat = fmt === "jpeg" ? "image/jpeg" : "image/png";
   const quality =
     fmt === "jpeg"
-      ? Math.min(1, Math.max(0.6, Number(expQuality.value || 92) / 100))
+      ? Math.min(1, Math.max(0.6, Number(expQuality.value || 100) / 100))
       : 1.0;
 
   if (mode === EXPORT_MODE_DAY) {
@@ -12435,33 +12438,60 @@ function downloadFile(dataUrl, fileName) {
     return "new-tab";
   }
 
+  const nav = window.navigator || {};
+  if (
+    typeof nav.msSaveOrOpenBlob === "function" ||
+    typeof nav.msSaveBlob === "function"
+  ) {
+    const blob = dataUrlToBlob(dataUrl);
+    if (blob) {
+      if (typeof nav.msSaveOrOpenBlob === "function") {
+        nav.msSaveOrOpenBlob(blob, fileName);
+      } else {
+        nav.msSaveBlob(blob, fileName);
+      }
+      return "download";
+    }
+  }
+
   const a = document.createElement("a");
-  a.download = fileName;
-  a.href = dataUrl;
+  const supportsDownloadAttr = typeof a.download !== "undefined";
+  const objectUrl =
+    typeof dataUrl === "string" && dataUrl.startsWith("data:")
+      ? dataUrlToObjectUrl(dataUrl)
+      : "";
+  a.href = objectUrl || dataUrl;
+  if (supportsDownloadAttr) {
+    a.download = fileName;
+  } else {
+    a.target = "_blank";
+    a.rel = "noopener";
+  }
   a.style.display = "none";
 
   document.body.appendChild(a);
   a.click();
 
-  // Удаляем ссылку после клика
+  const revokeDelay = supportsDownloadAttr ? 600 : 60000;
   setTimeout(() => {
     document.body.removeChild(a);
-    // Освобождаем память от data URL
-    if (dataUrl.startsWith("blob:")) {
+    if (objectUrl) {
+      URL.revokeObjectURL(objectUrl);
+    } else if (typeof dataUrl === "string" && dataUrl.startsWith("blob:")) {
       URL.revokeObjectURL(dataUrl);
     }
-  }, 100);
-  return "download";
+  }, revokeDelay);
+  return supportsDownloadAttr ? "download" : "new-tab";
 }
 
 function isSvgDataUrl(value) {
   return /^data:image\/svg\+xml/i.test(String(value || ""));
 }
 
-function dataUrlToObjectUrl(dataUrl) {
-  if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:")) return "";
+function dataUrlToBlob(dataUrl) {
+  if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:")) return null;
   const commaIndex = dataUrl.indexOf(",");
-  if (commaIndex < 0) return "";
+  if (commaIndex < 0) return null;
 
   const meta = dataUrl.slice(0, commaIndex);
   const payload = dataUrl.slice(commaIndex + 1);
@@ -12475,10 +12505,19 @@ function dataUrlToObjectUrl(dataUrl) {
       for (let i = 0; i < binary.length; i++) {
         bytes[i] = binary.charCodeAt(i);
       }
-      return URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+      return new Blob([bytes], { type: mimeType });
     }
-    const decoded = decodeURIComponent(payload);
-    return URL.createObjectURL(new Blob([decoded], { type: mimeType }));
+    return new Blob([decodeURIComponent(payload)], { type: mimeType });
+  } catch (_) {
+    return null;
+  }
+}
+
+function dataUrlToObjectUrl(dataUrl) {
+  try {
+    const blob = dataUrlToBlob(dataUrl);
+    if (!blob) return "";
+    return URL.createObjectURL(blob);
   } catch (_) {
     return "";
   }
