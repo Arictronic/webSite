@@ -109,7 +109,6 @@ const EXPORT_PRESETS = [
   // { id: "tg_16_9", name: "Telegram 16:9 (1280×720)", w: 1280, h: 720 },
   // { id: "tg_square", name: "Telegram 1:1 (1080×1080)", w: 1080, h: 1080 },
   // { id: "a4_portrait", name: "A4 портрет (2480×3508)", w: 2480, h: 3508 },
-  { id: "mobile_land", name: "Mobile 16:9 (1920x1080)", w: 1920, h: 1080 },
   { id: "a3_land", name: "A3 альбом (4961×3508)", w: 4961, h: 3508 },
   { id: "a4_land", name: "A4 альбом (3508×2480)", w: 3508, h: 2480 },
   // { id: "auto", name: "Auto (по размеру расписания)", w: 0, h: 0 },
@@ -9882,9 +9881,6 @@ function populateExportDaySelect() {
 
 function getDefaultWeekExportPresetId() {
   const preferredPresetIds = [];
-  if (IS_IOS_DEVICE) {
-    preferredPresetIds.push("mobile_land");
-  }
   preferredPresetIds.push("a4_land");
 
   for (const presetId of preferredPresetIds) {
@@ -10588,6 +10584,30 @@ function getSvgPreviewSize(svgText) {
   };
 }
 
+function showSvgPreviewAsImage(svgDataUrl, width, height) {
+  if (!expPreviewImg) return false;
+  const safeW = Math.max(1, Math.ceil(Number(width) || 1));
+  const safeH = Math.max(1, Math.ceil(Number(height) || 1));
+
+  expPreviewImg.onload = () => {
+    const imgW = expPreviewImg.naturalWidth || safeW;
+    const imgH = expPreviewImg.naturalHeight || safeH;
+    exportPreviewView.element = expPreviewImg;
+    fitExportPreviewToFrame(imgW, imgH);
+  };
+  expPreviewImg.onerror = () => {
+    console.error("Failed to load export preview image");
+  };
+
+  expPreviewImg.style.width = `${safeW}px`;
+  expPreviewImg.style.height = `${safeH}px`;
+  expPreviewImg.src = svgDataUrl;
+  expPreviewImg.style.display = "block";
+  exportPreviewView.element = expPreviewImg;
+  fitExportPreviewToFrame(safeW, safeH);
+  return true;
+}
+
 function displaySvgPreview(svgDataUrl) {
   const previewFrame = expPreviewFrame || document.querySelector(".export-preview-frame");
   if (!previewFrame) return;
@@ -10604,6 +10624,12 @@ function displaySvgPreview(svgDataUrl) {
 
   try {
     const svgText = decodeSvgDataUrl(svgDataUrl);
+    const { width, height } = getSvgPreviewSize(svgText);
+    // WebKit renders SVG-in-object less reliably in modal previews.
+    if (IS_WEBKIT_ENGINE || IS_IOS_WEBKIT) {
+      if (showSvgPreviewAsImage(svgDataUrl, width, height)) return;
+    }
+
     const svgBlob = new Blob([svgText], {
       type: "image/svg+xml;charset=utf-8",
     });
@@ -10613,8 +10639,6 @@ function displaySvgPreview(svgDataUrl) {
     previewObject.id = "expPreviewObject";
     previewObject.type = "image/svg+xml";
     previewObject.data = currentPreviewObjectUrl;
-
-    const { width, height } = getSvgPreviewSize(svgText);
     previewObject.style.cssText = `
       width: ${width}px;
       height: ${height}px;
@@ -10627,15 +10651,7 @@ function displaySvgPreview(svgDataUrl) {
   } catch (error) {
     console.error("Ошибка отображения предпросмотра:", error);
 
-    if (expPreviewImg) {
-      expPreviewImg.src = svgDataUrl;
-      expPreviewImg.style.display = "block";
-      expPreviewImg.onload = () => {
-        const imgW = expPreviewImg.naturalWidth || expPreviewImg.width || 1;
-        const imgH = expPreviewImg.naturalHeight || expPreviewImg.height || 1;
-        exportPreviewView.element = expPreviewImg;
-        fitExportPreviewToFrame(imgW, imgH);
-      };
+    if (showSvgPreviewAsImage(svgDataUrl, 800, 600)) {
       return;
     }
 
@@ -12191,6 +12207,162 @@ function getThemeBgCssColor() {
   return `#${bg}`;
 }
 
+function convertCanvasToRequestedDataUrl(canvas, opts) {
+  if (!canvas || !Number.isFinite(canvas.width) || !Number.isFinite(canvas.height)) {
+    throw new Error("Invalid export canvas");
+  }
+
+  let workingCanvas = canvas;
+  let scaledByLimit =
+    canvas.__downscaledByLimit === true ||
+    (canvas.dataset && canvas.dataset.downscaledByLimit === "1");
+
+  const limitResult = fitCanvasSizeToLimit(workingCanvas.width, workingCanvas.height);
+  if (limitResult.scaled) {
+    const reduced = document.createElement("canvas");
+    reduced.width = limitResult.width;
+    reduced.height = limitResult.height;
+    const reducedCtx = getCanvas2dContext(reduced, {
+      alpha: opts.fmt !== "jpeg",
+      willReadFrequently: false,
+    });
+    if (!reducedCtx) {
+      throw new Error("Canvas 2D context unavailable");
+    }
+    if (opts.fmt === "jpeg") {
+      reducedCtx.fillStyle = opts.background || "#ffffff";
+      reducedCtx.fillRect(0, 0, reduced.width, reduced.height);
+    }
+    reducedCtx.imageSmoothingEnabled = true;
+    if ("imageSmoothingQuality" in reducedCtx) {
+      reducedCtx.imageSmoothingQuality = "high";
+    }
+    reducedCtx.drawImage(workingCanvas, 0, 0, reduced.width, reduced.height);
+    workingCanvas = reduced;
+    scaledByLimit = true;
+  }
+
+  let finalCanvas = workingCanvas;
+  if (
+    opts.preset.id !== "auto" &&
+    !scaledByLimit &&
+    (workingCanvas.width !== opts.preset.w || workingCanvas.height !== opts.preset.h)
+  ) {
+    finalCanvas = createFinalCanvas(
+      workingCanvas,
+      {
+        w: opts.preset.w,
+        h: opts.preset.h,
+        rotate: false,
+      },
+      opts.fmt === "jpeg" ? opts.background : null,
+    );
+  }
+
+  const converted = canvasToDataUrlWithFallback(
+    finalCanvas,
+    opts.imageFormat,
+    opts.quality,
+  );
+
+  return {
+    dataUrl: converted.dataUrl,
+    scaled: scaledByLimit || converted.scaled,
+  };
+}
+
+async function exportToRasterCanvas(opts) {
+  if (opts.mode === EXPORT_MODE_DAY) {
+    const daySvg = await exportDayToSvg(opts);
+    if (!daySvg || !daySvg.dataUrl) {
+      throw new Error("Failed to render day SVG");
+    }
+    return await svgToCanvas(daySvg.dataUrl, opts);
+  }
+
+  if (
+    typeof htmlToImage === "undefined" ||
+    typeof htmlToImage.toCanvas !== "function"
+  ) {
+    throw new Error("html-to-image.toCanvas unavailable");
+  }
+
+  await new Promise((resolve) => {
+    renderAll();
+    setTimeout(resolve, 100);
+  });
+
+  const prepared = await prepareDomForExport({
+    compact: opts.compact,
+    format: "canvas",
+    hideEmpty: opts.hideEmpty,
+  });
+  if (!prepared) {
+    throw new Error("Failed to prepare DOM for raster export");
+  }
+
+  const { clone, cleanup, width, height, metrics } = prepared;
+  let exportWidth = width;
+  let exportHeight = height;
+
+  try {
+    const scheduleEl = clone.querySelector(".schedule");
+    if (!scheduleEl) {
+      throw new Error("Schedule not found for raster export");
+    }
+
+    applyCssVariablesToEventsForExport(clone);
+
+    const usedFonts = collectUsedFontVariantsFromDom(clone);
+    await ensureFontsLoaded(3000, usedFonts);
+    await new Promise((r) =>
+      requestAnimationFrame(() => requestAnimationFrame(r)),
+    );
+
+    const exportSchedule = clone.querySelector(".schedule");
+    if (exportSchedule) {
+      const rect = exportSchedule.getBoundingClientRect();
+      const fullWidth = exportSchedule.scrollWidth || rect.width || exportWidth;
+      const fullHeight = exportSchedule.scrollHeight || rect.height || exportHeight;
+      exportWidth = Math.max(100, Math.ceil(fullWidth));
+      exportHeight = Math.max(100, Math.ceil(fullHeight));
+      clone.style.width = `${exportWidth}px`;
+      clone.style.height = `${exportHeight}px`;
+      exportSchedule.style.width = `${exportWidth}px`;
+      exportSchedule.style.height = `${exportHeight}px`;
+    }
+
+    const lg = state.settings.logo;
+    if (lg?.enabled) {
+      await applyLogoToExport(clone, lg, metrics, "canvas");
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+
+    const fontEmbedCSS = await buildFontFaceCssForVariants(usedFonts, {
+      embedData: true,
+    });
+
+    return await htmlToImage.toCanvas(clone, {
+      backgroundColor:
+        typeof opts.background === "string" && opts.background
+          ? opts.background
+          : undefined,
+      width: exportWidth,
+      height: exportHeight,
+      pixelRatio: 1,
+      cacheBust: true,
+      quality: 1,
+      fontEmbedCSS,
+      style: {
+        visibility: "visible",
+        opacity: "1",
+      },
+    });
+  } finally {
+    cleanup();
+  }
+}
+
 function openPendingIosDownloadWindow() {
   if (!IS_IOS_WEBKIT) return null;
   if (pendingIosDownloadWindow && !pendingIosDownloadWindow.closed) {
@@ -12198,6 +12370,14 @@ function openPendingIosDownloadWindow() {
   }
   try {
     pendingIosDownloadWindow = window.open("", "_blank");
+    if (pendingIosDownloadWindow) {
+      try {
+        pendingIosDownloadWindow.document.write(
+          "<!doctype html><html><head><meta charset=\"utf-8\"><title>Preparing export</title></head><body style=\"font:16px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:24px;color:#111;\">Preparing export file...</body></html>",
+        );
+        pendingIosDownloadWindow.document.close();
+      } catch (_) {}
+    }
     return pendingIosDownloadWindow || null;
   } catch (_) {
     pendingIosDownloadWindow = null;
@@ -12252,39 +12432,34 @@ async function downloadFromExportModal() {
       finalDataUrl = lastPreview.dataUrl;
       fileName = `schedule-${opts.preset.id}-${stamp}_${timestamp}.svg`;
     } else {
+      let rasterResult = null;
+
       try {
         const canvas = await svgToCanvas(lastPreview.dataUrl, opts);
-
-        let finalCanvas = canvas;
-        const isDownscaledByLimit =
-          canvas.__downscaledByLimit === true ||
-          (canvas.dataset && canvas.dataset.downscaledByLimit === "1");
         if (
-          opts.preset.id !== "auto" &&
-          !isDownscaledByLimit &&
-          (canvas.width !== opts.preset.w || canvas.height !== opts.preset.h)
+          canvas?.__svgRasterFallback === true ||
+          (canvas?.dataset && canvas.dataset.svgRasterFallback === "1")
         ) {
-          const target = {
-            w: opts.preset.w,
-            h: opts.preset.h,
-            rotate: false,
-          };
-          finalCanvas = createFinalCanvas(
-            canvas,
-            target,
-            opts.fmt === "jpeg" ? opts.background : null,
-          );
+          throw new Error("SVG raster fallback canvas detected");
         }
+        rasterResult = convertCanvasToRequestedDataUrl(canvas, opts);
+      } catch (svgRasterError) {
+        console.warn("Raster conversion via SVG canvas failed:", svgRasterError);
+      }
 
-        const converted = canvasToDataUrlWithFallback(
-          finalCanvas,
-          opts.imageFormat,
-          opts.quality,
-        );
-        finalDataUrl = converted.dataUrl;
+      if (!rasterResult) {
+        try {
+          const canvas = await exportToRasterCanvas(opts);
+          rasterResult = convertCanvasToRequestedDataUrl(canvas, opts);
+        } catch (directRasterError) {
+          console.warn("Direct raster export failed:", directRasterError);
+        }
+      }
+
+      if (rasterResult && rasterResult.dataUrl) {
+        finalDataUrl = rasterResult.dataUrl;
         fileName = `schedule-${opts.preset.id}-${stamp}_${timestamp}.${opts.fmt === "jpeg" ? "jpg" : "png"}`;
-
-        if (isDownscaledByLimit || converted.scaled) {
+        if (rasterResult.scaled) {
           toast(
             "WARN",
             "Export",
@@ -12292,8 +12467,7 @@ async function downloadFromExportModal() {
             3200,
           );
         }
-      } catch (error) {
-        console.error("Export conversion error:", error);
+      } else {
         finalDataUrl = lastPreview.dataUrl;
         fileName = `schedule-${opts.preset.id}-${stamp}_${timestamp}.svg`;
         toast(
@@ -12401,40 +12575,42 @@ async function svgToCanvas(svgDataUrl, opts) {
       100,
     );
     fallbackCtx.fillText("Попробуйте экспорт в формат SVG", 50, 130);
+    fallback.__svgRasterFallback = true;
+    if (fallback.dataset) {
+      fallback.dataset.svgRasterFallback = "1";
+    }
     return fallback;
   }
 }
 
 function downloadFile(dataUrl, fileName) {
   if (IS_IOS_WEBKIT) {
-    let openUrl = dataUrl;
-    if (typeof dataUrl === "string" && dataUrl.startsWith("data:")) {
-      const objectUrl = dataUrlToObjectUrl(dataUrl);
-      if (objectUrl) {
-        openUrl = objectUrl;
-      }
+    const openUrl = typeof dataUrl === "string" ? dataUrl : "";
+    if (!openUrl) {
+      resetPendingIosDownloadWindow({ close: true });
+      return "new-tab";
     }
-
     let opened = null;
     if (pendingIosDownloadWindow && !pendingIosDownloadWindow.closed) {
       try {
-        pendingIosDownloadWindow.location.href = openUrl;
+        pendingIosDownloadWindow.location.replace(openUrl);
         opened = pendingIosDownloadWindow;
       } catch (_) {
         opened = null;
       }
     }
     if (!opened) {
-      opened = window.open(openUrl, "_blank");
+      try {
+        opened = window.open(openUrl, "_blank");
+      } catch (_) {
+        opened = null;
+      }
     }
     if (!opened) {
       window.location.href = openUrl;
     }
 
     resetPendingIosDownloadWindow();
-    if (typeof openUrl === "string" && openUrl.startsWith("blob:")) {
-      setTimeout(() => URL.revokeObjectURL(openUrl), 60000);
-    }
     return "new-tab";
   }
 
@@ -12525,65 +12701,95 @@ function dataUrlToObjectUrl(dataUrl) {
 
 function loadImageFromDataUrl(dataUrl) {
   return new Promise((resolve, reject) => {
-    const img = new Image();
-    let settled = false;
-    let timeoutId = 0;
-    let objectUrl = "";
-
-    const settle = (resolver, value) => {
-      if (settled) return;
-      settled = true;
-      if (timeoutId) clearTimeout(timeoutId);
-      if (objectUrl) {
-        try {
-          URL.revokeObjectURL(objectUrl);
-        } catch (_) {}
-      }
-      resolver(value);
-    };
-
     if (typeof dataUrl !== "string" || !dataUrl) {
-      reject(new Error("Некорректный URL изображения"));
+      reject(new Error("Invalid image URL"));
       return;
     }
 
-    let src = dataUrl;
-    if (isSvgDataUrl(dataUrl)) {
-      objectUrl = dataUrlToObjectUrl(dataUrl);
-      if (objectUrl) src = objectUrl;
-    }
-
-    // Для не data/blob URL устанавливаем crossOrigin
-    if (!/^data:|^blob:/i.test(src)) {
-      img.crossOrigin = "anonymous";
-    }
-
-    img.onload = () => {
-      if (img.width === 0 || img.height === 0) {
-        console.warn("Изображение имеет нулевой размер, но загружено");
-      }
-      settle(resolve, img);
-    };
-
-    img.onerror = (err) => {
-      console.error(
-        "Ошибка загрузки изображения:",
-        err,
-        dataUrl.substring(0, 100),
-      );
-      settle(reject, new Error("Не удалось загрузить изображение"));
-    };
-
-    timeoutId = setTimeout(() => {
-      if (settled) return;
-      if (img.complete && (img.width > 0 || img.height > 0)) {
-        settle(resolve, img);
+    const isSvg = isSvgDataUrl(dataUrl);
+    const sourceQueue = [];
+    if (isSvg) {
+      // WebKit is more stable with direct data URL for SVG-to-canvas conversion.
+      if (IS_WEBKIT_ENGINE) {
+        sourceQueue.push({ kind: "direct", value: dataUrl });
+        sourceQueue.push({ kind: "object", value: "" });
       } else {
-        settle(reject, new Error("Таймаут загрузки изображения"));
+        sourceQueue.push({ kind: "object", value: "" });
+        sourceQueue.push({ kind: "direct", value: dataUrl });
       }
-    }, 15000);
+    } else {
+      sourceQueue.push({ kind: "direct", value: dataUrl });
+    }
 
-    img.src = src;
+    let index = 0;
+    let lastError = null;
+
+    const tryNextSource = () => {
+      if (index >= sourceQueue.length) {
+        reject(lastError || new Error("Failed to load image"));
+        return;
+      }
+
+      const source = sourceQueue[index++];
+      let src = source.value;
+      if (source.kind === "object") {
+        src = dataUrlToObjectUrl(dataUrl);
+        if (!src) {
+          tryNextSource();
+          return;
+        }
+      }
+
+      const img = new Image();
+      let settled = false;
+      let timeoutId = 0;
+
+      const finish = (ok, value) => {
+        if (settled) return;
+        settled = true;
+        if (timeoutId) clearTimeout(timeoutId);
+        if (source.kind === "object" && src.startsWith("blob:")) {
+          try {
+            URL.revokeObjectURL(src);
+          } catch (_) {}
+        }
+        if (ok) {
+          resolve(value);
+          return;
+        }
+        lastError = value instanceof Error ? value : new Error("Failed to load image");
+        tryNextSource();
+      };
+
+      if (!/^data:|^blob:/i.test(src)) {
+        img.crossOrigin = "anonymous";
+      }
+
+      img.onload = () => {
+        if (img.width === 0 || img.height === 0) {
+          console.warn("Image loaded with zero dimensions");
+        }
+        finish(true, img);
+      };
+
+      img.onerror = (err) => {
+        console.error("Image load failed:", err, dataUrl.substring(0, 100));
+        finish(false, new Error("Failed to load image"));
+      };
+
+      timeoutId = setTimeout(() => {
+        if (settled) return;
+        if (img.complete && (img.width > 0 || img.height > 0)) {
+          finish(true, img);
+        } else {
+          finish(false, new Error("Image load timeout"));
+        }
+      }, 15000);
+
+      img.src = src;
+    };
+
+    tryNextSource();
   });
 }
 

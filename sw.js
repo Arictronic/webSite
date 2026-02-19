@@ -1,4 +1,4 @@
-const SW_VERSION = "2026-02-16-3";
+const SW_VERSION = "2026-02-19-1";
 const CACHE_PREFIX = "studio-schedule-cache";
 const CACHE_NAME = `${CACHE_PREFIX}-${SW_VERSION}`;
 
