@@ -10341,20 +10341,24 @@ function setupExportPreviewZoomControls() {
   expPreviewFrame.addEventListener(
     "wheel",
     (e) => {
-      if (!exportPreviewView.element) return;
       if (!e.ctrlKey && !e.metaKey) {
-        const canScrollVertically =
-          expPreviewFrame.scrollHeight > expPreviewFrame.clientHeight + 1;
-        const canScrollHorizontally =
-          expPreviewFrame.scrollWidth > expPreviewFrame.clientWidth + 1;
-        if (!canScrollVertically && !canScrollHorizontally) {
+        const canScrollDown =
+          expPreviewFrame.scrollTop + expPreviewFrame.clientHeight <
+          expPreviewFrame.scrollHeight - 1;
+        const canScrollUp = expPreviewFrame.scrollTop > 1;
+        const frameCanConsumeY =
+          e.deltaY > 0 ? canScrollDown : e.deltaY < 0 ? canScrollUp : false;
+
+        if (!frameCanConsumeY) {
           const modalBody = expPreviewFrame.closest(".modal-body");
-          if (modalBody) {
+          if (modalBody && modalBody.scrollHeight > modalBody.clientHeight + 1) {
             modalBody.scrollTop += e.deltaY;
+            e.preventDefault();
           }
         }
         return;
       }
+      if (!exportPreviewView.element) return;
       e.preventDefault();
 
       const rect = expPreviewFrame.getBoundingClientRect();
@@ -12375,6 +12379,27 @@ async function exportToRasterCanvas(opts) {
   }
 }
 
+async function runWithTimeout(taskFactory, timeoutMs, timeoutMessage) {
+  const parsedTimeout = Number(timeoutMs);
+  if (!Number.isFinite(parsedTimeout) || parsedTimeout <= 0) {
+    return await Promise.resolve().then(taskFactory);
+  }
+  const limit = parsedTimeout;
+
+  let timerId = 0;
+  const timeoutPromise = new Promise((_, reject) => {
+    timerId = setTimeout(() => {
+      reject(new Error(timeoutMessage || "Operation timed out"));
+    }, limit);
+  });
+
+  try {
+    return await Promise.race([Promise.resolve().then(taskFactory), timeoutPromise]);
+  } finally {
+    if (timerId) clearTimeout(timerId);
+  }
+}
+
 function openPendingIosDownloadWindow() {
   if (!IS_IOS_WEBKIT) return null;
   if (pendingIosDownloadWindow && !pendingIosDownloadWindow.closed) {
@@ -12518,6 +12543,7 @@ function resetPendingIosDownloadWindow({ close = false } = {}) {
 
 async function downloadFromExportModal() {
   const opts = getExportOptsFromUI();
+  const skipSvgPreviewForIosRaster = IS_IOS_WEBKIT && opts.fmt !== "svg";
   if (IS_IOS_WEBKIT) {
     openPendingIosDownloadWindow();
   }
@@ -12525,24 +12551,27 @@ async function downloadFromExportModal() {
   try {
     toast("INFO", "Export", "Preparing file...");
 
-    const svgOpts = { ...opts, fmt: "svg" };
-    const exportResult = await executeExport(svgOpts);
+    let exportResult = null;
+    if (!skipSvgPreviewForIosRaster) {
+      const svgOpts = { ...opts, fmt: "svg" };
+      exportResult = await executeExport(svgOpts);
 
-    if (!exportResult || !exportResult.dataUrl) {
-      toast("ERR", "Export", "Failed to render export image");
-      resetPendingIosDownloadWindow({ close: true });
-      return;
+      if (!exportResult || !exportResult.dataUrl) {
+        toast("ERR", "Export", "Failed to render export image");
+        resetPendingIosDownloadWindow({ close: true });
+        return;
+      }
+
+      lastPreview = {
+        dataUrl: exportResult.dataUrl,
+        originalOpts: opts,
+        ...svgOpts,
+        timestamp: Date.now(),
+      };
+
+      displaySvgPreview(exportResult.dataUrl);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
     }
-
-    lastPreview = {
-      dataUrl: exportResult.dataUrl,
-      originalOpts: opts,
-      ...svgOpts,
-      timestamp: Date.now(),
-    };
-
-    displaySvgPreview(exportResult.dataUrl);
-    await new Promise((resolve) => requestAnimationFrame(resolve));
 
     let finalDataUrl;
     let fileName;
@@ -12555,25 +12584,54 @@ async function downloadFromExportModal() {
     } else {
       let rasterResult = null;
 
-      try {
-        const canvas = await svgToCanvas(lastPreview.dataUrl, opts);
-        if (
-          canvas?.__svgRasterFallback === true ||
-          (canvas?.dataset && canvas.dataset.svgRasterFallback === "1")
-        ) {
-          throw new Error("SVG raster fallback canvas detected");
+      if (lastPreview?.dataUrl) {
+        try {
+          const canvas = await svgToCanvas(lastPreview.dataUrl, opts);
+          if (
+            canvas?.__svgRasterFallback === true ||
+            (canvas?.dataset && canvas.dataset.svgRasterFallback === "1")
+          ) {
+            throw new Error("SVG raster fallback canvas detected");
+          }
+          rasterResult = convertCanvasToRequestedDataUrl(canvas, opts);
+        } catch (svgRasterError) {
+          console.warn("Raster conversion via SVG canvas failed:", svgRasterError);
         }
-        rasterResult = convertCanvasToRequestedDataUrl(canvas, opts);
-      } catch (svgRasterError) {
-        console.warn("Raster conversion via SVG canvas failed:", svgRasterError);
       }
 
       if (!rasterResult) {
         try {
-          const canvas = await exportToRasterCanvas(opts);
+          const canvas = IS_IOS_WEBKIT
+            ? await runWithTimeout(
+                () => exportToRasterCanvas(opts),
+                35000,
+                "Raster export timed out",
+              )
+            : await exportToRasterCanvas(opts);
           rasterResult = convertCanvasToRequestedDataUrl(canvas, opts);
         } catch (directRasterError) {
           console.warn("Direct raster export failed:", directRasterError);
+        }
+      }
+
+      if (!rasterResult && skipSvgPreviewForIosRaster) {
+        try {
+          const fallbackSvgResult = await runWithTimeout(
+            () => executeExport({ ...opts, fmt: "svg" }),
+            12000,
+            "SVG fallback timed out",
+          );
+          if (fallbackSvgResult?.dataUrl) {
+            const canvas = await svgToCanvas(fallbackSvgResult.dataUrl, opts);
+            if (
+              canvas?.__svgRasterFallback !== true &&
+              (!canvas?.dataset || canvas.dataset.svgRasterFallback !== "1")
+            ) {
+              rasterResult = convertCanvasToRequestedDataUrl(canvas, opts);
+            }
+          }
+        } catch (svgFallbackError) {
+          console.warn("SVG fallback export failed:", svgFallbackError);
         }
       }
 
@@ -12589,14 +12647,18 @@ async function downloadFromExportModal() {
           );
         }
       } else {
-        finalDataUrl = lastPreview.dataUrl;
-        fileName = `schedule-${opts.preset.id}-${stamp}_${timestamp}.svg`;
-        toast(
-          "WARN",
-          "Export",
-          "PNG/JPEG conversion failed in this browser. Downloaded SVG instead.",
-          3800,
-        );
+        if (lastPreview?.dataUrl) {
+          finalDataUrl = lastPreview.dataUrl;
+          fileName = `schedule-${opts.preset.id}-${stamp}_${timestamp}.svg`;
+          toast(
+            "WARN",
+            "Export",
+            "PNG/JPEG conversion failed in this browser. Downloaded SVG instead.",
+            3800,
+          );
+        } else {
+          throw new Error("Failed to render export image");
+        }
       }
     }
 
