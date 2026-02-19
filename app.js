@@ -12718,8 +12718,17 @@ async function svgToCanvas(svgDataUrl, opts) {
 
 function downloadFile(dataUrl, fileName) {
   if (IS_IOS_WEBKIT) {
-    const openUrl = typeof dataUrl === "string" ? dataUrl : "";
-    const iosTargetWindow =
+    const rawUrl = typeof dataUrl === "string" ? dataUrl : "";
+    let openUrl = rawUrl;
+    let tempObjectUrl = "";
+    if (rawUrl.startsWith("data:")) {
+      tempObjectUrl = dataUrlToObjectUrl(rawUrl);
+      if (tempObjectUrl) {
+        openUrl = tempObjectUrl;
+      }
+    }
+
+    let iosTargetWindow =
       pendingIosDownloadWindow && !pendingIosDownloadWindow.closed
         ? pendingIosDownloadWindow
         : null;
@@ -12727,49 +12736,30 @@ function downloadFile(dataUrl, fileName) {
       resetPendingIosDownloadWindow({ close: true });
       return "new-tab";
     }
-    let opened = null;
-    if (iosTargetWindow) {
+    if (!iosTargetWindow) {
       try {
-        iosTargetWindow.location.replace(openUrl);
-        opened = iosTargetWindow;
+        iosTargetWindow = window.open("", "_blank");
       } catch (_) {
-        opened = null;
+        iosTargetWindow = null;
       }
     }
-    if (!opened) {
-      try {
-        opened = window.open(openUrl, "_blank");
-      } catch (_) {
-        opened = null;
-      }
-    }
-    if (!opened) {
+
+    // iOS WebKit often fails to navigate directly to large data URLs for week exports.
+    // Serve a stable fallback page with an explicit "open/save" action instead.
+    if (iosTargetWindow && !iosTargetWindow.closed) {
+      writeIosFallbackDownloadPage(iosTargetWindow, openUrl, fileName);
+    } else {
       window.location.href = openUrl;
     }
 
-    if (!opened && iosTargetWindow && !iosTargetWindow.closed) {
-      writeIosFallbackDownloadPage(
-        iosTargetWindow,
-        openUrl,
-        fileName,
-      );
-    }
-
-    if (opened && iosTargetWindow && !iosTargetWindow.closed) {
-      setTimeout(() => {
-        if (iosTargetWindow.closed) return;
-        const href = String(iosTargetWindow.location?.href || "");
-        if (!href || /about:blank/i.test(href)) {
-          writeIosFallbackDownloadPage(
-            iosTargetWindow,
-            openUrl,
-            fileName,
-          );
-        }
-      }, 900);
-    }
-
     resetPendingIosDownloadWindow();
+    if (tempObjectUrl) {
+      setTimeout(() => {
+        try {
+          URL.revokeObjectURL(tempObjectUrl);
+        } catch (_) {}
+      }, 10 * 60 * 1000);
+    }
     return "new-tab";
   }
 
