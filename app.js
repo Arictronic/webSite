@@ -10342,6 +10342,30 @@ function setupExportPreviewZoomControls() {
     "wheel",
     (e) => {
       if (!e.ctrlKey && !e.metaKey) {
+        const modalBody = expPreviewFrame.closest(".modal-body");
+        const currentScale = Number(exportPreviewView.scale) || 1;
+        const fitScale = Number(exportPreviewView.fitScale) || 1;
+        const previewZoomed = currentScale > fitScale + 0.02;
+
+        // When preview is not zoomed-in, prioritize modal scrolling.
+        // This prevents scroll trapping in Day mode where controls are taller.
+        if (!previewZoomed && modalBody) {
+          const modalCanScrollDown =
+            modalBody.scrollTop + modalBody.clientHeight < modalBody.scrollHeight - 1;
+          const modalCanScrollUp = modalBody.scrollTop > 1;
+          const modalCanConsumeY =
+            e.deltaY > 0
+              ? modalCanScrollDown
+              : e.deltaY < 0
+                ? modalCanScrollUp
+                : false;
+          if (modalCanConsumeY) {
+            modalBody.scrollTop += e.deltaY;
+            e.preventDefault();
+            return;
+          }
+        }
+
         const canScrollDown =
           expPreviewFrame.scrollTop + expPreviewFrame.clientHeight <
           expPreviewFrame.scrollHeight - 1;
@@ -10350,7 +10374,6 @@ function setupExportPreviewZoomControls() {
           e.deltaY > 0 ? canScrollDown : e.deltaY < 0 ? canScrollUp : false;
 
         if (!frameCanConsumeY) {
-          const modalBody = expPreviewFrame.closest(".modal-body");
           if (modalBody && modalBody.scrollHeight > modalBody.clientHeight + 1) {
             modalBody.scrollTop += e.deltaY;
             e.preventDefault();
