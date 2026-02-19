@@ -10342,7 +10342,19 @@ function setupExportPreviewZoomControls() {
     "wheel",
     (e) => {
       if (!exportPreviewView.element) return;
-      if (!e.ctrlKey && !e.metaKey) return;
+      if (!e.ctrlKey && !e.metaKey) {
+        const canScrollVertically =
+          expPreviewFrame.scrollHeight > expPreviewFrame.clientHeight + 1;
+        const canScrollHorizontally =
+          expPreviewFrame.scrollWidth > expPreviewFrame.clientWidth + 1;
+        if (!canScrollVertically && !canScrollHorizontally) {
+          const modalBody = expPreviewFrame.closest(".modal-body");
+          if (modalBody) {
+            modalBody.scrollTop += e.deltaY;
+          }
+        }
+        return;
+      }
       e.preventDefault();
 
       const rect = expPreviewFrame.getBoundingClientRect();
@@ -12385,6 +12397,115 @@ function openPendingIosDownloadWindow() {
   }
 }
 
+function safeFileName(value, fallback = "schedule-export") {
+  const base = String(value || "")
+    .trim()
+    .replace(/[<>:"/\\|?*\x00-\x1f]/g, "-")
+    .replace(/\s+/g, " ");
+  return base || fallback;
+}
+
+function writeIosFallbackDownloadPage(targetWindow, openUrl, fileName) {
+  if (!targetWindow || targetWindow.closed) return;
+  const safeUrl = String(openUrl || "");
+  if (!safeUrl) return;
+
+  const escapedUrl = safeUrl
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;");
+  const escapedName = String(fileName || "export")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  try {
+    targetWindow.document.open();
+    targetWindow.document.write(`
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Экспорт</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font: 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #111827;
+      background: #f8fafc;
+    }
+    .box {
+      max-width: 560px;
+      margin: 0 auto;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 16px;
+    }
+    a.btn {
+      display: inline-block;
+      margin-top: 12px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      background: #0f172a;
+      color: #ffffff;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    p { margin: 0 0 10px; line-height: 1.45; }
+    .name { color: #475569; font-size: 14px; word-break: break-word; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <p><strong>Файл готов.</strong></p>
+    <p>Если не открылся автоматически, нажмите кнопку ниже и сохраните через меню «Поделиться».</p>
+    <p class="name">${escapedName}</p>
+    <a class="btn" href="${escapedUrl}" target="_self" rel="noopener">Открыть файл</a>
+  </div>
+</body>
+</html>`);
+    targetWindow.document.close();
+  } catch (_) {}
+}
+
+async function tryShareFileFromDataUrl(dataUrl, fileName) {
+  const nav = window.navigator || {};
+  if (!IS_IOS_WEBKIT || typeof nav.share !== "function") return false;
+
+  const blob = dataUrlToBlob(dataUrl);
+  if (!blob) return false;
+
+  let fileForShare;
+  try {
+    if (typeof File === "function") {
+      fileForShare = new File([blob], safeFileName(fileName), {
+        type: blob.type || "application/octet-stream",
+      });
+    } else {
+      return false;
+    }
+  } catch (_) {
+    return false;
+  }
+
+  const shareData = {
+    files: [fileForShare],
+    title: safeFileName(fileName),
+  };
+
+  try {
+    if (typeof nav.canShare === "function" && !nav.canShare(shareData)) {
+      return false;
+    }
+    await nav.share(shareData);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 function resetPendingIosDownloadWindow({ close = false } = {}) {
   if (!pendingIosDownloadWindow) return;
   if (close) {
@@ -12476,6 +12597,18 @@ async function downloadFromExportModal() {
           "PNG/JPEG conversion failed in this browser. Downloaded SVG instead.",
           3800,
         );
+      }
+    }
+
+    if (IS_IOS_WEBKIT) {
+      const shared = await tryShareFileFromDataUrl(finalDataUrl, fileName);
+      if (shared) {
+        resetPendingIosDownloadWindow({ close: true });
+        toast("OK", "Export", "Файл передан в меню «Поделиться».");
+        setTimeout(() => {
+          closeExportModal();
+        }, 300);
+        return;
       }
     }
 
@@ -12586,15 +12719,19 @@ async function svgToCanvas(svgDataUrl, opts) {
 function downloadFile(dataUrl, fileName) {
   if (IS_IOS_WEBKIT) {
     const openUrl = typeof dataUrl === "string" ? dataUrl : "";
+    const iosTargetWindow =
+      pendingIosDownloadWindow && !pendingIosDownloadWindow.closed
+        ? pendingIosDownloadWindow
+        : null;
     if (!openUrl) {
       resetPendingIosDownloadWindow({ close: true });
       return "new-tab";
     }
     let opened = null;
-    if (pendingIosDownloadWindow && !pendingIosDownloadWindow.closed) {
+    if (iosTargetWindow) {
       try {
-        pendingIosDownloadWindow.location.replace(openUrl);
-        opened = pendingIosDownloadWindow;
+        iosTargetWindow.location.replace(openUrl);
+        opened = iosTargetWindow;
       } catch (_) {
         opened = null;
       }
@@ -12608,6 +12745,28 @@ function downloadFile(dataUrl, fileName) {
     }
     if (!opened) {
       window.location.href = openUrl;
+    }
+
+    if (!opened && iosTargetWindow && !iosTargetWindow.closed) {
+      writeIosFallbackDownloadPage(
+        iosTargetWindow,
+        openUrl,
+        fileName,
+      );
+    }
+
+    if (opened && iosTargetWindow && !iosTargetWindow.closed) {
+      setTimeout(() => {
+        if (iosTargetWindow.closed) return;
+        const href = String(iosTargetWindow.location?.href || "");
+        if (!href || /about:blank/i.test(href)) {
+          writeIosFallbackDownloadPage(
+            iosTargetWindow,
+            openUrl,
+            fileName,
+          );
+        }
+      }, 900);
     }
 
     resetPendingIosDownloadWindow();
