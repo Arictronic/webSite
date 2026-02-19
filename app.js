@@ -12438,20 +12438,23 @@ function writeIosFallbackDownloadPage(targetWindow, openUrl, fileName) {
   const escapedUrl = safeUrl
     .replace(/&/g, "&amp;")
     .replace(/"/g, "&quot;");
-  const escapedName = String(fileName || "export")
+  const normalizedName = safeFileName(fileName, "export");
+  const escapedName = String(normalizedName || "export")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+  const jsExportUrl = JSON.stringify(safeUrl);
+  const jsExportName = JSON.stringify(normalizedName || "export");
 
   try {
     targetWindow.document.open();
     targetWindow.document.write(`
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Экспорт</title>
+  <title>Export</title>
   <style>
     body {
       margin: 0;
@@ -12468,33 +12471,116 @@ function writeIosFallbackDownloadPage(targetWindow, openUrl, fileName) {
       border-radius: 12px;
       padding: 16px;
     }
-    a.btn {
-      display: inline-block;
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
       margin-top: 12px;
+    }
+    .btn {
+      display: inline-block;
       padding: 10px 14px;
       border-radius: 10px;
-      background: #0f172a;
-      color: #ffffff;
+      border: 0;
       text-decoration: none;
       font-weight: 600;
+      cursor: pointer;
+      font-size: 15px;
+      line-height: 1.2;
+    }
+    .btn-share {
+      background: #0f172a;
+      color: #ffffff;
+    }
+    .btn-open {
+      background: #e2e8f0;
+      color: #0f172a;
     }
     p { margin: 0 0 10px; line-height: 1.45; }
     .name { color: #475569; font-size: 14px; word-break: break-word; }
+    .hint {
+      margin-top: 12px;
+      color: #64748b;
+      font-size: 13px;
+      line-height: 1.35;
+    }
   </style>
 </head>
 <body>
   <div class="box">
-    <p><strong>Файл готов.</strong></p>
-    <p>Если не открылся автоматически, нажмите кнопку ниже и сохраните через меню «Поделиться».</p>
+    <p><strong>File is ready.</strong></p>
+    <p>Tap "Share / Save". If it does not open, tap "Open image" and use long press to save.</p>
     <p class="name">${escapedName}</p>
-    <a class="btn" href="${escapedUrl}" target="_self" rel="noopener">Открыть файл</a>
+    <div class="actions">
+      <button id="shareBtn" type="button" class="btn btn-share">Share / Save</button>
+      <a class="btn btn-open" href="${escapedUrl}" target="_self" rel="noopener">Open image</a>
+    </div>
+    <p class="hint">For PNG/JPEG use "Save Image". For SVG use "Save to Files".</p>
   </div>
+  <script>
+    (function () {
+      const exportUrl = ${jsExportUrl};
+      const exportName = ${jsExportName};
+      const shareBtn = document.getElementById("shareBtn");
+      if (!shareBtn) return;
+
+      const detectMimeType = () => {
+        const lower = String(exportName || "").toLowerCase();
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+        if (lower.endsWith(".png")) return "image/png";
+        if (lower.endsWith(".svg")) return "image/svg+xml";
+        return "application/octet-stream";
+      };
+
+      const tryShare = async () => {
+        if (
+          typeof navigator === "undefined" ||
+          typeof navigator.share !== "function" ||
+          typeof fetch !== "function" ||
+          typeof File !== "function"
+        ) {
+          return false;
+        }
+
+        try {
+          const response = await fetch(exportUrl);
+          if (!response || !response.ok) return false;
+          const blob = await response.blob();
+          if (!blob) return false;
+          const file = new File([blob], exportName, {
+            type: blob.type || detectMimeType(),
+          });
+          const payload = { files: [file], title: exportName };
+          if (typeof navigator.canShare === "function" && !navigator.canShare(payload)) {
+            return false;
+          }
+          await navigator.share(payload);
+          return true;
+        } catch (_) {
+          return false;
+        }
+      };
+
+      shareBtn.addEventListener("click", async function (event) {
+        event.preventDefault();
+        shareBtn.disabled = true;
+        shareBtn.textContent = "Preparing...";
+        const shared = await tryShare();
+        if (shared) {
+          shareBtn.textContent = "Done";
+          return;
+        }
+        shareBtn.disabled = false;
+        shareBtn.textContent = "Share / Save";
+        window.location.href = exportUrl;
+      });
+    })();
+  </script>
 </body>
 </html>`);
     targetWindow.document.close();
   } catch (_) {}
 }
-
 async function tryShareFileFromDataUrl(dataUrl, fileName) {
   const nav = window.navigator || {};
   if (!IS_IOS_WEBKIT || typeof nav.share !== "function") return false;
