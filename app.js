@@ -5907,12 +5907,39 @@ function initializeAllRowHeights() {
   // Применяем классы для двойных событий
   applyDoubleEventClasses();
 }
+
 function addEventToDOM(eventData) {
-    renderSchedule();
+    const slotIndex = getSlotIndexForTime(eventData.startMin);
+    if (slotIndex === -1) {
+        renderSchedule();
+        return;
+    }
+    scheduleRowHeightUpdate(slotIndex);
 }
 
 function removeEventFromDOM(eventId) {
-    renderSchedule();
+    const ev = state.events.find(e => e.id === eventId);
+    if (!ev) {
+        renderSchedule();
+        return;
+    }
+    
+    const slotIndex = getSlotIndexForTime(ev.startMin);
+    if (slotIndex === -1) {
+        renderSchedule();
+        return;
+    }
+    
+    // Находим и удаляем элемент события из DOM
+    const scheduleEl = document.getElementById('schedule');
+    if (scheduleEl) {
+        const eventEl = scheduleEl.querySelector(`.event[data-eid="${eventId}"]`);
+        if (eventEl) {
+            eventEl.remove();
+        }
+    }
+    
+    scheduleRowHeightUpdate(slotIndex);
 }
 
 function handleContextMenuCancel(e) {
@@ -5955,7 +5982,93 @@ function handleBeforeUnload(e) {
 }
 
 function updateEventInDOM(eventData) {
-    renderSchedule();
+    const slotIndex = getSlotIndexForTime(eventData.startMin);
+    if (slotIndex === -1) {
+        renderSchedule();
+        return;
+    }
+
+    const scheduleEl = document.getElementById('schedule');
+    if (!scheduleEl) {
+        renderSchedule();
+        return;
+    }
+
+    const rowCells = scheduleEl.querySelectorAll(`.cell.droppable[data-slot-index="${slotIndex}"]`);
+    if (!rowCells.length) {
+        renderSchedule();
+        return;
+    }
+
+    // Очищаем ячейки строки
+    rowCells.forEach(cell => {
+        const slotInner = cell.querySelector('.slot-inner');
+        if (slotInner) {
+            slotInner.innerHTML = '';
+            delete slotInner.dataset.renderKey;
+        }
+    });
+
+    // Находим все события для этой строки и рендерим их
+    const { start: dayStart, step } = getBounds();
+    const slotStartMin = dayStart + (slotIndex * step);
+    const view = state.settings.display.cellView;
+
+    for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
+        const eventsInSlot = state.events.filter(e => 
+            e.dayIndex === dayIdx && 
+            e.startMin >= slotStartMin && 
+            e.startMin < slotStartMin + step
+        );
+
+        const cell = Array.from(rowCells).find(c => parseInt(c.dataset.dayIndex) === dayIdx);
+        if (!cell) continue;
+
+        const slotInner = cell.querySelector('.slot-inner');
+        if (!slotInner) continue;
+
+        const slot = cell.querySelector('.slot');
+        
+        // Сортируем события для правильного порядка
+        eventsInSlot.sort((a, b) => a.startMin - b.startMin);
+
+        const count = eventsInSlot.length;
+
+        if (!count) {
+            if (state.settings.display.showEmptyHint) {
+                const hint = document.createElement("div");
+                hint.className = "empty-slot";
+                hint.textContent = "Клик для добавления";
+                slotInner.appendChild(hint);
+            }
+            if (slot && view === "timeline") slot.classList.remove("two");
+            cell.dataset.double = "";
+        } else if (view === "list") {
+            eventsInSlot.forEach((ev) =>
+                slotInner.appendChild(createListEventElement(ev, count))
+            );
+            cell.dataset.double = "";
+        } else {
+            if (count === 2) {
+                if (slot) slot.classList.add("two");
+                cell.dataset.double = "1";
+                eventsInSlot.forEach((ev) =>
+                    slotInner.appendChild(createTimelineEventElement(ev, true))
+                );
+            } else {
+                if (slot) slot.classList.remove("two");
+                cell.dataset.double = "";
+                eventsInSlot.forEach((ev) =>
+                    slotInner.appendChild(createTimelineEventElement(ev, false))
+                );
+            }
+        }
+
+        if (count) updateDoubleEventClassesForCell(cell);
+    }
+
+    // Обновляем высоту строки
+    scheduleRowHeightUpdate(slotIndex);
 }
 
 function getSlotIndexForTime(startMin) {
@@ -11293,11 +11406,12 @@ async function exportToSvg(opts) {
     console.log(`SVG экспорт: размеры ${exportWidth}x${exportHeight}, фон ${bgColor}`);
 
     // 10. Генерируем SVG
+    // pixelRatio не влияет на SVG (векторный формат), но важен для raster
     const dataUrl = await htmlToImage.toSvg(clone, {
       backgroundColor: bgColor,
       width: exportWidth,
       height: exportHeight,
-      pixelRatio: 1,
+      pixelRatio: 1, // SVG векторный - масштаб не важен
       cacheBust: true,
       quality: 1.0,
       fontEmbedCSS: fontEmbedCSS,
@@ -12381,6 +12495,9 @@ async function exportToRasterCanvas(opts) {
       embedData: true,
     });
 
+    // html-to-image рендерит в размерах DOM элемента
+    // Финальное масштабирование до размеров пресета происходит в convertCanvasToRequestedDataUrl
+    // pixelRatio здесь не нужен — он только увеличивает размер DOM рендера
     return await htmlToImage.toCanvas(clone, {
       backgroundColor:
         typeof opts.background === "string" && opts.background
@@ -12388,7 +12505,7 @@ async function exportToRasterCanvas(opts) {
           : undefined,
       width: exportWidth,
       height: exportHeight,
-      pixelRatio: 1,
+      pixelRatio: 1, // Рендерим в натуральном размере DOM, масштабирование будет потом
       cacheBust: true,
       quality: 1,
       fontEmbedCSS,
@@ -12745,7 +12862,8 @@ async function downloadFromExportModal() {
       }
 
       if (rasterResult && rasterResult.dataUrl) {
-        finalDataUrl = rasterResult.dataUrl;
+        // Внедряем DPI метаданные для PNG и JPEG (300 DPI для печати)
+        finalDataUrl = embedDpiInImage(rasterResult.dataUrl, 300);
         fileName = `schedule-${opts.preset.id}-${stamp}_${timestamp}.${opts.fmt === "jpeg" ? "jpg" : "png"}`;
         if (rasterResult.scaled) {
           toast(
@@ -12814,6 +12932,8 @@ async function svgToCanvas(svgDataUrl, opts) {
       svgHeight = 600;
     }
 
+    // Используем размеры из пресета напрямую
+    // Пресеты A3/A4 уже имеют размеры для 300 DPI (3508×2480, 4961×3508)
     const targetWidth = opts.preset.id === "auto" ? svgWidth : opts.preset.w;
     const targetHeight = opts.preset.id === "auto" ? svgHeight : opts.preset.h;
     const limitedSize = fitCanvasSizeToLimit(targetWidth, targetHeight);
@@ -12982,6 +13102,217 @@ function downloadFile(dataUrl, fileName) {
 
 function isSvgDataUrl(value) {
   return /^data:image\/svg\+xml/i.test(String(value || ""));
+}
+
+/**
+ * Добавляет DPI метаданные в PNG изображение через chunk pHYs
+ * @param {string} dataUrl - Base64 или data URL PNG изображения
+ * @param {number} dpi - DPI для установки (по умолчанию 300)
+ * @returns {string} - Новый data URL с DPI метаданными
+ */
+function embedDpiInPng(dataUrl, dpi = 300) {
+  try {
+    // Извлекаем base64 данные из data URL
+    const base64Data = dataUrl.includes(',') 
+      ? dataUrl.substring(dataUrl.indexOf(',') + 1) 
+      : dataUrl;
+    
+    // Декодируем base64 в байты
+    const binary = atob(base64Data);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    
+    // Проверяем сигнатуру PNG
+    const PNG_SIGNATURE = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+    for (let i = 0; i < 8; i++) {
+      if (bytes[i] !== PNG_SIGNATURE[i]) {
+        console.warn('Не PNG формат, пропускаем внедрение DPI');
+        return dataUrl;
+      }
+    }
+    
+    // Вычисляем значение для pHYs chunk (пикселей на метр)
+    // 1 дюйм = 0.0254 метра
+    // pixelsPerMeter = dpi / 0.0254
+    const pixelsPerMeter = Math.round(dpi / 0.0254);
+    
+    // Создаем pHYs chunk
+    // Тип chunk: pHYs (0x70485973)
+    // Данные: 4 байта X + 4 байта Y + 1 байт единица (1 = метр)
+    const physData = new Uint8Array(9);
+    const view = new DataView(physData.buffer);
+    view.setUint32(0, pixelsPerMeter, false); // Big-endian
+    view.setUint32(4, pixelsPerMeter, false); // Big-endian
+    physData[8] = 1; // Единица измерения: метр
+    
+    // Вычисляем CRC для pHYs chunk
+    const physCrc = crc32(physData);
+    
+    // Создаем заголовок chunk: длина (4) + тип (4) + данные (9) + CRC (4) = 21 байт
+    const physChunk = new Uint8Array(21);
+    const physView = new DataView(physChunk.buffer);
+    physView.setUint32(0, 9, false); // Длина данных
+    physView.setUint32(4, 0x70485973, false); // Тип chunk 'pHYs'
+    physChunk.set(physData, 8); // Данные
+    physView.setUint32(17, physCrc, false); // CRC
+    
+    // Находим позицию после IHDR chunk
+    // IHDR всегда первый chunk после сигнатуры
+    const ihdrLength = new DataView(bytes.buffer).getUint32(8, false);
+    const ihdrEnd = 8 + 4 + 4 + ihdrLength + 4; // сигнатура + длина + тип + данные + CRC
+    
+    // Вставляем pHYs chunk после IHDR
+    const newBytes = new Uint8Array(bytes.length + physChunk.length);
+    newBytes.set(bytes.slice(0, ihdrEnd), 0);
+    newBytes.set(physChunk, ihdrEnd);
+    newBytes.set(bytes.slice(ihdrEnd), ihdrEnd + physChunk.length);
+    
+    // Кодируем обратно в base64
+    let binaryStr = '';
+    for (let i = 0; i < newBytes.length; i++) {
+      binaryStr += String.fromCharCode(newBytes[i]);
+    }
+    const newBase64 = btoa(binaryStr);
+    
+    // Возвращаем новый data URL
+    return dataUrl.replace(/data:image\/png;base64,.*/, 'data:image/png;base64,' + newBase64);
+  } catch (error) {
+    console.error('Ошибка внедрения DPI в PNG:', error);
+    return dataUrl; // Возвращаем оригинал при ошибке
+  }
+}
+
+/**
+ * Вычисляет CRC32 для данных
+ * @param {Uint8Array} data - Данные для вычисления CRC
+ * @returns {number} - CRC32 значение
+ */
+function crc32(data) {
+  let crc = 0xFFFFFFFF;
+  const table = getCrc32Table();
+  
+  for (let i = 0; i < data.length; i++) {
+    crc = table[(crc ^ data[i]) & 0xFF] ^ (crc >>> 8);
+  }
+  
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+/**
+ * Возвращает таблицу CRC32 (кэшируется)
+ * @returns {Uint32Array} - Таблица CRC32
+ */
+let crc32Table = null;
+function getCrc32Table() {
+  if (crc32Table) return crc32Table;
+  
+  crc32Table = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let j = 0; j < 8; j++) {
+      c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    }
+    crc32Table[i] = c >>> 0;
+  }
+  return crc32Table;
+}
+
+/**
+ * Добавляет DPI метаданные в JPEG изображение
+ * @param {string} dataUrl - Base64 или data URL JPEG изображения
+ * @param {number} dpi - DPI для установки (по умолчанию 300)
+ * @returns {string} - Новый data URL с DPI метаданными
+ */
+function embedDpiInJpeg(dataUrl, dpi = 300) {
+  try {
+    // Извлекаем base64 данные из data URL
+    const base64Data = dataUrl.includes(',') 
+      ? dataUrl.substring(dataUrl.indexOf(',') + 1) 
+      : dataUrl;
+    
+    // Декодируем base64 в байты
+    const binary = atob(base64Data);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    
+    // Проверяем сигнатуру JPEG
+    if (bytes[0] !== 0xFF || bytes[1] !== 0xD8) {
+      console.warn('Не JPEG формат, пропускаем внедрение DPI');
+      return dataUrl;
+    }
+    
+    // Вычисляем плотность пикселей (pixels per inch)
+    const density = dpi & 0xFFFF;
+    
+    // Создаем APP0 JFIF сегмент с DPI информацией
+    // FF E0 xx xx 4A 46 49 46 00 01 01 XX XX XX XX 00 00
+    // где XX XX - плотность по X и Y (в дюймах)
+    const jfifSegment = new Uint8Array([
+      0xFF, 0xE0,           // APP0 marker
+      0x00, 0x10,           // Длина сегмента (16 байт)
+      0x4A, 0x46, 0x49, 0x46, 0x00, // 'JFIF\0'
+      0x01, 0x01,           // Версия JFIF 1.1
+      0x00,                 // Единицы: 0 = нет, 1 = дюймы, 2 = см
+      (density >> 8) & 0xFF, density & 0xFF, // Плотность по X (big-endian)
+      (density >> 8) & 0xFF, density & 0xFF, // Плотность по Y (big-endian)
+      0x00, 0x00            // Миниатюра: нет
+    ]);
+    
+    // Находим позицию после сигнатуры JPEG (FF D8)
+    let insertPos = 2;
+    
+    // Проверяем, есть ли уже APP0 сегмент
+    if (bytes[2] === 0xFF && (bytes[3] === 0xE0 || bytes[3] === 0xE1)) {
+      // Пропускаем существующий APP0/APP1 сегмент
+      const existingLength = (bytes[4] << 8) | bytes[5];
+      insertPos = 4 + existingLength + 2;
+    }
+    
+    // Вставляем JFIF сегмент
+    const newBytes = new Uint8Array(bytes.length + jfifSegment.length);
+    newBytes.set(bytes.slice(0, insertPos), 0);
+    newBytes.set(jfifSegment, insertPos);
+    newBytes.set(bytes.slice(insertPos), insertPos + jfifSegment.length);
+    
+    // Кодируем обратно в base64
+    let binaryStr = '';
+    for (let i = 0; i < newBytes.length; i++) {
+      binaryStr += String.fromCharCode(newBytes[i]);
+    }
+    const newBase64 = btoa(binaryStr);
+    
+    // Возвращаем новый data URL
+    return dataUrl.replace(/data:image\/jpeg;base64,.*/, 'data:image/jpeg;base64,' + newBase64)
+                  .replace(/data:image\/jpg;base64,.*/, 'data:image/jpeg;base64,' + newBase64);
+  } catch (error) {
+    console.error('Ошибка внедрения DPI в JPEG:', error);
+    return dataUrl; // Возвращаем оригинал при ошибке
+  }
+}
+
+/**
+ * Добавляет DPI метаданные в изображение в зависимости от формата
+ * @param {string} dataUrl - Data URL изображения
+ * @param {number} dpi - DPI для установки (по умолчанию 300)
+ * @returns {string} - Новый data URL с DPI метаданными
+ */
+function embedDpiInImage(dataUrl, dpi = 300) {
+  if (!dataUrl || typeof dataUrl !== 'string') {
+    return dataUrl;
+  }
+  
+  if (dataUrl.startsWith('data:image/png;')) {
+    return embedDpiInPng(dataUrl, dpi);
+  } else if (dataUrl.startsWith('data:image/jpeg;') || dataUrl.startsWith('data:image/jpg;')) {
+    return embedDpiInJpeg(dataUrl, dpi);
+  }
+  
+  // Для других форматов (SVG, WebP) возвращаем как есть
+  return dataUrl;
 }
 
 function dataUrlToBlob(dataUrl) {
