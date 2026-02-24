@@ -5855,6 +5855,192 @@ function rerenderRowBySlotIndex(slotIndex) {
     console.log(`[TouchDnD] Строка ${slotIndex}: высота=${maxHeight}px`);
 }
 
+/**
+ * Обновляет только указанный день в расписании (частичный ререндер)
+ * @param {number} dayIndex - Индекс дня (0-6)
+ */
+function rerenderDayByIndex(dayIndex) {
+    const scheduleEl = document.getElementById('schedule');
+    if (!scheduleEl) {
+        console.warn('[rerenderDayByIndex] scheduleEl не найден');
+        return;
+    }
+
+    const view = state.settings.display.cellView;
+    const todayIndex = (new Date().getDay() + 6) % 7;
+
+    console.log(`[rerenderDayByIndex] Начало обновления дня ${dayIndex}, режим: ${view}`);
+    console.log(`[rerenderDayByIndex] Событий в state.events для дня ${dayIndex}:`, 
+        state.events.filter(ev => ev.dayIndex === dayIndex).length);
+
+    // Получаем все ячейки этого дня
+    const dayCells = scheduleEl.querySelectorAll(`.cell.droppable[data-day-index="${dayIndex}"]`);
+    if (!dayCells.length) {
+        console.warn(`[rerenderDayByIndex] Ячейки для дня ${dayIndex} не найдены`);
+        console.log(`[rerenderDayByIndex] Все ячейки:`, scheduleEl.querySelectorAll('.cell.droppable').length);
+        return;
+    }
+
+    console.log(`[rerenderDayByIndex] Найдено ячеек для дня ${dayIndex}: ${dayCells.length}`);
+
+    // COMPACT MODE - отдельная логика
+    if (view === 'compact') {
+        const eventsByDay = state.events
+            .filter(ev => ev.dayIndex === dayIndex)
+            .sort((a, b) => a.startMin - b.startMin);
+
+        dayCells.forEach(cell => {
+            const slotInner = cell.querySelector('.slot-inner');
+            if (!slotInner) return;
+
+            updateTodayHighlight(cell, dayIndex, todayIndex);
+
+            const renderKey = [
+                'compact',
+                state.settings.display.showEmptyHint ? 1 : 0,
+                ...eventsByDay.map((ev) => getEventRenderKey(ev, 'compact', false)),
+            ].join(';');
+
+            console.log(`[rerenderDayByIndex] Compact: старый ключ="${slotInner.dataset.renderKey || 'нет'}", новый ключ="${renderKey}"`);
+
+            if (slotInner.dataset.renderKey !== renderKey) {
+                slotInner.dataset.renderKey = renderKey;
+                replaceChildrenCompat(slotInner);
+
+                if (!eventsByDay.length) {
+                    if (state.settings.display.showEmptyHint) {
+                        const hint = document.createElement('div');
+                        hint.className = 'empty-slot';
+                        hint.textContent = 'Нет занятий';
+                        slotInner.appendChild(hint);
+                    }
+                } else {
+                    eventsByDay.forEach((ev) =>
+                        slotInner.appendChild(createCompactEventCard(ev))
+                    );
+                }
+                console.log(`[rerenderDayByIndex] Compact: ячейка обновлена`);
+            } else {
+                console.log(`[rerenderDayByIndex] Compact: ключи совпали, пропускаем`);
+            }
+        });
+
+        console.log(`[rerenderDayByIndex] Compact режим обновлен`);
+        return;
+    }
+
+    // TIMELINE/LIST MODE
+    const { start, step } = getBounds();
+    const slots = buildSlots();
+
+    // Группируем события по слотам для этого дня
+    const eventsBySlot = new Map();
+    state.events
+        .filter(ev => ev.dayIndex === dayIndex)
+        .forEach(ev => {
+            const slotIndex = Math.floor((ev.startMin - start) / step);
+            if (slotIndex >= 0 && slotIndex < slots.length) {
+                if (!eventsBySlot.has(slotIndex)) {
+                    eventsBySlot.set(slotIndex, []);
+                }
+                eventsBySlot.get(slotIndex).push(ev);
+            }
+        });
+
+    console.log(`[rerenderDayByIndex] Заполнено слотов событиями:`, eventsBySlot.size);
+
+    // Обновляем каждую ячейку дня
+    let updatedCount = 0;
+    dayCells.forEach(cell => {
+        const slotIndex = parseInt(cell.dataset.slotIndex);
+        if (isNaN(slotIndex)) return;
+
+        const slot = cell.querySelector('.slot');
+        const slotInner = cell.querySelector('.slot-inner');
+        if (!slotInner) return;
+
+        // Обновляем highlight сегодня
+        updateTodayHighlight(cell, dayIndex, todayIndex);
+
+        // Обновляем классы слота
+        if (slot) {
+            slot.classList.toggle('list-mode', view === 'list');
+            slot.classList.toggle('tl-fill', view === 'timeline');
+            if (view !== 'timeline') slot.classList.remove('two');
+        }
+
+        // Получаем события для этой ячейки
+        const eventsInCell = (eventsBySlot.get(slotIndex) || []).sort((a, b) => a.startMin - b.startMin);
+        const count = eventsInCell.length;
+
+        // Генерируем ключ рендера
+        const renderKey = [
+            view,
+            state.settings.display.showEmptyHint ? 1 : 0,
+            count,
+            ...eventsInCell.map((ev) => getEventRenderKey(ev, view, count === 2)),
+        ].join(';');
+
+        const oldKey = slotInner.dataset.renderKey || 'нет';
+        
+        // Обновляем только если контент изменился
+        if (slotInner.dataset.renderKey !== renderKey) {
+            updatedCount++;
+            console.log(`[rerenderDayByIndex] Слот ${slotIndex}: обновляем (${eventsInCell.length} событий)`);
+            slotInner.dataset.renderKey = renderKey;
+            replaceChildrenCompat(slotInner);
+
+            if (!count) {
+                if (state.settings.display.showEmptyHint) {
+                    const hint = document.createElement('div');
+                    hint.className = 'empty-slot';
+                    hint.textContent = 'Клик для добавления';
+                    slotInner.appendChild(hint);
+                }
+                if (slot && view === 'timeline') slot.classList.remove('two');
+                cell.dataset.double = '';
+            } else if (view === 'list') {
+                eventsInCell.forEach((ev) =>
+                    slotInner.appendChild(createListEventElement(ev, count))
+                );
+                cell.dataset.double = '';
+            } else {
+                if (count === 2) {
+                    if (slot) slot.classList.add('two');
+                    cell.dataset.double = '1';
+                    eventsInCell.forEach((ev) =>
+                        slotInner.appendChild(createTimelineEventElement(ev, true))
+                    );
+                } else {
+                    if (slot) slot.classList.remove('two');
+                    cell.dataset.double = '';
+                    eventsInCell.forEach((ev) =>
+                        slotInner.appendChild(createTimelineEventElement(ev, false))
+                    );
+                }
+            }
+
+            if (count) updateDoubleEventClassesForCell(cell);
+        } else {
+            console.log(`[rerenderDayByIndex] Слот ${slotIndex}: ключи совпали (${count} событий), пропускаем`);
+        }
+    });
+
+    console.log(`[rerenderDayByIndex] Обновлено ячеек: ${updatedCount}/${dayCells.length}`);
+
+    // Обновляем высоты строк для всех затронутых слотов
+    const affectedSlots = new Set();
+    dayCells.forEach(cell => {
+        const slotIndex = parseInt(cell.dataset.slotIndex);
+        if (!isNaN(slotIndex)) affectedSlots.add(slotIndex);
+    });
+
+    console.log(`[rerenderDayByIndex] Обновление высот строк:`, [...affectedSlots]);
+    affectedSlots.forEach(slotIndex => {
+        rerenderRowBySlotIndex(slotIndex);
+    });
+}
+
 function initializeAllRowHeights() {
   const scheduleEl = document.getElementById("schedule");
   if (!scheduleEl) return;
@@ -7899,12 +8085,15 @@ function dayMenu(dayIndex) {
   );
   if (!action) return;
 
+  console.log(`[dayMenu] День ${dayIndex}, действие: ${action}`);
+
   if (action === "1") {
     if (!confirm("Удалить все занятия этого дня?")) return;
     pushHistory("Очистка дня");
     state.events = state.events.filter((e) => e.dayIndex !== dayIndex);
     saveState();
-    renderAll();
+    rerenderDayByIndex(dayIndex);
+    updateStats();
     toast("OK", "День очищен", `Удалены занятия за ${DAYS[dayIndex]}.`);
     return;
   }
@@ -7914,13 +8103,46 @@ function dayMenu(dayIndex) {
       toast("WARN", "Нельзя", "У понедельника нет предыдущего.");
       return;
     }
-    pushHistory("Копирование дня");
+    
+    // Проверяем, можно ли скопировать занятия в целевой день
     const prev = state.events.filter((e) => e.dayIndex === dayIndex - 1);
-    const copies = prev.map((e) => ({ ...deepCopy(e), id: uid(), dayIndex }));
+    const existingInTarget = state.events.filter((e) => e.dayIndex === dayIndex);
+    
+    // Проверяем каждое занятие на возможность копирования
+    const validCopies = [];
+    const skippedEvents = [];
+    
+    for (const e of prev) {
+      const validation = validateTimeSlot(dayIndex, e.startMin, e.durationMin, null);
+      if (validation.valid) {
+        validCopies.push(e);
+      } else {
+        skippedEvents.push(`${e.name} (${minToHHMM(e.startMin)})`);
+      }
+    }
+    
+    if (validCopies.length === 0) {
+      toast("WARN", "Копирование невозможно", 
+        skippedEvents.length > 0 
+          ? `Не удалось скопировать:\n${skippedEvents.join('\n')}`
+          : "Все занятия конфликтуют с существующими.");
+      return;
+    }
+    
+    pushHistory("Копирование дня");
+    const copies = validCopies.map((e) => ({ ...deepCopy(e), id: uid(), dayIndex }));
     state.events = state.events.concat(copies);
     saveState();
-    renderAll();
-    toast("OK", "Скопировано", `Скопировано: ${copies.length}.`);
+    // Обновляем оба дня: предыдущий (источник) и текущий (приемник)
+    rerenderDayByIndex(dayIndex - 1);
+    rerenderDayByIndex(dayIndex);
+    updateStats();
+    
+    let msg = `Скопировано: ${copies.length}.`;
+    if (skippedEvents.length > 0) {
+      msg += `\nПропущено: ${skippedEvents.length} (конфликт).`;
+    }
+    toast("OK", "Скопировано", msg);
     return;
   }
 
@@ -7929,17 +8151,50 @@ function dayMenu(dayIndex) {
       toast("WARN", "Нельзя", "У воскресенья нет следующего.");
       return;
     }
-    pushHistory("Копирование дня");
+    
+    // Проверяем, можно ли скопировать занятия в следующий день
     const cur = state.events.filter((e) => e.dayIndex === dayIndex);
-    const copies = cur.map((e) => ({
+    const nextDayIndex = dayIndex + 1;
+    
+    // Проверяем каждое занятие на возможность копирования
+    const validCopies = [];
+    const skippedEvents = [];
+    
+    for (const e of cur) {
+      const validation = validateTimeSlot(nextDayIndex, e.startMin, e.durationMin, null);
+      if (validation.valid) {
+        validCopies.push(e);
+      } else {
+        skippedEvents.push(`${e.name} (${minToHHMM(e.startMin)})`);
+      }
+    }
+    
+    if (validCopies.length === 0) {
+      toast("WARN", "Копирование невозможно", 
+        skippedEvents.length > 0 
+          ? `Не удалось скопировать:\n${skippedEvents.join('\n')}`
+          : "Все занятия конфликтуют с существующими.");
+      return;
+    }
+    
+    pushHistory("Копирование дня");
+    const copies = validCopies.map((e) => ({
       ...deepCopy(e),
       id: uid(),
-      dayIndex: dayIndex + 1,
+      dayIndex: nextDayIndex,
     }));
     state.events = state.events.concat(copies);
     saveState();
-    renderAll();
-    toast("OK", "Скопировано", `Скопировано: ${copies.length}.`);
+    // Обновляем оба дня: текущий (источник) и следующий (пр��емник)
+    rerenderDayByIndex(dayIndex);
+    rerenderDayByIndex(nextDayIndex);
+    updateStats();
+    
+    let msg = `Скопировано: ${copies.length}.`;
+    if (skippedEvents.length > 0) {
+      msg += `\nПропущено: ${skippedEvents.length} (конфликт).`;
+    }
+    toast("OK", "Скопировано", msg);
     return;
   }
 }
