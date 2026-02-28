@@ -13212,7 +13212,8 @@ async function downloadFromExportModal() {
       // Открываем модальное окно для скачивания изображения
       let iosWindow = null;
       try {
-        iosWindow = window.open("", "_blank", "width=400,height=600");
+        // Открываем окно с about:blank чтобы не загружалась наша страница
+        iosWindow = window.open("about:blank", "_blank", "width=400,height=600");
         if (iosWindow && !iosWindow.closed) {
           // Сразу записываем содержимое
           writeIosImageDownloadPage(iosWindow, finalDataUrl, fileName);
