@@ -2787,6 +2787,12 @@ function exportJson() {
   } else {
     toast("OK", "Экспорт JSON", "Файл скачан.");
   }
+  // Очищаем URL через некоторое время
+  setTimeout(() => {
+    try {
+      URL.revokeObjectURL(url);
+    } catch (_) {}
+  }, 60000);
 }
 
 function importJson(file) {
@@ -8185,7 +8191,7 @@ function dayMenu(dayIndex) {
     }));
     state.events = state.events.concat(copies);
     saveState();
-    // Обновляем оба дня: текущий (источник) и следующий (пр��������������������������емник)
+    // Обновляем оба дня: текущий (источник) и следующий (пр����������������������������емник)
     rerenderDayByIndex(dayIndex);
     rerenderDayByIndex(nextDayIndex);
     updateStats();
@@ -12914,9 +12920,8 @@ function writeIosFallbackDownloadPage(targetWindow, openUrl, fileName) {
     <p class="name">${escapedName}</p>
     <div class="actions">
       <button id="saveBtn" type="button" class="btn btn-save">Сохранить</button>
-      <a class="btn btn-open" href="${escapedUrl}" target="_blank" download="${escapedName}" rel="noopener">Скачать напрямую</a>
     </div>
-    <p class="hint">Если кнопка «Сохранить» не работает, используйте «Скачать напрямую».</p>
+    <p class="hint">Используйте кнопку «Сохранить» для загрузки файла.</p>
     <button id="backBtn" type="button" class="btn btn-back">← Назад</button>
   </div>
   <script>
@@ -12935,50 +12940,41 @@ function writeIosFallbackDownloadPage(targetWindow, openUrl, fileName) {
         return "application/octet-stream";
       };
 
-      const trySave = async () => {
-        if (
-          typeof navigator === "undefined" ||
-          typeof navigator.share !== "function" ||
-          typeof fetch !== "function" ||
-          typeof File !== "function"
-        ) {
-          return false;
-        }
-
-        try {
-          const response = await fetch(exportUrl);
-          if (!response || !response.ok) return false;
-          const blob = await response.blob();
-          if (!blob) return false;
-          const file = new File([blob], exportName, {
-            type: blob.type || detectMimeType(),
-          });
-          const payload = { files: [file], title: exportName };
-          if (typeof navigator.canShare === "function" && !navigator.canShare(payload)) {
-            return false;
-          }
-          await navigator.share(payload);
-          return true;
-        } catch (_) {
-          return false;
-        }
-      };
-
       if (saveBtn) {
         saveBtn.addEventListener("click", async function (event) {
           event.preventDefault();
           saveBtn.disabled = true;
           saveBtn.textContent = "Подготовка...";
-          const saved = await trySave();
-          if (saved) {
-            saveBtn.textContent = "Сохранено ✓";
-            saveBtn.disabled = false;
-            return;
+
+          // Пробуем navigator.share для iOS
+          if (typeof navigator !== "undefined" && typeof navigator.share === "function" && typeof fetch === "function" && typeof File === "function") {
+            try {
+              const response = await fetch(exportUrl);
+              if (response && response.ok) {
+                const blob = await response.blob();
+                if (blob) {
+                  const file = new File([blob], exportName, {
+                    type: blob.type || detectMimeType(),
+                  });
+                  const payload = { files: [file] };
+                  if (typeof navigator.canShare === "function" && !navigator.canShare(payload)) {
+                    throw new Error("Cannot share");
+                  }
+                  await navigator.share(payload);
+                  saveBtn.textContent = "Сохранено ✓";
+                  saveBtn.disabled = false;
+                  return;
+                }
+              }
+            } catch (_) {}
           }
-          saveBtn.disabled = false;
-          saveBtn.textContent = "Сохранить";
-          // Fallback: открываем файл напрямую если share не сработал
-          // Пользователь может использовать кнопку "Открыть файл" или долгое нажатие
+
+          // Fallback: прямое скачивание
+          window.location.href = exportUrl;
+          setTimeout(() => {
+            saveBtn.textContent = "Готово ✓";
+            saveBtn.disabled = false;
+          }, 1000);
         });
       }
 
@@ -13021,7 +13017,7 @@ async function tryShareFileFromDataUrl(dataUrl, fileName) {
 
   const shareData = {
     files: [fileForShare],
-    title: safeFileName(fileName),
+    // Не передаём title, чтобы не создавалось текстовое сообщение
   };
 
   try {
@@ -13298,45 +13294,27 @@ function downloadFile(dataUrl, fileName) {
     }
 
     if (!openUrl) {
-      resetPendingIosDownloadWindow({ close: true });
-      return "new-tab";
+      return "download";
     }
 
-    // Для JSON экспорта (не из modal) - используем pendingIosDownloadWindow если есть
-    let iosTargetWindow =
-      pendingIosDownloadWindow && !pendingIosDownloadWindow.closed
-        ? pendingIosDownloadWindow
-        : null;
+    // Для JSON экспорта - скачиваем в том же окне без открытия новых вкладок
+    // Создаём временную ссылку и кликаем по ней
+    const a = document.createElement("a");
+    a.href = openUrl;
+    a.download = fileName;
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
 
-    // Если нет pending окна, создаём новое
-    if (!iosTargetWindow) {
-      try {
-        iosTargetWindow = window.open("", "_blank");
-      } catch (_) {
-        iosTargetWindow = null;
-      }
-    }
-
-    // iOS WebKit often fails to navigate directly to large data URLs for week exports.
-    // Serve a stable fallback page with an explicit "open/save" action instead.
-    if (iosTargetWindow && !iosTargetWindow.closed) {
-      writeIosFallbackDownloadPage(iosTargetWindow, openUrl, fileName);
-    } else if (iosTargetWindow === null) {
-      // Popup blocked - fallback to direct download
-      window.location.href = openUrl;
-    }
-    // Если окно было но закрылось - ничего не делаем (пользователь уже закрыл)
-
-    // Не закрываем pendingIosDownloadWindow для JSON экспорта
-    // Пользователь должен сам закрыть вкладку после сохранения
     if (tempObjectUrl) {
       setTimeout(() => {
         try {
           URL.revokeObjectURL(tempObjectUrl);
         } catch (_) {}
-      }, 10 * 60 * 1000);
+      }, 5000);
     }
-    return "new-tab";
+    return "download";
   }
 
   const nav = window.navigator || {};
