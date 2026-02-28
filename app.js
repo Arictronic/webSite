@@ -10960,6 +10960,21 @@ async function buildExportPreview() {
   }
 }
 
+function getExportPreviewImageEl(previewFrame) {
+  const frame =
+    previewFrame ||
+    expPreviewFrame ||
+    document.querySelector(".export-preview-frame");
+  if (!frame) return null;
+  let imageEl = frame.querySelector("#expPreviewImg");
+  if (!imageEl) {
+    imageEl = document.createElement("img");
+    imageEl.id = "expPreviewImg";
+    frame.appendChild(imageEl);
+  }
+  return imageEl;
+}
+
 function decodeSvgDataUrl(svgDataUrl) {
   if (typeof svgDataUrl !== "string" || !svgDataUrl.startsWith("data:")) {
     throw new Error("Invalid SVG data URL");
@@ -11026,23 +11041,24 @@ function getSvgPreviewSize(svgText) {
 }
 
 function showSvgPreviewAsImage(svgDataUrl, width, height) {
-  if (!expPreviewImg) return false;
+  const imageEl = getExportPreviewImageEl();
+  if (!imageEl) return false;
   const safeW = Math.max(1, Math.ceil(Number(width) || 1));
   const safeH = Math.max(1, Math.ceil(Number(height) || 1));
 
-  expPreviewImg.onload = () => {
-    const imgW = expPreviewImg.naturalWidth || safeW;
-    const imgH = expPreviewImg.naturalHeight || safeH;
-    exportPreviewView.element = expPreviewImg;
+  imageEl.onload = () => {
+    const imgW = imageEl.naturalWidth || safeW;
+    const imgH = imageEl.naturalHeight || safeH;
+    exportPreviewView.element = imageEl;
     // Не устанавливаем style.width/height - пусть image сам рендерится
     fitExportPreviewToFrame(imgW, imgH);
   };
-  expPreviewImg.onerror = () => {
+  imageEl.onerror = () => {
     console.error("Failed to load export preview image");
   };
 
-  expPreviewImg.src = svgDataUrl;
-  expPreviewImg.style.display = "block";
+  imageEl.src = svgDataUrl;
+  imageEl.style.display = "block";
   // Не устанавливаем exportPreviewView.element до загрузки
   return true;
 }
@@ -11050,7 +11066,10 @@ function showSvgPreviewAsImage(svgDataUrl, width, height) {
 function displaySvgPreview(svgDataUrl) {
   const previewFrame = expPreviewFrame || document.querySelector(".export-preview-frame");
   if (!previewFrame) return;
-  if (expPreviewImg) expPreviewImg.style.display = "none";
+  const previewImage = getExportPreviewImageEl(previewFrame);
+  if (previewImage) previewImage.style.display = "none";
+  const previewError = previewFrame.querySelector("#expPreviewError");
+  if (previewError) previewError.remove();
 
   const oldPreview = previewFrame.querySelector("#expPreviewObject");
   if (oldPreview) {
@@ -11094,11 +11113,18 @@ function displaySvgPreview(svgDataUrl) {
       return;
     }
 
-    previewFrame.innerHTML = `
-            <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #666;">
-                Не удалось загрузить предпросмотр
-            </div>
-        `;
+    let errorEl = previewFrame.querySelector("#expPreviewError");
+    if (!errorEl) {
+      errorEl = document.createElement("div");
+      errorEl.id = "expPreviewError";
+      errorEl.style.display = "flex";
+      errorEl.style.alignItems = "center";
+      errorEl.style.justifyContent = "center";
+      errorEl.style.height = "100%";
+      errorEl.style.color = "#666";
+      previewFrame.appendChild(errorEl);
+    }
+    errorEl.textContent = "Не удалось загрузить предпросмотр";
   }
 }
 
@@ -11125,9 +11151,16 @@ function clearPreviewCache() {
     }
   }
 
-  if (expPreviewImg) {
-    expPreviewImg.removeAttribute("src");
-    expPreviewImg.style.display = "";
+  const previewImage = getExportPreviewImageEl(previewFrame);
+  if (previewImage) {
+    previewImage.onload = null;
+    previewImage.onerror = null;
+    previewImage.removeAttribute("src");
+    previewImage.style.display = "";
+  }
+  const previewError = previewFrame?.querySelector?.("#expPreviewError");
+  if (previewError) {
+    previewError.remove();
   }
 
   exportPreviewView = {
@@ -13195,20 +13228,7 @@ async function downloadFromExportModal() {
     !!preparedExportFile && preparedExportFile.key === cacheKey;
 
   try {
-    if (IS_APPLE_DOWNLOAD_TAB && !hasPreparedFile) {
-      await prepareExportFile(opts, {
-        cacheKey,
-        notifyGeneration: true,
-      });
-      toast(
-        "OK",
-        "Export",
-        "Файл подготовлен. Нажмите «Скачать» ещё раз.",
-      );
-      return;
-    }
-
-    if (IS_APPLE_DOWNLOAD_TAB) {
+    if (IS_APPLE_DOWNLOAD_TAB && hasPreparedFile) {
       // Если файл уже подготовлен, открываем вкладку прямо в user gesture.
       openPendingIosDownloadWindow();
     }
@@ -13217,6 +13237,11 @@ async function downloadFromExportModal() {
       cacheKey,
       notifyGeneration: !hasPreparedFile,
     });
+
+    if (IS_APPLE_DOWNLOAD_TAB && !hasPreparedFile) {
+      // Пытаемся открыть вкладку после подготовки (один клик).
+      openPendingIosDownloadWindow();
+    }
 
     const mode = downloadFile(prepared.dataUrl, prepared.fileName);
     if (mode === "new-tab") {
