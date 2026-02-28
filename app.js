@@ -2768,24 +2768,47 @@ function saveSettings() {
   toast("OK", "", "Настройки сохранены.");
 }
 
+let isExportingJson = false;
+
 function exportJson() {
-  hardenState();
-  const snapshot = deepCopy(state);
-  snapshot.version = 13;
-  const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
-    type: "application/json",
-  });
-  const url = URL.createObjectURL(blob);
-  const fileName = `schedule_${new Date().toISOString().slice(0, 10)}.json`;
-  const mode = downloadFile(url, fileName);
-  if (mode === "new-tab") {
-    toast(
-      "INFO",
-      "Экспорт JSON",
-      "Открыто в новой вкладке. В Safari сохраните файл через «Поделиться».",
-    );
-  } else {
-    toast("OK", "Экспорт JSON", "Файл скачан.");
+  if (isExportingJson) {
+    toast("INFO", "Экспорт JSON", "Экспорт уже выполняется...");
+    return;
+  }
+  
+  isExportingJson = true;
+  try {
+    hardenState();
+    const snapshot = deepCopy(state);
+    snapshot.version = 13;
+    const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const fileName = `schedule_${new Date().toISOString().slice(0, 10)}.json`;
+    const mode = downloadFile(url, fileName);
+    if (mode === "new-tab") {
+      toast(
+        "INFO",
+        "Экспорт JSON",
+        "Открыто в новой вкладке. В Safari сохраните файл через «Поделиться».",
+      );
+      // Don't revoke URL immediately for iOS/Mac - user may need it for sharing
+      if (!IS_IOS_WEBKIT) {
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      }
+    } else {
+      toast("OK", "Экспорт JSON", "Файл скачан.");
+      // For direct downloads, revoke after a short delay
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    }
+  } catch (e) {
+    toast("ERR", "Экспорт JSON", "Ошибка: " + e.message);
+  } finally {
+    // Reset flag after a short delay to allow download to start
+    setTimeout(() => {
+      isExportingJson = false;
+    }, 1000);
   }
 }
 
@@ -8185,7 +8208,7 @@ function dayMenu(dayIndex) {
     }));
     state.events = state.events.concat(copies);
     saveState();
-    // Обновляем оба дня: текущий (источник) и следующий (пр��емник)
+    // Обновляем оба дня: текущий (источник) и следующий (пр����емник)
     rerenderDayByIndex(dayIndex);
     rerenderDayByIndex(nextDayIndex);
     updateStats();
@@ -12797,15 +12820,21 @@ async function runWithTimeout(taskFactory, timeoutMs, timeoutMessage) {
 
 function openPendingIosDownloadWindow() {
   if (!IS_IOS_WEBKIT) return null;
+  
+  // Close any existing pending window to prevent multiple tabs
   if (pendingIosDownloadWindow && !pendingIosDownloadWindow.closed) {
-    return pendingIosDownloadWindow;
+    try {
+      pendingIosDownloadWindow.close();
+    } catch (_) {}
   }
+  pendingIosDownloadWindow = null;
+  
   try {
     pendingIosDownloadWindow = window.open("", "_blank");
     if (pendingIosDownloadWindow) {
       try {
         pendingIosDownloadWindow.document.write(
-          "<!doctype html><html><head><meta charset=\"utf-8\"><title>Preparing export</title></head><body style=\"font:16px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:24px;color:#111;\">Preparing export file...</body></html>",
+          "<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\"><title>Подготовка экспорта</title></head><body style=\"font:16px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:24px;color:#111;\">Подготовка файла экспорта...</body></html>",
         );
         pendingIosDownloadWindow.document.close();
       } catch (_) {}
@@ -12845,11 +12874,11 @@ function writeIosFallbackDownloadPage(targetWindow, openUrl, fileName) {
     targetWindow.document.open();
     targetWindow.document.write(`
 <!doctype html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Export</title>
+  <title>Экспорт файла</title>
   <style>
     body {
       margin: 0;
@@ -12891,6 +12920,16 @@ function writeIosFallbackDownloadPage(targetWindow, openUrl, fileName) {
       background: #e2e8f0;
       color: #0f172a;
     }
+    .btn-back {
+      background: #64748b;
+      color: #ffffff;
+      margin-top: 12px;
+    }
+    .btn-close {
+      background: #ef4444;
+      color: #ffffff;
+      margin-top: 8px;
+    }
     p { margin: 0 0 10px; line-height: 1.45; }
     .name { color: #475569; font-size: 14px; word-break: break-word; }
     .hint {
@@ -12903,20 +12942,26 @@ function writeIosFallbackDownloadPage(targetWindow, openUrl, fileName) {
 </head>
 <body>
   <div class="box">
-    <p><strong>File is ready.</strong></p>
-    <p>Tap "Share / Save". If it does not open, tap "Open image" and use long press to save.</p>
+    <p><strong>Файл готов.</strong></p>
+    <p>Нажмите «Поделиться / Сохранить». Если файл не открывается, нажмите «Открыть файл» и используйте долгое нажатие для сохранения.</p>
     <p class="name">${escapedName}</p>
     <div class="actions">
-      <button id="shareBtn" type="button" class="btn btn-share">Share / Save</button>
-      <a class="btn btn-open" href="${escapedUrl}" target="_self" rel="noopener">Open image</a>
+      <button id="shareBtn" type="button" class="btn btn-share">Поделиться / Сохранить</button>
+      <a class="btn btn-open" href="${escapedUrl}" target="_self" rel="noopener">Открыть файл</a>
     </div>
-    <p class="hint">For PNG/JPEG use "Save Image". For SVG use "Save to Files".</p>
+    <p class="hint">Для PNG/JPEG используйте «Сохранить изображение». Для SVG используйте «Сохранить в Файлы».</p>
+    <div class="actions" style="margin-top: 8px;">
+      <button id="backBtn" type="button" class="btn btn-back">← Назад</button>
+      <button id="closeBtn" type="button" class="btn btn-close">✕ Закрыть вкладку</button>
+    </div>
   </div>
   <script>
     (function () {
       const exportUrl = ${jsExportUrl};
       const exportName = ${jsExportName};
       const shareBtn = document.getElementById("shareBtn");
+      const backBtn = document.getElementById("backBtn");
+      const closeBtn = document.getElementById("closeBtn");
       if (!shareBtn) return;
 
       const detectMimeType = () => {
@@ -12924,6 +12969,7 @@ function writeIosFallbackDownloadPage(targetWindow, openUrl, fileName) {
         if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
         if (lower.endsWith(".png")) return "image/png";
         if (lower.endsWith(".svg")) return "image/svg+xml";
+        if (lower.endsWith(".json")) return "application/json";
         return "application/octet-stream";
       };
 
@@ -12959,16 +13005,33 @@ function writeIosFallbackDownloadPage(targetWindow, openUrl, fileName) {
       shareBtn.addEventListener("click", async function (event) {
         event.preventDefault();
         shareBtn.disabled = true;
-        shareBtn.textContent = "Preparing...";
+        shareBtn.textContent = "Подготовка...";
         const shared = await tryShare();
         if (shared) {
-          shareBtn.textContent = "Done";
+          shareBtn.textContent = "Готово";
           return;
         }
         shareBtn.disabled = false;
-        shareBtn.textContent = "Share / Save";
+        shareBtn.textContent = "Поделиться / Сохранить";
         window.location.href = exportUrl;
       });
+
+      if (backBtn) {
+        backBtn.addEventListener("click", function () {
+          window.history.back();
+        });
+      }
+
+      if (closeBtn) {
+        closeBtn.addEventListener("click", function () {
+          // Try to close the window (may be blocked by browser)
+          window.close();
+          // Fallback: show message if window.close() is blocked
+          setTimeout(() => {
+            alert("Закройте эту вкладку вручную или используйте кнопку «Назад»");
+          }, 500);
+        });
+      }
     })();
   </script>
 </body>
@@ -13274,20 +13337,25 @@ function downloadFile(dataUrl, fileName) {
       }
     }
 
-    let iosTargetWindow =
-      pendingIosDownloadWindow && !pendingIosDownloadWindow.closed
-        ? pendingIosDownloadWindow
-        : null;
     if (!openUrl) {
       resetPendingIosDownloadWindow({ close: true });
       return "new-tab";
     }
-    if (!iosTargetWindow) {
+
+    // Close any existing pending window to prevent multiple tabs
+    if (pendingIosDownloadWindow && !pendingIosDownloadWindow.closed) {
       try {
-        iosTargetWindow = window.open("", "_blank");
-      } catch (_) {
-        iosTargetWindow = null;
-      }
+        pendingIosDownloadWindow.close();
+      } catch (_) {}
+    }
+    pendingIosDownloadWindow = null;
+
+    // Open a fresh window for this download
+    let iosTargetWindow = null;
+    try {
+      iosTargetWindow = window.open("", "_blank");
+    } catch (_) {
+      iosTargetWindow = null;
     }
 
     // iOS WebKit often fails to navigate directly to large data URLs for week exports.
@@ -13298,7 +13366,6 @@ function downloadFile(dataUrl, fileName) {
       window.location.href = openUrl;
     }
 
-    resetPendingIosDownloadWindow();
     if (tempObjectUrl) {
       setTimeout(() => {
         try {
@@ -14193,7 +14260,7 @@ function fixTypography(text) {
     "ни",
     "то",
     "но",
-    "же",
+    "��е",
     "ли",
     "бы",
     "ко",
