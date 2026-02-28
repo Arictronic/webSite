@@ -13121,18 +13121,16 @@ async function downloadFromExportModal() {
       }
     }
 
-    // Для iOS/Mac открываем окно с кнопками, для остальных — прямое скачивание
-    if (IS_IOS_WEBKIT || /Mac/.test(navigator.userAgent)) {
-      const downloadWindow = window.open("", "_blank");
-      if (downloadWindow) {
-        writeIosFallbackDownloadPage(downloadWindow, finalDataUrl, fileName);
-      } else {
-        toast("WARN", "Export", "Браузер заблокировал всплывающее окно.");
-        downloadFile(finalDataUrl, fileName);
-      }
+    // Скачиваем через downloadFile (как JSON)
+    const mode = downloadFile(finalDataUrl, fileName);
+    if (mode === "new-tab") {
+      toast(
+        "INFO",
+        "Export",
+        "Открыто в новой вкладке. В Safari сохраните файл через «Поделиться».",
+      );
     } else {
-      // Windows/Android/Linux — скачиваем сразу
-      downloadFile(finalDataUrl, fileName);
+      toast("OK", "Export", `Файл «${fileName}» скачан`);
     }
 
     setTimeout(() => closeExportModal(), 500);
@@ -13244,20 +13242,16 @@ function downloadFile(dataUrl, fileName) {
       }
     }
 
-    let iosTargetWindow =
-      pendingIosDownloadWindow && !pendingIosDownloadWindow.closed
-        ? pendingIosDownloadWindow
-        : null;
     if (!openUrl) {
-      resetPendingIosDownloadWindow({ close: true });
       return "new-tab";
     }
-    if (!iosTargetWindow) {
-      try {
-        iosTargetWindow = window.open("", "_blank");
-      } catch (_) {
-        iosTargetWindow = null;
-      }
+
+    // Открываем новое окно для iOS (как в JSON)
+    let iosTargetWindow;
+    try {
+      iosTargetWindow = window.open("", "_blank");
+    } catch (_) {
+      iosTargetWindow = null;
     }
 
     if (iosTargetWindow && !iosTargetWindow.closed) {
@@ -13266,7 +13260,6 @@ function downloadFile(dataUrl, fileName) {
       window.location.href = openUrl;
     }
 
-    resetPendingIosDownloadWindow();
     if (tempObjectUrl) {
       setTimeout(() => {
         try {
