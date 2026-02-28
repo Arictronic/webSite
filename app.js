@@ -10654,7 +10654,8 @@ function fitExportPreviewToFrame(width, height) {
   );
   exportPreviewView.minScale = Math.max(0.05, exportPreviewView.fitScale * 0.5);
   exportPreviewView.maxScale = Math.max(2, exportPreviewView.fitScale * 12);
-  applyExportPreviewScale(exportPreviewView.fitScale, { anchorX: 0, anchorY: 0 });
+  // Устанавливаем масштаб 100% по умолчанию для корректного отображения
+  applyExportPreviewScale(1, { anchorX: 0, anchorY: 0 });
   if (expPreviewFrame) {
     expPreviewFrame.scrollLeft = 0;
     expPreviewFrame.scrollTop = 0;
@@ -13216,7 +13217,8 @@ async function downloadFromExportModal() {
         writeIosImageDownloadPage(iosWindow, finalDataUrl, fileName);
         toast("OK", "Export", "Открыто окно сохранения.");
       }
-      // Не закрываем pendingIosDownloadWindow - пользователь сам закроет
+      // Закрываем модальное окно экспорта
+      closeExportModal();
       return;
     } else {
       const mode = downloadFile(finalDataUrl, fileName);
