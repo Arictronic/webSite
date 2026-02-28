@@ -13277,50 +13277,45 @@ function downloadFile(dataUrl, fileName) {
     return "new-tab";
   }
 
-  const nav = window.navigator || {};
-  if (
-    typeof nav.msSaveOrOpenBlob === "function" ||
-    typeof nav.msSaveBlob === "function"
-  ) {
+  // Windows/Android/Linux - скачиваем через blob
+  try {
     const blob = dataUrlToBlob(dataUrl);
     if (blob) {
+      const nav = window.navigator || {};
       if (typeof nav.msSaveOrOpenBlob === "function") {
         nav.msSaveOrOpenBlob(blob, fileName);
-      } else {
-        nav.msSaveBlob(blob, fileName);
+        return "download";
       }
+      
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 1000);
+      
       return "download";
     }
+  } catch (e) {
+    console.error("downloadFile blob error:", e);
   }
-
+  
+  // Fallback для старых браузеров
   const a = document.createElement("a");
-  const supportsDownloadAttr = typeof a.download !== "undefined";
-  const objectUrl =
-    typeof dataUrl === "string" && dataUrl.startsWith("data:")
-      ? dataUrlToObjectUrl(dataUrl)
-      : "";
-  a.href = objectUrl || dataUrl;
-  if (supportsDownloadAttr) {
-    a.download = fileName;
-  } else {
-    a.target = "_blank";
-    a.rel = "noopener";
-  }
+  a.href = dataUrl;
+  a.target = "_blank";
+  a.rel = "noopener";
   a.style.display = "none";
-
   document.body.appendChild(a);
   a.click();
-
-  const revokeDelay = supportsDownloadAttr ? 600 : 60000;
-  setTimeout(() => {
-    document.body.removeChild(a);
-    if (objectUrl) {
-      URL.revokeObjectURL(objectUrl);
-    } else if (typeof dataUrl === "string" && dataUrl.startsWith("blob:")) {
-      URL.revokeObjectURL(dataUrl);
-    }
-  }, revokeDelay);
-  return supportsDownloadAttr ? "download" : "new-tab";
+  document.body.removeChild(a);
+  return "new-tab";
 }
 
 function isSvgDataUrl(value) {
