@@ -2787,12 +2787,6 @@ function exportJson() {
   } else {
     toast("OK", "Экспорт JSON", "Файл скачан.");
   }
-  // Очищаем URL через некоторое время
-  setTimeout(() => {
-    try {
-      URL.revokeObjectURL(url);
-    } catch (_) {}
-  }, 60000);
 }
 
 function importJson(file) {
@@ -8191,7 +8185,7 @@ function dayMenu(dayIndex) {
     }));
     state.events = state.events.concat(copies);
     saveState();
-    // Обновляем оба дня: текущий (источник) и следующий (пр����������������������������емник)
+    // Обновляем оба дня: текущий (источник) и следующий (пр������������������������������������емник)
     rerenderDayByIndex(dayIndex);
     rerenderDayByIndex(nextDayIndex);
     updateStats();
@@ -12847,6 +12841,15 @@ function writeIosFallbackDownloadPage(targetWindow, openUrl, fileName) {
   const jsExportUrl = JSON.stringify(safeUrl);
   const jsExportName = JSON.stringify(normalizedName || "export");
 
+  // Получаем текущие цвета темы
+  const theme = state.settings.theme;
+  const tokens = theme.mode === "light" ? theme.customTokens : 
+    theme.mode === "dark" ? THEME_PRESETS.find(p => p.id === "graphite-dark").tokens : theme.customTokens;
+  const bg = tokens.bg || "#f6f7fb";
+  const card = tokens.card || "#ffffff";
+  const text = tokens.text || "#0f172a";
+  const muted = tokens.muted || "#64748b";
+
   try {
     targetWindow.document.open();
     targetWindow.document.write(`
@@ -12854,75 +12857,82 @@ function writeIosFallbackDownloadPage(targetWindow, openUrl, fileName) {
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <title>Экспорт файла</title>
   <style>
+    * { box-sizing: border-box; }
     body {
       margin: 0;
       padding: 20px;
       font: 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      color: #111827;
-      background: #f8fafc;
+      color: ${text};
+      background: rgba(0, 0, 0, 0.5);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     .box {
-      max-width: 560px;
-      margin: 0 auto;
-      background: #ffffff;
-      border: 1px solid #e2e8f0;
-      border-radius: 12px;
-      padding: 16px;
+      width: 100%;
+      max-width: 400px;
+      background: ${card};
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
     }
     .actions {
       display: flex;
-      flex-wrap: wrap;
+      flex-direction: column;
       gap: 10px;
-      margin-top: 12px;
+      margin-top: 16px;
     }
     .btn {
       display: inline-block;
-      padding: 10px 14px;
-      border-radius: 10px;
+      padding: 14px 20px;
+      border-radius: 12px;
       border: 0;
       text-decoration: none;
       font-weight: 600;
       cursor: pointer;
-      font-size: 15px;
+      font-size: 16px;
       line-height: 1.2;
+      width: 100%;
+      text-align: center;
+      transition: opacity 0.2s;
+    }
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
     }
     .btn-save {
-      background: #0f172a;
-      color: #ffffff;
-    }
-    .btn-open {
-      background: #e2e8f0;
-      color: #0f172a;
+      background: ${text};
+      color: ${card};
     }
     .btn-back {
-      background: #64748b;
-      color: #ffffff;
-      margin-top: 12px;
-      width: 100%;
+      background: ${bg};
+      color: ${muted};
     }
-    p { margin: 0 0 10px; line-height: 1.45; }
-    .name { color: #475569; font-size: 14px; word-break: break-word; }
-    .hint {
-      margin-top: 12px;
-      color: #64748b;
-      font-size: 13px;
-      line-height: 1.35;
+    .title {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .name {
+      color: ${muted};
+      font-size: 14px;
+      word-break: break-word;
+      margin-top: 8px;
     }
   </style>
 </head>
 <body>
   <div class="box">
-    <p><strong>Файл готов.</strong></p>
-    <p>Нажмите «Сохранить» для загрузки файла.</p>
+    <div class="title">Файл готов</div>
     <p class="name">${escapedName}</p>
     <div class="actions">
       <button id="saveBtn" type="button" class="btn btn-save">Сохранить</button>
+      <button id="backBtn" type="button" class="btn btn-back">← Назад</button>
     </div>
-    <p class="hint">Используйте кнопку «Сохранить» для загрузки файла.</p>
-    <button id="backBtn" type="button" class="btn btn-back">← Назад</button>
   </div>
   <script>
     (function () {
@@ -12940,49 +12950,54 @@ function writeIosFallbackDownloadPage(targetWindow, openUrl, fileName) {
         return "application/octet-stream";
       };
 
+      const trySave = async () => {
+        if (
+          typeof navigator === "undefined" ||
+          typeof navigator.share !== "function" ||
+          typeof fetch !== "function" ||
+          typeof File !== "function"
+        ) {
+          return false;
+        }
+
+        try {
+          const response = await fetch(exportUrl);
+          if (!response || !response.ok) return false;
+          const blob = await response.blob();
+          if (!blob) return false;
+          const file = new File([blob], exportName, {
+            type: blob.type || detectMimeType(),
+          });
+          const payload = { files: [file] };
+          if (typeof navigator.canShare === "function" && !navigator.canShare(payload)) {
+            return false;
+          }
+          await navigator.share(payload);
+          return true;
+        } catch (_) {
+          return false;
+        }
+      };
+
       if (saveBtn) {
         saveBtn.addEventListener("click", async function (event) {
           event.preventDefault();
           saveBtn.disabled = true;
           saveBtn.textContent = "Подготовка...";
-
-          // Пробуем navigator.share для iOS
-          if (typeof navigator !== "undefined" && typeof navigator.share === "function" && typeof fetch === "function" && typeof File === "function") {
-            try {
-              const response = await fetch(exportUrl);
-              if (response && response.ok) {
-                const blob = await response.blob();
-                if (blob) {
-                  const file = new File([blob], exportName, {
-                    type: blob.type || detectMimeType(),
-                  });
-                  const payload = { files: [file] };
-                  if (typeof navigator.canShare === "function" && !navigator.canShare(payload)) {
-                    throw new Error("Cannot share");
-                  }
-                  await navigator.share(payload);
-                  saveBtn.textContent = "Сохранено ✓";
-                  saveBtn.disabled = false;
-                  return;
-                }
-              }
-            } catch (_) {}
+          const saved = await trySave();
+          if (saved) {
+            saveBtn.textContent = "Готово";
+            return;
           }
-
-          // Fallback: прямое скачивание
+          saveBtn.disabled = false;
+          saveBtn.textContent = "Сохранить";
           window.location.href = exportUrl;
-          setTimeout(() => {
-            saveBtn.textContent = "Готово ✓";
-            saveBtn.disabled = false;
-          }, 1000);
         });
       }
 
       if (backBtn) {
         backBtn.addEventListener("click", function () {
-          // Пробуем вернуться на предыдущую страницу
           window.history.back();
-          // Если не сработало - пробуем закрыть вкладку
           setTimeout(() => {
             window.close();
           }, 300);
@@ -13017,7 +13032,7 @@ async function tryShareFileFromDataUrl(dataUrl, fileName) {
 
   const shareData = {
     files: [fileForShare],
-    // Не передаём title, чтобы не создавалось текстовое сообщение
+    title: safeFileName(fileName),
   };
 
   try {
@@ -13293,28 +13308,39 @@ function downloadFile(dataUrl, fileName) {
       }
     }
 
+    let iosTargetWindow =
+      pendingIosDownloadWindow && !pendingIosDownloadWindow.closed
+        ? pendingIosDownloadWindow
+        : null;
     if (!openUrl) {
-      return "download";
+      resetPendingIosDownloadWindow({ close: true });
+      return "new-tab";
+    }
+    if (!iosTargetWindow) {
+      try {
+        iosTargetWindow = window.open("", "_blank");
+      } catch (_) {
+        iosTargetWindow = null;
+      }
     }
 
-    // Для JSON экспорта - скачиваем в том же окне без открытия новых вкладок
-    // Создаём временную ссылку и кликаем по ней
-    const a = document.createElement("a");
-    a.href = openUrl;
-    a.download = fileName;
-    a.style.display = "none";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    // iOS WebKit often fails to navigate directly to large data URLs for week exports.
+    // Serve a stable fallback page with an explicit "open/save" action instead.
+    if (iosTargetWindow && !iosTargetWindow.closed) {
+      writeIosFallbackDownloadPage(iosTargetWindow, openUrl, fileName);
+    } else {
+      window.location.href = openUrl;
+    }
 
+    resetPendingIosDownloadWindow();
     if (tempObjectUrl) {
       setTimeout(() => {
         try {
           URL.revokeObjectURL(tempObjectUrl);
         } catch (_) {}
-      }, 5000);
+      }, 10 * 60 * 1000);
     }
-    return "download";
+    return "new-tab";
   }
 
   const nav = window.navigator || {};
