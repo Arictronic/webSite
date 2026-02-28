@@ -10654,7 +10654,8 @@ function fitExportPreviewToFrame(width, height) {
   );
   exportPreviewView.minScale = Math.max(0.05, exportPreviewView.fitScale * 0.5);
   exportPreviewView.maxScale = Math.max(2, exportPreviewView.fitScale * 12);
-  applyExportPreviewScale(exportPreviewView.fitScale, { anchorX: 0, anchorY: 0 });
+  // Устанавливаем масштаб 100% для корректного отображения
+  applyExportPreviewScale(1, { anchorX: 0, anchorY: 0 });
   if (expPreviewFrame) {
     expPreviewFrame.scrollLeft = 0;
     expPreviewFrame.scrollTop = 0;
@@ -13089,13 +13090,8 @@ async function downloadFromExportModal() {
   const opts = getExportOptsFromUI();
   const skipSvgPreviewForIosRaster = IS_IOS_WEBKIT && opts.fmt !== "svg";
 
-  // Для iOS заранее открываем окно
-  if (IS_IOS_WEBKIT) {
-    openPendingIosDownloadWindow();
-  }
-
   try {
-    toast("INFO", "Export", "Preparing file...");
+    toast("INFO", "Export", "Подготовка файла...");
 
     let exportResult = null;
     if (!skipSvgPreviewForIosRaster) {
@@ -13104,7 +13100,6 @@ async function downloadFromExportModal() {
 
       if (!exportResult || !exportResult.dataUrl) {
         toast("ERR", "Export", "Failed to render export image");
-        resetPendingIosDownloadWindow({ close: true });
         return;
       }
 
@@ -13214,12 +13209,16 @@ async function downloadFromExportModal() {
       const iosWindow = pendingIosDownloadWindow && !pendingIosDownloadWindow.closed
         ? pendingIosDownloadWindow
         : null;
-      
+
       if (iosWindow) {
         writeIosImageDownloadPage(iosWindow, finalDataUrl, fileName);
         toast("OK", "Export", "Открыто окно сохранения.");
       }
-      // Не закрываем pendingIosDownloadWindow - пользователь сам закроет
+      // Закрываем модальное окно экспорта
+      setTimeout(() => {
+        closeExportModal();
+        resetPendingIosDownloadWindow();
+      }, 200);
       return;
     } else {
       const mode = downloadFile(finalDataUrl, fileName);
