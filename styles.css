@@ -1276,6 +1276,12 @@ button:hover:not([disabled]) { filter: brightness(0.97); }
   transition: all 0.2s ease;
 }
 
+.field input[type="color"] {
+  height: 44px;
+  padding: 4px;
+  cursor: pointer;
+}
+
 .field input:focus,
 .field select:focus,
 .field textarea:focus {

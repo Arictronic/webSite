@@ -10371,14 +10371,7 @@ function openExportModal() {
       firstControl.focus({ preventScroll: true });
     }
   }, 20);
-  setTimeout(() => {
-    if (!exportBackdrop.classList.contains("show")) return;
-    if (typeof buildExportPreview === "function") {
-      buildExportPreview().catch((error) => {
-        console.error("Auto export preview build failed:", error);
-      });
-    }
-  }, 80);
+  // Не генерируем предпросмотр автоматически - только по запросу пользователя
 }
 
 function closeExportModal() {
@@ -11626,10 +11619,10 @@ async function exportToSvg(opts) {
 
     const exportSchedule = clone.querySelector(".schedule");
     if (exportSchedule) {
-      const rect = exportSchedule.getBoundingClientRect();
-      const fullWidth = exportSchedule.scrollWidth || rect.width || exportWidth;
-      const fullHeight =
-        exportSchedule.scrollHeight || rect.height || exportHeight;
+      // На iOS используем scrollWidth/scrollHeight вместо getBoundingClientRect
+      // который может возвращать только видимую часть
+      const fullWidth = exportSchedule.scrollWidth || exportSchedule.offsetWidth || exportWidth;
+      const fullHeight = exportSchedule.scrollHeight || exportSchedule.offsetHeight || exportHeight;
       exportWidth = Math.max(100, Math.ceil(fullWidth));
       exportHeight = Math.max(100, Math.ceil(fullHeight));
       clone.style.width = `${exportWidth}px`;
@@ -12807,7 +12800,7 @@ function openPendingIosDownloadWindow() {
     if (pendingIosDownloadWindow) {
       try {
         pendingIosDownloadWindow.document.write(
-          "<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\"><title>Подготовка экспорта</title></head><body style=\"font:16px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:24px;color:#111;\">Подготовка файла экспорта...</body></html>",
+          "<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Подготовка экспорта</title><style>body{margin:0;padding:0;font:16px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111;background:#f8fafc;min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column}.loader{width:48px;height:48px;border:5px solid #e2e8f0;border-bottom-color:#0f172a;border-radius:50%;animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.text{margin-top:24px;font-size:18px;color:#475569}</style></head><body><div class=\"loader\"></div><div class=\"text\">Подготовка файла экспорта…</div></body></html>",
         );
         pendingIosDownloadWindow.document.close();
       } catch (_) {}
@@ -12842,6 +12835,9 @@ function writeIosImageDownloadPage(targetWindow, openUrl, fileName) {
     .replace(/>/g, "&gt;");
   const jsExportUrl = JSON.stringify(safeUrl);
   const jsExportName = JSON.stringify(normalizedName || "export");
+  
+  // Проверяем, является ли файл SVG
+  const isSvg = fileName.toLowerCase().endsWith(".svg");
 
   // Получаем текущие цвета темы
   const theme = state.settings.theme;
@@ -12854,7 +12850,7 @@ function writeIosImageDownloadPage(targetWindow, openUrl, fileName) {
 
   try {
     targetWindow.document.open();
-    targetWindow.document.write(`<!doctype html><html lang="ru"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" /><title>Сохранение изображения</title><style>*{box-sizing:border-box}body{margin:0;padding:20px;font:16px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:${text};background:rgba(0,0,0,0.5);min-height:100vh;display:flex;align-items:center;justify-content:center}.box{width:100%;max-width:400px;background:${card};border-radius:16px;padding:24px;box-shadow:0 20px 40px rgba(0,0,0,0.3)}.actions{display:flex;flex-direction:column;gap:10px;margin-top:16px}.btn{display:inline-block;padding:14px 20px;border-radius:12px;border:0;text-decoration:none;font-weight:600;cursor:pointer;font-size:16px;line-height:1.2;width:100%;text-align:center;transition:opacity 0.2s}.btn:disabled{opacity:0.6;cursor:not-allowed}.btn-download{background:${text};color:${card}}.btn-back{background:${bg};color:${muted}}.title{font-size:20px;font-weight:700;margin-bottom:8px}.name{color:${muted};font-size:14px;word-break:break-word;margin-top:8px}.preview{margin-top:16px;border-radius:8px;overflow:hidden;background:${bg};max-height:300px;display:flex;align-items:center;justify-content:center}.preview img{max-width:100%;max-height:300px;object-fit:contain}</style></head><body><div class="box"><div class="title">Изображение готово</div><p class="name">${escapedName}</p><div class="preview"><img src="${escapedUrl}" alt="Preview"/></div><div class="actions"><button id="downloadBtn" type="button" class="btn btn-download">Скачать</button><button id="backBtn" type="button" class="btn btn-back">← Назад</button></div></div><script>(function(){const exportUrl=${jsExportUrl};const exportName=${jsExportName};const downloadBtn=document.getElementById("downloadBtn");const backBtn=document.getElementById("backBtn");const detectMimeType=()=>{const lower=String(exportName||"").toLowerCase();if(lower.endsWith(".jpg")||lower.endsWith(".jpeg"))return"image/jpeg";if(lower.endsWith(".png"))return"image/png";if(lower.endsWith(".svg"))return"image/svg+xml";return"application/octet-stream"};const tryDownload=async()=>{if(typeof navigator==="undefined"||typeof navigator.share!=="function"||typeof fetch!=="function"||typeof File!=="function"){return false}try{const response=await fetch(exportUrl);if(!response||!response.ok)return false;const blob=await response.blob();if(!blob)return false;const file=new File([blob],exportName,{type:blob.type||detectMimeType()});const payload={files:[file]};if(typeof navigator.canShare==="function"&&!navigator.canShare(payload)){return false}await navigator.share(payload);return true}catch(_){return false}};if(downloadBtn){downloadBtn.addEventListener("click",async function(event){event.preventDefault();downloadBtn.disabled=true;downloadBtn.textContent="Подготовка...";const downloaded=await tryDownload();if(downloaded){downloadBtn.textContent="Готово";return}downloadBtn.disabled=false;downloadBtn.textContent="Скачать";window.location.href=exportUrl})}if(backBtn){backBtn.addEventListener("click",function(){window.history.back();setTimeout(()=>{window.close()},300)})}}())<\/script></body></html>`);
+    targetWindow.document.write(`<!doctype html><html lang="ru"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" /><title>Сохранение изображения</title><style>*{box-sizing:border-box}body{margin:0;padding:20px;font:16px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:${text};background:rgba(0,0,0,0.5);min-height:100vh;display:flex;align-items:center;justify-content:center}.box{width:100%;max-width:400px;background:${card};border-radius:16px;padding:24px;box-shadow:0 20px 40px rgba(0,0,0,0.3)}.actions{display:flex;flex-direction:column;gap:10px;margin-top:16px}.btn{display:inline-block;padding:14px 20px;border-radius:12px;border:0;text-decoration:none;font-weight:600;cursor:pointer;font-size:16px;line-height:1.2;width:100%;text-align:center;transition:opacity 0.2s}.btn:disabled{opacity:0.6;cursor:not-allowed}.btn-download{background:${text};color:${card}}.btn-back{background:${bg};color:${muted}}.title{font-size:20px;font-weight:700;margin-bottom:8px}.name{color:${muted};font-size:14px;word-break:break-word;margin-top:8px}.preview{margin-top:16px;border-radius:8px;overflow:hidden;background:${bg};max-height:300px;display:flex;align-items:center;justify-content:center}.preview img{max-width:100%;max-height:300px;object-fit:contain}.preview object{max-width:100%;max-height:300px}</style></head><body><div class="box"><div class="title">Изображение готово</div><p class="name">${escapedName}</p><div class="preview">${isSvg ? `<object data="${escapedUrl}" type="image/svg+xml"></object>` : `<img src="${escapedUrl}" alt="Preview"/>`}</div><div class="actions"><button id="downloadBtn" type="button" class="btn btn-download">Скачать</button><button id="backBtn" type="button" class="btn btn-back">← Назад</button></div></div><script>(function(){const exportUrl=${jsExportUrl};const exportName=${jsExportName};const downloadBtn=document.getElementById("downloadBtn");const backBtn=document.getElementById("backBtn");const detectMimeType=()=>{const lower=String(exportName||"").toLowerCase();if(lower.endsWith(".jpg")||lower.endsWith(".jpeg"))return"image/jpeg";if(lower.endsWith(".png"))return"image/png";if(lower.endsWith(".svg"))return"image/svg+xml";return"application/octet-stream"};const tryDownload=async()=>{if(typeof navigator==="undefined"||typeof navigator.share!=="function"||typeof fetch!=="function"||typeof File!=="function"){return false}try{const response=await fetch(exportUrl);if(!response||!response.ok)return false;const blob=await response.blob();if(!blob)return false;const file=new File([blob],exportName,{type:blob.type||detectMimeType()});const payload={files:[file]};if(typeof navigator.canShare==="function"&&!navigator.canShare(payload)){return false}await navigator.share(payload);return true}catch(_){return false}};if(downloadBtn){downloadBtn.addEventListener("click",async function(event){event.preventDefault();downloadBtn.disabled=true;downloadBtn.textContent="Подготовка...";const downloaded=await tryDownload();if(downloaded){downloadBtn.textContent="Готово";return}downloadBtn.disabled=false;downloadBtn.textContent="Скачать";window.location.href=exportUrl})}if(backBtn){backBtn.addEventListener("click",function(){window.history.back();setTimeout(()=>{window.close()},300)})}}())<\/script></body></html>`);
     targetWindow.document.close();
   } catch (_) {}
 }
@@ -14071,7 +14067,7 @@ function applyCellSpacingForExport(targetElement) {
 function parseRgba(colorString) {
   if (!colorString) return null;
 
-  // Регулярное выражение для rgb(r, g, b)
+  // Регуляр��ое выражение для rgb(r, g, b)
   const rgbMatch = colorString.match(
     /^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i,
   );
