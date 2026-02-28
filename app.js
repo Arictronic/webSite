@@ -13069,41 +13069,67 @@ async function downloadFromExportModal() {
     const stamp = new Date().toISOString().slice(0, 10);
     const time = new Date().toISOString().slice(11, 19).replace(/:/g, "-");
 
-    // Генерируем изображение
-    const exportResult = await executeExport({ ...opts, fmt: "svg" });
+    // Проверяем размер экспорта - для больших размеров используем SVG
+    const isLargeExport = opts.preset && 
+      (opts.preset.w > 4000 || opts.preset.h > 3000);
+
+    // Генерируем изображение с таймаутом
+    let exportResult;
+    try {
+      exportResult = await Promise.race([
+        executeExport({ ...opts, fmt: "svg" }),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("Превышено время генерации")), 60000)
+        ),
+      ]);
+    } catch (genError) {
+      console.error("Export generation error:", genError);
+      toast("WARN", "Export", "Генерация заняла слишком много времени. Используем упрощённый формат.");
+      // Пробуем скомпактным режимом
+      exportResult = await executeExport({ ...opts, fmt: "svg", compact: true });
+    }
+
     if (!exportResult || !exportResult.dataUrl) {
       toast("ERR", "Export", "Не удалось сгенерировать изображение");
       if (iosWindow && !iosWindow.closed) iosWindow.close();
       return;
     }
 
-    if (opts.fmt === "svg") {
+    // Для больших экспортов или SVG формата - используем SVG напрямую
+    if (opts.fmt === "svg" || isLargeExport) {
       finalDataUrl = exportResult.dataUrl;
       fileName = `расписание_${stamp}_${time}.svg`;
+      
+      if (isLargeExport && opts.fmt !== "svg") {
+        toast("INFO", "Export", "Большой размер экспорта. Использован формат SVG для совместимости.");
+      }
     } else {
       // Конвертируем SVG в PNG/JPEG
       let rasterResult = null;
       try {
         const canvas = await svgToCanvas(exportResult.dataUrl, opts);
         rasterResult = convertCanvasToRequestedDataUrl(canvas, opts);
-      } catch (_) {
-        // Fallback
+      } catch (e) {
+        console.warn("svgToCanvas failed:", e);
       }
 
       if (!rasterResult) {
         try {
           const canvas = await exportToRasterCanvas(opts);
           rasterResult = convertCanvasToRequestedDataUrl(canvas, opts);
-        } catch (_) {
-          // Используем SVG как fallback
-          finalDataUrl = exportResult.dataUrl;
-          fileName = `расписание_${stamp}_${time}.svg`;
+        } catch (e) {
+          console.warn("exportToRasterCanvas failed:", e);
         }
       }
 
       if (rasterResult && rasterResult.dataUrl) {
         finalDataUrl = embedDpiInImage(rasterResult.dataUrl, 300);
         fileName = `расписание_${stamp}_${time}.${opts.fmt === "jpeg" ? "jpg" : "png"}`;
+      } else {
+        // Fallback на SVG
+        finalDataUrl = exportResult.dataUrl;
+        fileName = `расписание_${stamp}_${time}.svg`;
+        toast("INFO", "Export", "Использован формат SVG для совместимости.");
       }
     }
 
