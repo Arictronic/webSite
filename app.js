@@ -10654,8 +10654,7 @@ function fitExportPreviewToFrame(width, height) {
   );
   exportPreviewView.minScale = Math.max(0.05, exportPreviewView.fitScale * 0.5);
   exportPreviewView.maxScale = Math.max(2, exportPreviewView.fitScale * 12);
-  // Устанавливаем масштаб 100% по умолчанию для корректного отображения
-  applyExportPreviewScale(1, { anchorX: 0, anchorY: 0 });
+  applyExportPreviewScale(exportPreviewView.fitScale, { anchorX: 0, anchorY: 0 });
   if (expPreviewFrame) {
     expPreviewFrame.scrollLeft = 0;
     expPreviewFrame.scrollTop = 0;
@@ -10996,16 +10995,18 @@ function showSvgPreviewAsImage(svgDataUrl, width, height) {
     const imgW = expPreviewImg.naturalWidth || safeW;
     const imgH = expPreviewImg.naturalHeight || safeH;
     exportPreviewView.element = expPreviewImg;
-    // Не устанавливаем style.width/height - пусть image сам рендерится
     fitExportPreviewToFrame(imgW, imgH);
   };
   expPreviewImg.onerror = () => {
     console.error("Failed to load export preview image");
   };
 
+  expPreviewImg.style.width = `${safeW}px`;
+  expPreviewImg.style.height = `${safeH}px`;
   expPreviewImg.src = svgDataUrl;
   expPreviewImg.style.display = "block";
-  // Не устанавливаем exportPreviewView.element до загрузки
+  exportPreviewView.element = expPreviewImg;
+  fitExportPreviewToFrame(safeW, safeH);
   return true;
 }
 
@@ -13088,19 +13089,22 @@ async function downloadFromExportModal() {
   const opts = getExportOptsFromUI();
   const skipSvgPreviewForIosRaster = IS_IOS_WEBKIT && opts.fmt !== "svg";
 
+  // Для iOS заранее открываем окно
+  if (IS_IOS_WEBKIT) {
+    openPendingIosDownloadWindow();
+  }
+
   try {
-    toast("INFO", "Export", "Подготовка файла...");
+    toast("INFO", "Export", "Preparing file...");
 
     let exportResult = null;
-    
-    // Для SVG всегда генерируем preview
-    // Для PNG/JPEG на iOS не генерируем preview (сразу конвертируем в canvas)
     if (!skipSvgPreviewForIosRaster) {
       const svgOpts = { ...opts, fmt: "svg" };
       exportResult = await executeExport(svgOpts);
 
       if (!exportResult || !exportResult.dataUrl) {
         toast("ERR", "Export", "Failed to render export image");
+        resetPendingIosDownloadWindow({ close: true });
         return;
       }
 
@@ -13110,6 +13114,9 @@ async function downloadFromExportModal() {
         ...svgOpts,
         timestamp: Date.now(),
       };
+
+      displaySvgPreview(exportResult.dataUrl);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
     }
 
     let finalDataUrl;
@@ -13202,13 +13209,8 @@ async function downloadFromExportModal() {
       }
     }
 
-    // Для iOS открываем модальное окно для скачивания
+    // Для iOS используем то же модальное окно как для JSON
     if (IS_IOS_WEBKIT) {
-      // Открываем окно если ещё не открыто
-      if (!pendingIosDownloadWindow || pendingIosDownloadWindow.closed) {
-        openPendingIosDownloadWindow();
-      }
-      
       const iosWindow = pendingIosDownloadWindow && !pendingIosDownloadWindow.closed
         ? pendingIosDownloadWindow
         : null;
@@ -13217,8 +13219,7 @@ async function downloadFromExportModal() {
         writeIosImageDownloadPage(iosWindow, finalDataUrl, fileName);
         toast("OK", "Export", "Открыто окно сохранения.");
       }
-      // Закрываем модальное окно экспорта
-      closeExportModal();
+      // Не закрываем pendingIosDownloadWindow - пользователь сам закроет
       return;
     } else {
       const mode = downloadFile(finalDataUrl, fileName);
