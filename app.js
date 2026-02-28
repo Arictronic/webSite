@@ -8185,7 +8185,7 @@ function dayMenu(dayIndex) {
     }));
     state.events = state.events.concat(copies);
     saveState();
-    // Обновляем оба дня: текущий (источник) и следующий (пр��������������емник)
+    // Обновляем оба дня: текущий (источник) и следующий (пр��������������������������емник)
     rerenderDayByIndex(dayIndex);
     rerenderDayByIndex(nextDayIndex);
     updateStats();
@@ -12910,13 +12910,13 @@ function writeIosFallbackDownloadPage(targetWindow, openUrl, fileName) {
 <body>
   <div class="box">
     <p><strong>Файл готов.</strong></p>
-    <p>Нажмите «Сохранить». Если файл не открывается, нажмите «Открыть файл» и используйте долгое нажатие для сохранения.</p>
+    <p>Нажмите «Сохранить» для загрузки файла.</p>
     <p class="name">${escapedName}</p>
     <div class="actions">
       <button id="saveBtn" type="button" class="btn btn-save">Сохранить</button>
-      <a class="btn btn-open" href="${escapedUrl}" target="_self" rel="noopener">Открыть файл</a>
+      <a class="btn btn-open" href="${escapedUrl}" target="_blank" download="${escapedName}" rel="noopener">Скачать напрямую</a>
     </div>
-    <p class="hint">Для PNG/JPEG используйте «Сохранить изображение». Для SVG используйте «Сохранить в Файлы».</p>
+    <p class="hint">Если кнопка «Сохранить» не работает, используйте «Скачать напрямую».</p>
     <button id="backBtn" type="button" class="btn btn-back">← Назад</button>
   </div>
   <script>
@@ -12971,21 +12971,25 @@ function writeIosFallbackDownloadPage(targetWindow, openUrl, fileName) {
           saveBtn.textContent = "Подготовка...";
           const saved = await trySave();
           if (saved) {
-            saveBtn.textContent = "Готово";
+            saveBtn.textContent = "Сохранено ✓";
+            saveBtn.disabled = false;
             return;
           }
           saveBtn.disabled = false;
           saveBtn.textContent = "Сохранить";
-          window.location.href = exportUrl;
+          // Fallback: открываем файл напрямую если share не сработал
+          // Пользователь может использовать кнопку "Открыть файл" или долгое нажатие
         });
       }
 
       if (backBtn) {
         backBtn.addEventListener("click", function () {
-          window.close();
+          // Пробуем вернуться на предыдущую страницу
+          window.history.back();
+          // Если не сработало - пробуем закрыть вкладку
           setTimeout(() => {
-            alert("Закройте эту вкладку вручную");
-          }, 500);
+            window.close();
+          }, 300);
         });
       }
     })();
@@ -13293,14 +13297,18 @@ function downloadFile(dataUrl, fileName) {
       }
     }
 
-    let iosTargetWindow =
-      pendingIosDownloadWindow && !pendingIosDownloadWindow.closed
-        ? pendingIosDownloadWindow
-        : null;
     if (!openUrl) {
       resetPendingIosDownloadWindow({ close: true });
       return "new-tab";
     }
+
+    // Для JSON экспорта (не из modal) - используем pendingIosDownloadWindow если есть
+    let iosTargetWindow =
+      pendingIosDownloadWindow && !pendingIosDownloadWindow.closed
+        ? pendingIosDownloadWindow
+        : null;
+
+    // Если нет pending окна, создаём новое
     if (!iosTargetWindow) {
       try {
         iosTargetWindow = window.open("", "_blank");
@@ -13313,11 +13321,14 @@ function downloadFile(dataUrl, fileName) {
     // Serve a stable fallback page with an explicit "open/save" action instead.
     if (iosTargetWindow && !iosTargetWindow.closed) {
       writeIosFallbackDownloadPage(iosTargetWindow, openUrl, fileName);
-    } else {
+    } else if (iosTargetWindow === null) {
+      // Popup blocked - fallback to direct download
       window.location.href = openUrl;
     }
+    // Если окно было но закрылось - ничего не делаем (пользователь уже закрыл)
 
-    resetPendingIosDownloadWindow();
+    // Не закрываем pendingIosDownloadWindow для JSON экспорта
+    // Пользователь должен сам закрыть вкладку после сохранения
     if (tempObjectUrl) {
       setTimeout(() => {
         try {
@@ -14200,7 +14211,7 @@ function fixTypography(text) {
     "у",
     "и",
     "а",
-    "на",
+    "��а",
     "по",
     "из",
     "за",
