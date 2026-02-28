@@ -605,6 +605,9 @@ let filterCache = new Map();
 let lastPreview = null;
 let currentPreviewObjectUrl = null;
 let pendingIosDownloadWindow = null;
+let preparedExportFile = null;
+let exportPreparationPromise = null;
+let exportPreparationTimer = null;
 let modalScrollLockState = {
   active: false,
   scrollY: 0,
@@ -10106,6 +10109,57 @@ function updateLogoCSSVariables() {
 
 function invalidateExportPreview() {
   clearPreviewCache();
+  scheduleExportFilePreparation();
+}
+
+function getExportOptionsCacheKey(opts) {
+  const preset = opts && typeof opts.preset === "object" ? opts.preset : {};
+  return JSON.stringify({
+    mode: String(opts?.mode || ""),
+    fmt: String(opts?.fmt || ""),
+    imageFormat: String(opts?.imageFormat || ""),
+    quality: Number(opts?.quality || 0),
+    background: opts?.background ?? null,
+    compact: Boolean(opts?.compact),
+    hideEmpty: Boolean(opts?.hideEmpty),
+    presetId: String(preset.id || ""),
+    presetW: Number(preset.w || 0),
+    presetH: Number(preset.h || 0),
+    dayIndex: Number(opts?.dayIndex ?? -1),
+    dayOverlay: Number(opts?.dayOverlay ?? 0),
+    dayTopOffset: Number(opts?.dayTopOffset ?? 0),
+    dayTitleColor: String(opts?.dayTitleColor || ""),
+    dayBackgroundDataUrl: String(opts?.dayBackgroundDataUrl || ""),
+  });
+}
+
+function isExportModalVisible() {
+  return (
+    !!exportBackdrop &&
+    !exportBackdrop.hidden &&
+    exportBackdrop.classList.contains("show")
+  );
+}
+
+function scheduleExportFilePreparation(delayMs = 180) {
+  if (!IS_APPLE_DOWNLOAD_TAB) return;
+  if (!isExportModalVisible()) return;
+  if (exportPreparationTimer) {
+    clearTimeout(exportPreparationTimer);
+  }
+  exportPreparationTimer = setTimeout(() => {
+    exportPreparationTimer = null;
+    if (!isExportModalVisible()) return;
+    try {
+      const opts = getExportOptsFromUI();
+      const cacheKey = getExportOptionsCacheKey(opts);
+      if (preparedExportFile && preparedExportFile.key === cacheKey) return;
+      prepareExportFile(opts, {
+        cacheKey,
+        notifyGeneration: false,
+      }).catch(() => {});
+    } catch (_) {}
+  }, Math.max(0, Number(delayMs) || 0));
 }
 
 function getExportDaySettings() {
@@ -10368,6 +10422,7 @@ function openExportModal() {
   invalidateExportPreview();
   syncExportModalUI();
   setBackdropVisible(exportBackdrop, true);
+  scheduleExportFilePreparation(240);
   setTimeout(() => {
     const firstControl = expPreset || expFormat || $("btnExpPreview");
     if (firstControl && typeof firstControl.focus === "function") {
@@ -11108,6 +11163,12 @@ function clearPreviewCache() {
 
   // Очищаем данные предпросмотра
   lastPreview = null;
+  preparedExportFile = null;
+  exportPreparationPromise = null;
+  if (exportPreparationTimer) {
+    clearTimeout(exportPreparationTimer);
+    exportPreparationTimer = null;
+  }
 
   console.log("Кэш предпросмотра очищен");
 }
@@ -13059,79 +13120,129 @@ function resetPendingIosDownloadWindow({ close = false } = {}) {
   pendingIosDownloadWindow = null;
 }
 
-async function downloadFromExportModal() {
-  // В iOS/macOS pre-open вкладку в том же пользовательском жесте,
-  // иначе Safari может заблокировать popup после await.
-  if (IS_APPLE_DOWNLOAD_TAB) {
-    openPendingIosDownloadWindow();
-  }
-  const opts = getExportOptsFromUI();
+function buildExportFileName(stamp, time, ext) {
+  return `расписание_${stamp}_${time}.${ext}`;
+}
 
-  try {
-    let finalDataUrl;
-    let fileName;
+async function prepareExportFile(
+  opts,
+  { cacheKey = null, notifyGeneration = true } = {},
+) {
+  const resolvedKey = String(cacheKey || getExportOptionsCacheKey(opts));
+  if (preparedExportFile && preparedExportFile.key === resolvedKey) {
+    return preparedExportFile;
+  }
+
+  if (exportPreparationPromise && exportPreparationPromise.key === resolvedKey) {
+    return exportPreparationPromise.promise;
+  }
+
+  const preparationTask = (async () => {
     const stamp = new Date().toISOString().slice(0, 10);
     const time = new Date().toISOString().slice(11, 19).replace(/:/g, "-");
+    let sourceSvgDataUrl =
+      lastPreview && typeof lastPreview.dataUrl === "string" ? lastPreview.dataUrl : "";
 
-    // Если есть готовое превью — используем его (быстрее!)
-    if (lastPreview && lastPreview.dataUrl) {
-      finalDataUrl = lastPreview.dataUrl;
-      
-      // Определяем формат из превью
-      const isSvg = lastPreview.fmt === "svg" || lastPreview.dataUrl.startsWith("data:image/svg");
-      if (isSvg) {
-        fileName = `расписание_${stamp}_${time}.svg`;
-      } else {
-        fileName = `расписание_${stamp}_${time}.${opts.fmt === "jpeg" ? "jpg" : "png"}`;
+    if (!sourceSvgDataUrl) {
+      if (notifyGeneration) {
+        toast("INFO", "Export", "Генерация изображения...");
       }
-    } else {
-      // Превью нет — генерируем новое изображение
-      toast("INFO", "Export", "Генерация изображения...");
-      
       const exportResult = await executeExport({ ...opts, fmt: "svg" });
       if (!exportResult || !exportResult.dataUrl) {
-        toast("ERR", "Export", "Не удалось сгенерировать изображение");
-        resetPendingIosDownloadWindow({ close: true });
-        return;
+        throw new Error("Не удалось сгенерировать изображение");
       }
-
-      // Сохраняем как превью для следующего раза
+      sourceSvgDataUrl = exportResult.dataUrl;
       lastPreview = {
-        dataUrl: exportResult.dataUrl,
+        dataUrl: sourceSvgDataUrl,
         fmt: "svg",
         originalOpts: opts,
       };
+    }
 
-      // Конвертируем в нужный формат
-      if (opts.fmt === "svg") {
-        finalDataUrl = exportResult.dataUrl;
-        fileName = `расписание_${stamp}_${time}.svg`;
-      } else {
-        let rasterResult = null;
+    let finalDataUrl = sourceSvgDataUrl;
+    let fileName = buildExportFileName(stamp, time, "svg");
+
+    if (opts.fmt !== "svg") {
+      let rasterResult = null;
+      try {
+        const canvas = await svgToCanvas(sourceSvgDataUrl, opts);
+        rasterResult = convertCanvasToRequestedDataUrl(canvas, opts);
+      } catch (_) {}
+
+      if (!rasterResult) {
         try {
-          const canvas = await svgToCanvas(exportResult.dataUrl, opts);
+          const canvas = await exportToRasterCanvas(opts);
           rasterResult = convertCanvasToRequestedDataUrl(canvas, opts);
         } catch (_) {}
+      }
 
-        if (!rasterResult) {
-          try {
-            const canvas = await exportToRasterCanvas(opts);
-            rasterResult = convertCanvasToRequestedDataUrl(canvas, opts);
-          } catch (_) {}
-        }
-
-        if (rasterResult && rasterResult.dataUrl) {
-          finalDataUrl = embedDpiInImage(rasterResult.dataUrl, 300);
-          fileName = `расписание_${stamp}_${time}.${opts.fmt === "jpeg" ? "jpg" : "png"}`;
-        } else {
-          finalDataUrl = exportResult.dataUrl;
-          fileName = `расписание_${stamp}_${time}.svg`;
-        }
+      if (rasterResult && rasterResult.dataUrl) {
+        finalDataUrl = embedDpiInImage(rasterResult.dataUrl, 300);
+        fileName = buildExportFileName(
+          stamp,
+          time,
+          opts.fmt === "jpeg" ? "jpg" : "png",
+        );
       }
     }
 
-    // Скачиваем через downloadFile (как JSON)
-    const mode = downloadFile(finalDataUrl, fileName);
+    const prepared = {
+      key: resolvedKey,
+      dataUrl: finalDataUrl,
+      fileName,
+    };
+    preparedExportFile = prepared;
+    return prepared;
+  })();
+
+  exportPreparationPromise = {
+    key: resolvedKey,
+    promise: preparationTask,
+  };
+
+  try {
+    return await preparationTask;
+  } finally {
+    if (
+      exportPreparationPromise &&
+      exportPreparationPromise.promise === preparationTask
+    ) {
+      exportPreparationPromise = null;
+    }
+  }
+}
+
+async function downloadFromExportModal() {
+  const opts = getExportOptsFromUI();
+  const cacheKey = getExportOptionsCacheKey(opts);
+  const hasPreparedFile =
+    !!preparedExportFile && preparedExportFile.key === cacheKey;
+
+  try {
+    if (IS_APPLE_DOWNLOAD_TAB && !hasPreparedFile) {
+      await prepareExportFile(opts, {
+        cacheKey,
+        notifyGeneration: true,
+      });
+      toast(
+        "OK",
+        "Export",
+        "Файл подготовлен. Нажмите «Скачать» ещё раз.",
+      );
+      return;
+    }
+
+    if (IS_APPLE_DOWNLOAD_TAB) {
+      // Если файл уже подготовлен, открываем вкладку прямо в user gesture.
+      openPendingIosDownloadWindow();
+    }
+
+    const prepared = await prepareExportFile(opts, {
+      cacheKey,
+      notifyGeneration: !hasPreparedFile,
+    });
+
+    const mode = downloadFile(prepared.dataUrl, prepared.fileName);
     if (mode === "new-tab") {
       toast(
         "INFO",
@@ -13139,7 +13250,7 @@ async function downloadFromExportModal() {
         "Открыто в новой вкладке. В Safari сохраните файл через «Поделиться».",
       );
     } else {
-      toast("OK", "Export", `Файл «${fileName}» скачан`);
+      toast("OK", "Export", `Файл «${prepared.fileName}» скачан`);
     }
 
     setTimeout(() => closeExportModal(), 500);
