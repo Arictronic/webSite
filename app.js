@@ -607,7 +607,6 @@ let currentPreviewObjectUrl = null;
 let pendingIosDownloadWindow = null;
 let preparedExportFile = null;
 let exportPreparationPromise = null;
-let exportPreparationTimer = null;
 let modalScrollLockState = {
   active: false,
   scrollY: 0,
@@ -10109,7 +10108,6 @@ function updateLogoCSSVariables() {
 
 function invalidateExportPreview() {
   clearPreviewCache();
-  scheduleExportFilePreparation();
 }
 
 function getExportOptionsCacheKey(opts) {
@@ -10131,35 +10129,6 @@ function getExportOptionsCacheKey(opts) {
     dayTitleColor: String(opts?.dayTitleColor || ""),
     dayBackgroundDataUrl: String(opts?.dayBackgroundDataUrl || ""),
   });
-}
-
-function isExportModalVisible() {
-  return (
-    !!exportBackdrop &&
-    !exportBackdrop.hidden &&
-    exportBackdrop.classList.contains("show")
-  );
-}
-
-function scheduleExportFilePreparation(delayMs = 180) {
-  if (!IS_APPLE_DOWNLOAD_TAB) return;
-  if (!isExportModalVisible()) return;
-  if (exportPreparationTimer) {
-    clearTimeout(exportPreparationTimer);
-  }
-  exportPreparationTimer = setTimeout(() => {
-    exportPreparationTimer = null;
-    if (!isExportModalVisible()) return;
-    try {
-      const opts = getExportOptsFromUI();
-      const cacheKey = getExportOptionsCacheKey(opts);
-      if (preparedExportFile && preparedExportFile.key === cacheKey) return;
-      prepareExportFile(opts, {
-        cacheKey,
-        notifyGeneration: false,
-      }).catch(() => {});
-    } catch (_) {}
-  }, Math.max(0, Number(delayMs) || 0));
 }
 
 function getExportDaySettings() {
@@ -10422,7 +10391,6 @@ function openExportModal() {
   invalidateExportPreview();
   syncExportModalUI();
   setBackdropVisible(exportBackdrop, true);
-  scheduleExportFilePreparation(240);
   setTimeout(() => {
     const firstControl = expPreset || expFormat || $("btnExpPreview");
     if (firstControl && typeof firstControl.focus === "function") {
@@ -10973,6 +10941,18 @@ async function buildExportPreview() {
     // Отображаем SVG предпросмотр
     displaySvgPreview(exportResult.dataUrl);
 
+    if (IS_APPLE_DOWNLOAD_TAB) {
+      const cacheKey = getExportOptionsCacheKey(opts);
+      try {
+        await prepareExportFile(opts, {
+          cacheKey,
+          notifyGeneration: false,
+        });
+      } catch (prepareError) {
+        console.warn("Export file cache preparation failed:", prepareError);
+      }
+    }
+
     toast("OK", "Экспорт", "Предпросмотр готов");
   } catch (error) {
     console.error("Export preview error:", error);
@@ -11165,10 +11145,6 @@ function clearPreviewCache() {
   lastPreview = null;
   preparedExportFile = null;
   exportPreparationPromise = null;
-  if (exportPreparationTimer) {
-    clearTimeout(exportPreparationTimer);
-    exportPreparationTimer = null;
-  }
 
   console.log("Кэш предпросмотра очищен");
 }
