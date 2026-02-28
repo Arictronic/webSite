@@ -7,11 +7,13 @@ import {
 // ===================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И КОНСТАНТЫ =====================
 const $ = (id) => document.getElementById(id);
 const USER_AGENT = navigator.userAgent || "";
+const PLATFORM = navigator.platform || "";
 const IS_IPHONE_DEVICE = /iPhone|iPod/.test(USER_AGENT);
 const IS_IPAD_DEVICE =
   /iPad/.test(USER_AGENT) ||
-  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  (PLATFORM === "MacIntel" && navigator.maxTouchPoints > 1);
 const IS_IOS_DEVICE = IS_IPHONE_DEVICE || IS_IPAD_DEVICE;
+const IS_MACOS_DEVICE = /Mac/i.test(PLATFORM) && !IS_IOS_DEVICE;
 const IS_WEBKIT_ENGINE =
   /AppleWebKit/i.test(USER_AGENT) &&
   !/CriOS|FxiOS|EdgiOS|OPiOS|YaBrowser/i.test(USER_AGENT);
@@ -22,6 +24,7 @@ const IS_SAFARI_BROWSER =
 // On iOS all browsers run on WebKit, so iOS-specific download handling
 // should not be limited to Safari UA only.
 const IS_IOS_WEBKIT = IS_IOS_DEVICE;
+const IS_APPLE_DOWNLOAD_TAB = IS_IOS_WEBKIT || IS_MACOS_DEVICE;
 const SUPPORTS_HAS_SELECTOR =
   typeof CSS !== "undefined" &&
   typeof CSS.supports === "function" &&
@@ -12787,7 +12790,7 @@ async function runWithTimeout(taskFactory, timeoutMs, timeoutMessage) {
 }
 
 function openPendingIosDownloadWindow() {
-  if (!IS_IOS_WEBKIT) return null;
+  if (!IS_APPLE_DOWNLOAD_TAB) return null;
   if (pendingIosDownloadWindow && !pendingIosDownloadWindow.closed) {
     return pendingIosDownloadWindow;
   }
@@ -13227,7 +13230,7 @@ async function svgToCanvas(svgDataUrl, opts) {
 }
 
 function downloadFile(dataUrl, fileName) {
-  if (IS_IOS_WEBKIT) {
+  if (IS_APPLE_DOWNLOAD_TAB) {
     const rawUrl = typeof dataUrl === "string" ? dataUrl : "";
     let openUrl = rawUrl;
     let tempObjectUrl = "";
@@ -13246,7 +13249,7 @@ function downloadFile(dataUrl, fileName) {
       return "new-tab";
     }
 
-    // Открываем новое окно для iOS (как в JSON)
+    // Открываем новую вкладку для iOS/macOS (как в JSON)
     let iosTargetWindow;
     try {
       iosTargetWindow = window.open("", "_blank");
@@ -14259,5 +14262,4 @@ if (isServiceWorkerAllowed()) {
     registerServiceWorker();
   });
 }
-
 
