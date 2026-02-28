@@ -11381,18 +11381,10 @@ async function exportDayToSvg(opts) {
 }
 
 async function executeExport(opts) {
-  const startTime = Date.now();
-  console.log("[executeExport] Starting export, mode:", opts.mode, "preset:", opts.preset);
-  
   if (opts.mode === EXPORT_MODE_DAY) {
-    const result = await exportDayToSvg(opts);
-    console.log("[executeExport] Day export completed in", Date.now() - startTime, "ms");
-    return result;
+    return await exportDayToSvg(opts);
   }
-  
-  const result = await exportToSvg(opts);
-  console.log("[executeExport] Week export completed in", Date.now() - startTime, "ms");
-  return result;
+  return await exportToSvg(opts);
 }
 
 async function prepareDomForExport({
@@ -11570,37 +11562,29 @@ async function prepareDomForExport({
 }
 
 async function exportToSvg(opts) {
-  const startTime = Date.now();
-  console.log("[exportToSvg] Starting SVG export");
-
   if (
     typeof htmlToImage === "undefined" ||
     typeof htmlToImage.toSvg !== "function"
   ) {
     toast("WARN", "SVG", "html-to-image не найден (проверь подключение).");
-    console.error("[exportToSvg] html-to-image.toSvg not available");
     return null;
   }
 
   // 1. Принудительно обновляем рендер перед экспортом
-  console.log("[exportToSvg] Rendering all...");
   await new Promise((resolve) => {
     renderAll();
     setTimeout(resolve, 100);
   });
 
-  // 2. Получаем подготовленный DOM с учетом параметра скрытия пустых слотов
-  console.log("[exportToSvg] Preparing DOM...");
+  // 2. Получаем подготовленный DOM
   const prepared = await prepareDomForExport({
     compact: opts.compact,
     format: "svg",
     hideEmpty: opts.hideEmpty,
   });
-  console.log("[exportToSvg] DOM prepared in", Date.now() - startTime, "ms");
 
   if (!prepared) {
     toast("ERR", "SVG", "Не удалось подготовить DOM для экспорта");
-    console.error("[exportToSvg] prepareDomForExport returned null");
     return null;
   }
 
@@ -11668,16 +11652,12 @@ async function exportToSvg(opts) {
         ? opts.background
         : getThemeBgCssColor() || "#ffffff";
 
-    console.log(`SVG экспорт: размеры ${exportWidth}x${exportHeight}, фон ${bgColor}`);
-
     // 10. Генерируем SVG
-    console.log("[exportToSvg] Calling htmlToImage.toSvg...");
-    const svgStartTime = Date.now();
     const dataUrl = await htmlToImage.toSvg(clone, {
       backgroundColor: bgColor,
       width: exportWidth,
       height: exportHeight,
-      pixelRatio: 1, // SVG векторный - масштаб не важен
+      pixelRatio: 1,
       cacheBust: true,
       quality: 1.0,
       fontEmbedCSS: fontEmbedCSS,
@@ -11686,9 +11666,6 @@ async function exportToSvg(opts) {
         opacity: "1",
       },
     });
-    console.log("[exportToSvg] htmlToImage.toSvg completed in", Date.now() - svgStartTime, "ms");
-    console.log("[exportToSvg] Total export time:", Date.now() - startTime, "ms");
-    console.log("[exportToSvg] SVG size:", Math.round(dataUrl.length / 1024), "KB");
 
     return { dataUrl };
   } catch (e) {
@@ -13082,11 +13059,23 @@ function resetPendingIosDownloadWindow({ close = false } = {}) {
 async function downloadFromExportModal() {
   const opts = getExportOptsFromUI();
 
-  console.log("[Export] Starting export with options:", opts);
+  // 1. СРАЗУ открываем окно для сохранения (синхронно, до всех await!)
+  let downloadWindow = null;
+  try {
+    downloadWindow = window.open("", "_blank");
+  } catch (_) {
+    downloadWindow = null;
+  }
+
+  if (!downloadWindow) {
+    toast("WARN", "Export", "Браузер заблокировал всплывающее окно. Разрешите всплывающие окна.");
+    return;
+  }
+
+  // Показываем страницу ожидания с таймером
+  showDownloadWaitingPage(downloadWindow);
 
   try {
-    toast("INFO", "Export", "Подготовка файла...");
-
     let finalDataUrl;
     let fileName;
     const stamp = new Date().toISOString().slice(0, 10);
@@ -13096,32 +13085,24 @@ async function downloadFromExportModal() {
     const isLargeExport = opts.preset &&
       (opts.preset.w > 4000 || opts.preset.h > 3000);
 
-    console.log("[Export] Is large export:", isLargeExport, "Preset:", opts.preset);
-
-    // Генерируем изображение с таймаутом и логированием
+    // Генерируем изображение с таймаутом
     let exportResult;
-    const startTime = Date.now();
     try {
-      console.log("[Export] Starting executeExport...");
       exportResult = await Promise.race([
         executeExport({ ...opts, fmt: "svg" }),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error("Превышено время генерации (60с)")), 60000)
         ),
       ]);
-      console.log("[Export] executeExport completed in", Date.now() - startTime, "ms");
     } catch (genError) {
-      console.error("[Export] Generation error:", genError);
+      console.error("Export generation error:", genError);
       toast("WARN", "Export", "Генерация заняла слишком много времени. Используем упрощённый формат.");
-      // Пробуем с компактным режимом
-      console.log("[Export] Retrying with compact mode...");
       exportResult = await executeExport({ ...opts, fmt: "svg", compact: true });
     }
 
-    console.log("[Export] Export result:", exportResult ? "OK" : "NULL");
-
     if (!exportResult || !exportResult.dataUrl) {
       toast("ERR", "Export", "Не удалось сгенерировать изображение");
+      if (downloadWindow && !downloadWindow.closed) downloadWindow.close();
       return;
     }
 
@@ -13130,8 +13111,6 @@ async function downloadFromExportModal() {
       finalDataUrl = exportResult.dataUrl;
       fileName = `расписание_${stamp}_${time}.svg`;
 
-      console.log("[Export] Using SVG format, size:", Math.round(finalDataUrl.length / 1024), "KB");
-
       if (isLargeExport && opts.fmt !== "svg") {
         toast("INFO", "Export", "Большой размер экспорта. Использован формат SVG для совместимости.");
       }
@@ -13139,75 +13118,139 @@ async function downloadFromExportModal() {
       // Конвертируем SVG в PNG/JPEG
       let rasterResult = null;
       try {
-        console.log("[Export] Converting SVG to canvas...");
         const canvas = await svgToCanvas(exportResult.dataUrl, opts);
         rasterResult = convertCanvasToRequestedDataUrl(canvas, opts);
-        console.log("[Export] Canvas conversion completed");
       } catch (e) {
-        console.warn("[Export] svgToCanvas failed:", e);
+        console.warn("svgToCanvas failed:", e);
       }
 
       if (!rasterResult) {
         try {
-          console.log("[Export] Trying exportToRasterCanvas...");
           const canvas = await exportToRasterCanvas(opts);
           rasterResult = convertCanvasToRequestedDataUrl(canvas, opts);
-          console.log("[Export] Raster canvas completed");
         } catch (e) {
-          console.warn("[Export] exportToRasterCanvas failed:", e);
+          console.warn("exportToRasterCanvas failed:", e);
         }
       }
 
       if (rasterResult && rasterResult.dataUrl) {
         finalDataUrl = embedDpiInImage(rasterResult.dataUrl, 300);
         fileName = `расписание_${stamp}_${time}.${opts.fmt === "jpeg" ? "jpg" : "png"}`;
-        console.log("[Export] Using raster format, size:", Math.round(finalDataUrl.length / 1024), "KB");
       } else {
         // Fallback на SVG
         finalDataUrl = exportResult.dataUrl;
         fileName = `расписание_${stamp}_${time}.svg`;
-        console.log("[Export] Fallback to SVG");
         toast("INFO", "Export", "Использован формат SVG для совместимости.");
       }
     }
 
-    // Для iOS открываем окно с кнопками Сохранить/Назад
-    if (IS_IOS_WEBKIT) {
-      let iosWindow = openPendingIosDownloadWindow();
-      if (iosWindow && !iosWindow.closed) {
-        writeIosFallbackDownloadPage(iosWindow, finalDataUrl, fileName);
-        toast("OK", "Export", "Открыто окно сохранения.");
-        setTimeout(() => {
-          closeExportModal();
-        }, 200);
-        return;
-      }
-      // Если окно не открылось, скачиваем напрямую
-      console.log("[Export] iOS window not available, downloading directly");
-    }
-
-    // Для остальных устройств скачиваем файл
-    console.log("[Export] Calling downloadFile...");
-    const mode = downloadFile(finalDataUrl, fileName);
-    console.log("[Export] Download mode:", mode);
-    if (mode === "new-tab") {
-      toast(
-        "INFO",
-        "Safari",
-        "Файл открыт в новой вкладке. Для сохранения используйте меню «Поделиться».",
-      );
-    } else {
-      toast("OK", "Export", `Файл «${fileName}» скачан`);
+    // Обновляем окно с кнопками Сохранить/Назад (как у JSON)
+    if (downloadWindow && !downloadWindow.closed) {
+      writeIosFallbackDownloadPage(downloadWindow, finalDataUrl, fileName);
     }
 
     setTimeout(() => {
       closeExportModal();
-    }, 500);
+    }, 200);
+
   } catch (error) {
-    console.error("[Export] Fatal error:", error);
+    console.error("Export error:", error);
+    if (downloadWindow && !downloadWindow.closed) {
+      downloadWindow.close();
+    }
     toast("ERR", "Download", error?.message || "Ошибка скачивания");
     resetPendingIosDownloadWindow({ close: true });
   }
+}
+
+// Страница ожидания с таймером
+function showDownloadWaitingPage(targetWindow) {
+  if (!targetWindow || targetWindow.closed) return;
+
+  const theme = state.settings.theme;
+  const tokens = theme.mode === "light" ? theme.customTokens :
+    theme.mode === "dark" ? THEME_PRESETS.find(p => p.id === "graphite-dark").tokens : theme.customTokens;
+  const bg = tokens.bg || "#f6f7fb";
+  const card = tokens.card || "#ffffff";
+  const text = tokens.text || "#0f172a";
+  const muted = tokens.muted || "#64748b";
+  const accent = tokens.accent || "#0ea5e9";
+
+  try {
+    targetWindow.document.open();
+    targetWindow.document.write(`<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Подготовка файла...</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{
+      font:16px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      background:${bg};
+      color:${text};
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .box{
+      background:${card};
+      border-radius:16px;
+      padding:32px;
+      box-shadow:0 20px 40px rgba(0,0,0,0.1);
+      text-align:center;
+      max-width:400px;
+      width:100%;
+    }
+    .spinner{
+      width:48px;
+      height:48px;
+      border:4px solid ${bg};
+      border-top-color:${accent};
+      border-radius:50%;
+      animation:spin 1s linear infinite;
+      margin:0 auto 20px;
+    }
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .title{font-size:20px;font-weight:700;margin-bottom:8px}
+    .desc{color:${muted};font-size:14px;margin-bottom:16px}
+    .timer{
+      font-size:28px;
+      font-weight:600;
+      color:${accent};
+      font-variant-numeric:tabular-nums;
+    }
+    .hint{color:${muted};font-size:13px;margin-top:16px}
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="spinner"></div>
+    <div class="title">Подготовка файла</div>
+    <div class="desc">Генерация изображения...</div>
+    <div class="timer" id="timer">0:00</div>
+    <div class="hint">Это займёт от 5 до 30 секунд<br/>в зависимости от размера</div>
+  </div>
+  <script>
+    (function(){
+      var start = Date.now();
+      var timerEl = document.getElementById('timer');
+      function update(){
+        var elapsed = Math.floor((Date.now() - start) / 1000);
+        var min = Math.floor(elapsed / 60);
+        var sec = elapsed % 60;
+        timerEl.textContent = min + ':' + (sec < 10 ? '0' : '') + sec;
+        requestAnimationFrame(update);
+      }
+      update();
+    })();
+  <\/script>
+</body>
+</html>`);
+    targetWindow.document.close();
+  } catch (_) {}
 }
 async function svgToCanvas(svgDataUrl, opts) {
   try {
@@ -13296,17 +13339,13 @@ async function svgToCanvas(svgDataUrl, opts) {
 }
 
 function downloadFile(dataUrl, fileName) {
-  console.log("[downloadFile] Called with fileName:", fileName, "dataUrl length:", Math.round(dataUrl.length / 1024), "KB");
-
   if (IS_IOS_WEBKIT) {
     const rawUrl = typeof dataUrl === "string" ? dataUrl : "";
     let openUrl = rawUrl;
     let tempObjectUrl = "";
 
     // Для больших файлов (>5MB) используем прямой data URL вместо blob
-    // чтобы избежать проблем с памятью при конвертации
     const isLargeFile = rawUrl.length > 5 * 1024 * 1024;
-    const isSvg = fileName.toLowerCase().endsWith(".svg");
 
     if (!isLargeFile && rawUrl.startsWith("data:")) {
       tempObjectUrl = dataUrlToObjectUrl(rawUrl);
@@ -13331,8 +13370,6 @@ function downloadFile(dataUrl, fileName) {
       }
     }
 
-    // iOS WebKit often fails to navigate directly to large data URLs for week exports.
-    // Serve a stable fallback page with an explicit "open/save" action instead.
     if (iosTargetWindow && !iosTargetWindow.closed) {
       writeIosFallbackDownloadPage(iosTargetWindow, openUrl, fileName);
     } else {
@@ -13348,22 +13385,6 @@ function downloadFile(dataUrl, fileName) {
       }, 10 * 60 * 1000);
     }
     return "new-tab";
-  }
-
-  // Для SVG и больших файлов открываем в новой вкладке
-  const isSvg = fileName.toLowerCase().endsWith(".svg");
-  const isLargeFile = dataUrl.length > 5 * 1024 * 1024;
-  
-  if (isSvg || isLargeFile) {
-    console.log("[downloadFile] Opening SVG/large file in new tab");
-    const newWindow = window.open("", "_blank");
-    if (newWindow) {
-      newWindow.document.open();
-      newWindow.document.write(`<!doctype html><html lang="ru"><head><meta charset="utf-8"/><title>${fileName}</title><style>body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f5f5f5}</style></head><body><embed src="${dataUrl}" type="image/svg+xml" width="100%" height="100%"/></body></html>`);
-      newWindow.document.close();
-      console.log("[downloadFile] New tab opened successfully");
-      return "new-tab";
-    }
   }
 
   const nav = window.navigator || {};
@@ -13399,7 +13420,6 @@ function downloadFile(dataUrl, fileName) {
 
   document.body.appendChild(a);
   a.click();
-  console.log("[downloadFile] Link clicked, mode:", supportsDownloadAttr ? "download" : "new-tab");
 
   const revokeDelay = supportsDownloadAttr ? 600 : 60000;
   setTimeout(() => {
