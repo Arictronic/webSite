@@ -13121,20 +13121,14 @@ async function downloadFromExportModal() {
       }
     }
 
-    // Для macOS/iOS открываем окно с кнопками Сохранить/Назад
-    if (IS_IOS_WEBKIT || /Mac/.test(navigator.userAgent)) {
-      const downloadWindow = window.open("", "_blank");
-      if (downloadWindow) {
-        writeIosFallbackDownloadPage(downloadWindow, finalDataUrl, fileName);
-        setTimeout(() => closeExportModal(), 200);
-        return;
-      }
-    }
-
-    // Для остальных устройств скачиваем напрямую
+    // Скачиваем как JSON - просто передаём данные в downloadFile
     const mode = downloadFile(finalDataUrl, fileName);
     if (mode === "new-tab") {
-      toast("INFO", "Safari", "Файл открыт в новой вкладке. Используйте «Поделиться».");
+      toast(
+        "INFO",
+        "Export",
+        "Открыто в новой вкладке. В Safari сохраните файл через «Поделиться».",
+      );
     } else {
       toast("OK", "Export", `Файл «${fileName}» скачан`);
     }
