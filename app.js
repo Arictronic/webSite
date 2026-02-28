@@ -13060,6 +13060,11 @@ function resetPendingIosDownloadWindow({ close = false } = {}) {
 }
 
 async function downloadFromExportModal() {
+  // В iOS/macOS pre-open вкладку в том же пользовательском жесте,
+  // иначе Safari может заблокировать popup после await.
+  if (IS_APPLE_DOWNLOAD_TAB) {
+    openPendingIosDownloadWindow();
+  }
   const opts = getExportOptsFromUI();
 
   try {
@@ -13086,6 +13091,7 @@ async function downloadFromExportModal() {
       const exportResult = await executeExport({ ...opts, fmt: "svg" });
       if (!exportResult || !exportResult.dataUrl) {
         toast("ERR", "Export", "Не удалось сгенерировать изображение");
+        resetPendingIosDownloadWindow({ close: true });
         return;
       }
 
@@ -13246,16 +13252,24 @@ function downloadFile(dataUrl, fileName) {
     }
 
     if (!openUrl) {
+      resetPendingIosDownloadWindow({ close: true });
       return "new-tab";
     }
 
-    // Открываем новую вкладку для iOS/macOS (как в JSON)
-    let iosTargetWindow;
-    try {
-      iosTargetWindow = window.open("", "_blank");
-    } catch (_) {
-      iosTargetWindow = null;
+    // Сначала используем pre-open окно (создано в user gesture),
+    // затем пробуем открыть новое, если pre-open недоступно.
+    let iosTargetWindow =
+      pendingIosDownloadWindow && !pendingIosDownloadWindow.closed
+        ? pendingIosDownloadWindow
+        : null;
+    if (!iosTargetWindow) {
+      try {
+        iosTargetWindow = window.open("", "_blank");
+      } catch (_) {
+        iosTargetWindow = null;
+      }
     }
+    resetPendingIosDownloadWindow();
 
     if (iosTargetWindow && !iosTargetWindow.closed) {
       writeIosFallbackDownloadPage(iosTargetWindow, openUrl, fileName);
@@ -14262,4 +14276,3 @@ if (isServiceWorkerAllowed()) {
     registerServiceWorker();
   });
 }
-
