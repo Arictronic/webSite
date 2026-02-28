@@ -12827,6 +12827,209 @@ function safeFileName(value, fallback = "schedule-export") {
   return base || fallback;
 }
 
+function writeIosImageDownloadPage(targetWindow, openUrl, fileName) {
+  if (!targetWindow || targetWindow.closed) return;
+  const safeUrl = String(openUrl || "");
+  if (!safeUrl) return;
+
+  const escapedUrl = safeUrl
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;");
+  const normalizedName = safeFileName(fileName, "export");
+  const escapedName = String(normalizedName || "export")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  const jsExportUrl = JSON.stringify(safeUrl);
+  const jsExportName = JSON.stringify(normalizedName || "export");
+
+  // Получаем текущие цвета темы
+  const theme = state.settings.theme;
+  const tokens = theme.mode === "light" ? theme.customTokens : 
+    theme.mode === "dark" ? THEME_PRESETS.find(p => p.id === "graphite-dark").tokens : theme.customTokens;
+  const bg = tokens.bg || "#f6f7fb";
+  const card = tokens.card || "#ffffff";
+  const text = tokens.text || "#0f172a";
+  const muted = tokens.muted || "#64748b";
+
+  try {
+    targetWindow.document.open();
+    targetWindow.document.write(`
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Сохранение изображения</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 20px;
+      font: 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: ${text};
+      background: rgba(0, 0, 0, 0.5);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .box {
+      width: 100%;
+      max-width: 400px;
+      background: ${card};
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+    }
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 16px;
+    }
+    .btn {
+      display: inline-block;
+      padding: 14px 20px;
+      border-radius: 12px;
+      border: 0;
+      text-decoration: none;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1.2;
+      width: 100%;
+      text-align: center;
+      transition: opacity 0.2s;
+    }
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .btn-download {
+      background: ${text};
+      color: ${card};
+    }
+    .btn-back {
+      background: ${bg};
+      color: ${muted};
+    }
+    .title {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .name {
+      color: ${muted};
+      font-size: 14px;
+      word-break: break-word;
+      margin-top: 8px;
+    }
+    .preview {
+      margin-top: 16px;
+      border-radius: 8px;
+      overflow: hidden;
+      background: ${bg};
+      max-height: 300px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .preview img {
+      max-width: 100%;
+      max-height: 300px;
+      object-fit: contain;
+    }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="title">Изображение готово</div>
+    <p class="name">${escapedName}</p>
+    <div class="preview">
+      <img src="${escapedUrl}" alt="Preview" />
+    </div>
+    <div class="actions">
+      <button id="downloadBtn" type="button" class="btn btn-download">Скачать</button>
+      <button id="backBtn" type="button" class="btn btn-back">← Назад</button>
+    </div>
+  </div>
+  <script>
+    (function () {
+      const exportUrl = ${jsExportUrl};
+      const exportName = ${jsExportName};
+      const downloadBtn = document.getElementById("downloadBtn");
+      const backBtn = document.getElementById("backBtn");
+
+      const detectMimeType = () => {
+        const lower = String(exportName || "").toLowerCase();
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+        if (lower.endsWith(".png")) return "image/png";
+        if (lower.endsWith(".svg")) return "image/svg+xml";
+        return "application/octet-stream";
+      };
+
+      const tryDownload = async () => {
+        if (
+          typeof navigator === "undefined" ||
+          typeof navigator.share !== "function" ||
+          typeof fetch !== "function" ||
+          typeof File !== "function"
+        ) {
+          return false;
+        }
+
+        try {
+          const response = await fetch(exportUrl);
+          if (!response || !response.ok) return false;
+          const blob = await response.blob();
+          if (!blob) return false;
+          const file = new File([blob], exportName, {
+            type: blob.type || detectMimeType(),
+          });
+          const payload = { files: [file] };
+          if (typeof navigator.canShare === "function" && !navigator.canShare(payload)) {
+            return false;
+          }
+          await navigator.share(payload);
+          return true;
+        } catch (_) {
+          return false;
+        }
+      };
+
+      if (downloadBtn) {
+        downloadBtn.addEventListener("click", async function (event) {
+          event.preventDefault();
+          downloadBtn.disabled = true;
+          downloadBtn.textContent = "Подготовка...";
+          const downloaded = await tryDownload();
+          if (downloaded) {
+            downloadBtn.textContent = "Готово";
+            return;
+          }
+          downloadBtn.disabled = false;
+          downloadBtn.textContent = "Скачать";
+          window.location.href = exportUrl;
+        });
+      }
+
+      if (backBtn) {
+        backBtn.addEventListener("click", function () {
+          window.history.back();
+          setTimeout(() => {
+            window.close();
+          }, 300);
+        });
+      }
+    })();
+  </script>
+</body>
+</html>`);
+    targetWindow.document.close();
+  } catch (_) {}
+}
+
 function writeIosFallbackDownloadPage(targetWindow, openUrl, fileName) {
   if (!targetWindow || targetWindow.closed) return;
   const safeUrl = String(openUrl || "");
@@ -13177,10 +13380,10 @@ async function downloadFromExportModal() {
 
     // Для iOS используем модальное окно вместо новой вкладки
     if (IS_IOS_WEBKIT) {
-      // Открываем модальное окно для скачивания
+      // Открываем модальное окно для скачивания изображения
       const iosWindow = window.open("", "_blank");
       if (iosWindow && !iosWindow.closed) {
-        writeIosFallbackDownloadPage(iosWindow, finalDataUrl, fileName);
+        writeIosImageDownloadPage(iosWindow, finalDataUrl, fileName);
       }
       toast("OK", "Export", "Открыто окно сохранения.");
     } else {
