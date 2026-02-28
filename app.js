@@ -13121,16 +13121,18 @@ async function downloadFromExportModal() {
       }
     }
 
-    // Скачиваем как JSON - просто передаём данные в downloadFile
-    const mode = downloadFile(finalDataUrl, fileName);
-    if (mode === "new-tab") {
-      toast(
-        "INFO",
-        "Export",
-        "Открыто в новой вкладке. В Safari сохраните файл через «Поделиться».",
-      );
+    // Для iOS/Mac открываем окно с кнопками, для остальных — прямое скачивание
+    if (IS_IOS_WEBKIT || /Mac/.test(navigator.userAgent)) {
+      const downloadWindow = window.open("", "_blank");
+      if (downloadWindow) {
+        writeIosFallbackDownloadPage(downloadWindow, finalDataUrl, fileName);
+      } else {
+        toast("WARN", "Export", "Браузер заблокировал всплывающее окно.");
+        downloadFile(finalDataUrl, fileName);
+      }
     } else {
-      toast("OK", "Export", `Файл «${fileName}» скачан`);
+      // Windows/Android/Linux — скачиваем сразу
+      downloadFile(finalDataUrl, fileName);
     }
 
     setTimeout(() => closeExportModal(), 500);
