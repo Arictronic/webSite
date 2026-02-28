@@ -13086,155 +13086,62 @@ function resetPendingIosDownloadWindow({ close = false } = {}) {
 
 async function downloadFromExportModal() {
   const opts = getExportOptsFromUI();
-  const skipSvgPreviewForIosRaster = IS_IOS_WEBKIT && opts.fmt !== "svg";
 
   try {
     toast("INFO", "Export", "Подготовка файла...");
-
-    let exportResult = null;
-    
-    // Для SVG генерируем preview
-    // Для PNG/JPEG на iOS не генерируем preview (сразу конвертируем в canvas)
-    if (!skipSvgPreviewForIosRaster) {
-      const svgOpts = { ...opts, fmt: "svg" };
-      exportResult = await executeExport(svgOpts);
-
-      if (!exportResult || !exportResult.dataUrl) {
-        toast("ERR", "Export", "Failed to render export image");
-        return;
-      }
-
-      lastPreview = {
-        dataUrl: exportResult.dataUrl,
-        originalOpts: opts,
-        ...svgOpts,
-        timestamp: Date.now(),
-      };
-    }
 
     let finalDataUrl;
     let fileName;
     const stamp = new Date().toISOString().slice(0, 10);
     const time = new Date().toISOString().slice(11, 19).replace(/:/g, "-");
 
+    // Генерируем изображение
+    const exportResult = await executeExport({ ...opts, fmt: "svg" });
+    if (!exportResult || !exportResult.dataUrl) {
+      toast("ERR", "Export", "Не удалось сгенерировать изображение");
+      return;
+    }
+
     if (opts.fmt === "svg") {
-      finalDataUrl = lastPreview.dataUrl;
+      finalDataUrl = exportResult.dataUrl;
       fileName = `расписание_${stamp}_${time}.svg`;
     } else {
+      // Конвертируем SVG в PNG/JPEG
       let rasterResult = null;
-
-      // Для iOS PNG/JPEG используем direct canvas export
-      if (IS_IOS_WEBKIT && !skipSvgPreviewForIosRaster && lastPreview?.dataUrl) {
-        try {
-          const canvas = await svgToCanvas(lastPreview.dataUrl, opts);
-          if (
-            canvas?.__svgRasterFallback === true ||
-            (canvas?.dataset && canvas.dataset.svgRasterFallback === "1")
-          ) {
-            throw new Error("SVG raster fallback canvas detected");
-          }
-          rasterResult = convertCanvasToRequestedDataUrl(canvas, opts);
-        } catch (svgRasterError) {
-          console.warn("Raster conversion via SVG canvas failed:", svgRasterError);
-        }
+      try {
+        const canvas = await svgToCanvas(exportResult.dataUrl, opts);
+        rasterResult = convertCanvasToRequestedDataUrl(canvas, opts);
+      } catch (_) {
+        // Fallback
       }
 
       if (!rasterResult) {
         try {
-          const canvas = IS_IOS_WEBKIT
-            ? await runWithTimeout(
-                () => exportToRasterCanvas(opts),
-                35000,
-                "Raster export timed out",
-              )
-            : await exportToRasterCanvas(opts);
+          const canvas = await exportToRasterCanvas(opts);
           rasterResult = convertCanvasToRequestedDataUrl(canvas, opts);
-        } catch (directRasterError) {
-          console.warn("Direct raster export failed:", directRasterError);
-        }
-      }
-
-      if (!rasterResult && skipSvgPreviewForIosRaster) {
-        try {
-          const fallbackSvgResult = await runWithTimeout(
-            () => executeExport({ ...opts, fmt: "svg" }),
-            12000,
-            "SVG fallback timed out",
-          );
-          if (fallbackSvgResult?.dataUrl) {
-            const canvas = await svgToCanvas(fallbackSvgResult.dataUrl, opts);
-            if (
-              canvas?.__svgRasterFallback !== true &&
-              (!canvas?.dataset || canvas.dataset.svgRasterFallback !== "1")
-            ) {
-              rasterResult = convertCanvasToRequestedDataUrl(canvas, opts);
-            }
-          }
-        } catch (svgFallbackError) {
-          console.warn("SVG fallback export failed:", svgFallbackError);
+        } catch (_) {
+          // Используем SVG как fallback
+          finalDataUrl = exportResult.dataUrl;
+          fileName = `расписание_${stamp}_${time}.svg`;
         }
       }
 
       if (rasterResult && rasterResult.dataUrl) {
-        // Внедряем DPI метаданные для PNG и JPEG (300 DPI для печати)
         finalDataUrl = embedDpiInImage(rasterResult.dataUrl, 300);
         fileName = `расписание_${stamp}_${time}.${opts.fmt === "jpeg" ? "jpg" : "png"}`;
-        if (rasterResult.scaled) {
-          toast(
-            "WARN",
-            "Export",
-            "Image saved with reduced resolution for compatibility.",
-            3200,
-          );
-        }
-      } else {
-        if (lastPreview?.dataUrl) {
-          finalDataUrl = lastPreview.dataUrl;
-          fileName = `расписание_${stamp}_${time}.svg`;
-          toast(
-            "WARN",
-            "Export",
-            "PNG/JPEG conversion failed in this browser. Downloaded SVG instead.",
-            3800,
-          );
-        } else {
-          throw new Error("Failed to render export image");
-        }
       }
     }
 
-    // Для iOS открываем модальное окно для скачивания
-    if (IS_IOS_WEBKIT) {
-      // Открываем окно если ещё не открыто
-      if (!pendingIosDownloadWindow || pendingIosDownloadWindow.closed) {
-        openPendingIosDownloadWindow();
-      }
-
-      const iosWindow = pendingIosDownloadWindow && !pendingIosDownloadWindow.closed
-        ? pendingIosDownloadWindow
-        : null;
-
-      if (iosWindow) {
-        writeIosImageDownloadPage(iosWindow, finalDataUrl, fileName);
-        toast("OK", "Export", "Открыто окно сохранения.");
-      }
-      // Закрываем модальное окно экспорта
-      setTimeout(() => {
-        closeExportModal();
-        resetPendingIosDownloadWindow();
-      }, 200);
-      return;
+    // Скачиваем файл
+    const mode = downloadFile(finalDataUrl, fileName);
+    if (mode === "new-tab") {
+      toast(
+        "INFO",
+        "Safari",
+        "Файл открыт в новой вкладке. Для сохранения используйте меню «Поделиться».",
+      );
     } else {
-      const mode = downloadFile(finalDataUrl, fileName);
-      if (mode === "new-tab") {
-        toast(
-          "INFO",
-          "Safari",
-          "Файл открыт в новой вкладке. Для сохранения используйте меню «Поделиться».",
-        );
-      } else {
-        toast("OK", "Export", `File \"${fileName}\" downloaded`);
-      }
+      toast("OK", "Export", `Файл «${fileName}» скачан`);
     }
 
     setTimeout(() => {
@@ -13242,8 +13149,7 @@ async function downloadFromExportModal() {
     }, 500);
   } catch (error) {
     console.error("Download error:", error);
-    toast("ERR", "Download", error?.message || "Download failed");
-    resetPendingIosDownloadWindow({ close: true });
+    toast("ERR", "Download", error?.message || "Ошибка скачивания");
   }
 }
 async function svgToCanvas(svgDataUrl, opts) {
