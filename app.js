@@ -12807,7 +12807,7 @@ function openPendingIosDownloadWindow() {
     if (pendingIosDownloadWindow) {
       try {
         pendingIosDownloadWindow.document.write(
-          "<!doctype html><html><head><meta charset=\"utf-8\"><title>Preparing export</title></head><body style=\"font:16px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:24px;color:#111;\">Preparing export file...</body></html>",
+          "<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\"><title>Подготовка экспорта</title></head><body style=\"font:16px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:24px;color:#111;\">Подготовка файла экспорта...</body></html>",
         );
         pendingIosDownloadWindow.document.close();
       } catch (_) {}
@@ -13093,6 +13093,11 @@ async function downloadFromExportModal() {
   const opts = getExportOptsFromUI();
   const skipSvgPreviewForIosRaster = IS_IOS_WEBKIT && opts.fmt !== "svg";
 
+  // Для iOS заранее открываем окно
+  if (IS_IOS_WEBKIT) {
+    openPendingIosDownloadWindow();
+  }
+
   try {
     toast("INFO", "Export", "Preparing file...");
 
@@ -13103,6 +13108,7 @@ async function downloadFromExportModal() {
 
       if (!exportResult || !exportResult.dataUrl) {
         toast("ERR", "Export", "Failed to render export image");
+        resetPendingIosDownloadWindow({ close: true });
         return;
       }
 
@@ -13207,28 +13213,17 @@ async function downloadFromExportModal() {
       }
     }
 
-    // Для iOS используем модальное окно вместо новой вкладки
+    // Для iOS используем то же модальное окно как для JSON
     if (IS_IOS_WEBKIT) {
-      // Открываем модальное окно для скачивания изображения
-      let iosWindow = null;
-      try {
-        // Открываем окно с about:blank чтобы не загружалась наша страница
-        iosWindow = window.open("about:blank", "_blank", "width=400,height=600");
-        if (iosWindow && !iosWindow.closed) {
-          // Сразу записываем содержимое
-          writeIosImageDownloadPage(iosWindow, finalDataUrl, fileName);
-          toast("OK", "Export", "Открыто окно сохранения.");
-          // Не закрываем модальное окно экспорта сразу - пользователь может вернуться
-          return;
-        }
-      } catch (_) {}
+      const iosWindow = pendingIosDownloadWindow && !pendingIosDownloadWindow.closed
+        ? pendingIosDownloadWindow
+        : null;
       
-      // Если не удалось открыть окно, используем прямое скачивание
-      window.location.href = finalDataUrl;
-      toast("INFO", "Export", "Файл скачивается.");
-      setTimeout(() => {
-        closeExportModal();
-      }, 500);
+      if (iosWindow) {
+        writeIosImageDownloadPage(iosWindow, finalDataUrl, fileName);
+        toast("OK", "Export", "Открыто окно сохранения.");
+      }
+      // Не закрываем pendingIosDownloadWindow - пользователь сам закроет
       return;
     } else {
       const mode = downloadFile(finalDataUrl, fileName);
@@ -13249,6 +13244,7 @@ async function downloadFromExportModal() {
   } catch (error) {
     console.error("Download error:", error);
     toast("ERR", "Download", error?.message || "Download failed");
+    resetPendingIosDownloadWindow({ close: true });
   }
 }
 async function svgToCanvas(svgDataUrl, opts) {
