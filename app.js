@@ -2776,7 +2776,9 @@ function exportJson() {
     type: "application/json",
   });
   const url = URL.createObjectURL(blob);
-  const fileName = `schedule_${new Date().toISOString().slice(0, 10)}.json`;
+  const stamp = new Date().toISOString().slice(0, 10);
+  const time = new Date().toISOString().slice(11, 19).replace(/:/g, "-");
+  const fileName = `расписание_${stamp}_${time}.json`;
   const mode = downloadFile(url, fileName);
   if (mode === "new-tab") {
     toast(
@@ -8185,7 +8187,7 @@ function dayMenu(dayIndex) {
     }));
     state.events = state.events.concat(copies);
     saveState();
-    // Обновляем оба дня: текущий (источник) и следующий (пр������������������������������������емник)
+    // Обновляем оба дня: текущий (источник) и следующий (пр����������������������������������������емник)
     rerenderDayByIndex(dayIndex);
     rerenderDayByIndex(nextDayIndex);
     updateStats();
@@ -13032,7 +13034,6 @@ async function tryShareFileFromDataUrl(dataUrl, fileName) {
 
   const shareData = {
     files: [fileForShare],
-    title: safeFileName(fileName),
   };
 
   try {
@@ -13059,9 +13060,6 @@ function resetPendingIosDownloadWindow({ close = false } = {}) {
 async function downloadFromExportModal() {
   const opts = getExportOptsFromUI();
   const skipSvgPreviewForIosRaster = IS_IOS_WEBKIT && opts.fmt !== "svg";
-  if (IS_IOS_WEBKIT) {
-    openPendingIosDownloadWindow();
-  }
 
   try {
     toast("INFO", "Export", "Preparing file...");
@@ -13073,7 +13071,6 @@ async function downloadFromExportModal() {
 
       if (!exportResult || !exportResult.dataUrl) {
         toast("ERR", "Export", "Failed to render export image");
-        resetPendingIosDownloadWindow({ close: true });
         return;
       }
 
@@ -13091,11 +13088,11 @@ async function downloadFromExportModal() {
     let finalDataUrl;
     let fileName;
     const stamp = new Date().toISOString().slice(0, 10);
-    const timestamp = new Date().toISOString().slice(11, 19).replace(/:/g, "-");
+    const time = new Date().toISOString().slice(11, 19).replace(/:/g, "-");
 
     if (opts.fmt === "svg") {
       finalDataUrl = lastPreview.dataUrl;
-      fileName = `schedule-${opts.preset.id}-${stamp}_${timestamp}.svg`;
+      fileName = `расписание_${stamp}_${time}.svg`;
     } else {
       let rasterResult = null;
 
@@ -13153,7 +13150,7 @@ async function downloadFromExportModal() {
       if (rasterResult && rasterResult.dataUrl) {
         // Внедряем DPI метаданные для PNG и JPEG (300 DPI для печати)
         finalDataUrl = embedDpiInImage(rasterResult.dataUrl, 300);
-        fileName = `schedule-${opts.preset.id}-${stamp}_${timestamp}.${opts.fmt === "jpeg" ? "jpg" : "png"}`;
+        fileName = `расписание_${stamp}_${time}.${opts.fmt === "jpeg" ? "jpg" : "png"}`;
         if (rasterResult.scaled) {
           toast(
             "WARN",
@@ -13165,7 +13162,7 @@ async function downloadFromExportModal() {
       } else {
         if (lastPreview?.dataUrl) {
           finalDataUrl = lastPreview.dataUrl;
-          fileName = `schedule-${opts.preset.id}-${stamp}_${timestamp}.svg`;
+          fileName = `расписание_${stamp}_${time}.svg`;
           toast(
             "WARN",
             "Export",
@@ -13178,27 +13175,25 @@ async function downloadFromExportModal() {
       }
     }
 
+    // Для iOS используем модальное окно вместо новой вкладки
     if (IS_IOS_WEBKIT) {
-      const shared = await tryShareFileFromDataUrl(finalDataUrl, fileName);
-      if (shared) {
-        resetPendingIosDownloadWindow({ close: true });
-        toast("OK", "Export", "Файл передан в меню «Поделиться».");
-        setTimeout(() => {
-          closeExportModal();
-        }, 300);
-        return;
+      // Открываем модальное окно для скачивания
+      const iosWindow = window.open("", "_blank");
+      if (iosWindow && !iosWindow.closed) {
+        writeIosFallbackDownloadPage(iosWindow, finalDataUrl, fileName);
       }
-    }
-
-    const mode = downloadFile(finalDataUrl, fileName);
-    if (mode === "new-tab") {
-      toast(
-        "INFO",
-        "Safari",
-        "Файл открыт в новой вкладке. Для сохранения используйте меню «Поделиться».",
-      );
+      toast("OK", "Export", "Открыто окно сохранения.");
     } else {
-      toast("OK", "Export", `File \"${fileName}\" downloaded`);
+      const mode = downloadFile(finalDataUrl, fileName);
+      if (mode === "new-tab") {
+        toast(
+          "INFO",
+          "Safari",
+          "Файл открыт в новой вкладке. Для сохранения используйте меню «Поделиться».",
+        );
+      } else {
+        toast("OK", "Export", `File \"${fileName}\" downloaded`);
+      }
     }
 
     setTimeout(() => {
@@ -13207,7 +13202,6 @@ async function downloadFromExportModal() {
   } catch (error) {
     console.error("Download error:", error);
     toast("ERR", "Download", error?.message || "Download failed");
-    resetPendingIosDownloadWindow({ close: true });
   }
 }
 async function svgToCanvas(svgDataUrl, opts) {
