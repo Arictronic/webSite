@@ -8185,7 +8185,7 @@ function dayMenu(dayIndex) {
     }));
     state.events = state.events.concat(copies);
     saveState();
-    // Обновляем оба дня: текущий (источник) и следующий (пр������������емник)
+    // Обновляем оба дня: текущий (источник) и следующий (пр��������������емник)
     rerenderDayByIndex(dayIndex);
     rerenderDayByIndex(nextDayIndex);
     updateStats();
@@ -12866,6 +12866,12 @@ function writeIosFallbackDownloadPage(targetWindow, openUrl, fileName) {
       border-radius: 12px;
       padding: 16px;
     }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+    }
     .btn {
       display: inline-block;
       padding: 10px 14px;
@@ -12876,8 +12882,20 @@ function writeIosFallbackDownloadPage(targetWindow, openUrl, fileName) {
       cursor: pointer;
       font-size: 15px;
       line-height: 1.2;
+    }
+    .btn-save {
       background: #0f172a;
       color: #ffffff;
+    }
+    .btn-open {
+      background: #e2e8f0;
+      color: #0f172a;
+    }
+    .btn-back {
+      background: #64748b;
+      color: #ffffff;
+      margin-top: 12px;
+      width: 100%;
     }
     p { margin: 0 0 10px; line-height: 1.45; }
     .name { color: #475569; font-size: 14px; word-break: break-word; }
@@ -12894,18 +12912,73 @@ function writeIosFallbackDownloadPage(targetWindow, openUrl, fileName) {
     <p><strong>Файл готов.</strong></p>
     <p>Нажмите «Сохранить». Если файл не открывается, нажмите «Открыть файл» и используйте долгое нажатие для сохранения.</p>
     <p class="name">${escapedName}</p>
-    <div class="actions" style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px;">
-      <a class="btn" href="${escapedUrl}" target="_self" rel="noopener">Сохранить</a>
-      <a class="btn" href="${escapedUrl}" target="_blank" rel="noopener">Открыть файл</a>
+    <div class="actions">
+      <button id="saveBtn" type="button" class="btn btn-save">Сохранить</button>
+      <a class="btn btn-open" href="${escapedUrl}" target="_self" rel="noopener">Открыть файл</a>
     </div>
     <p class="hint">Для PNG/JPEG используйте «Сохранить изображение». Для SVG используйте «Сохранить в Файлы».</p>
-    <button id="backBtn" type="button" class="btn" style="margin-top: 12px; width: 100%;">← Назад</button>
+    <button id="backBtn" type="button" class="btn btn-back">← Назад</button>
   </div>
   <script>
     (function () {
       const exportUrl = ${jsExportUrl};
       const exportName = ${jsExportName};
+      const saveBtn = document.getElementById("saveBtn");
       const backBtn = document.getElementById("backBtn");
+
+      const detectMimeType = () => {
+        const lower = String(exportName || "").toLowerCase();
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+        if (lower.endsWith(".png")) return "image/png";
+        if (lower.endsWith(".svg")) return "image/svg+xml";
+        if (lower.endsWith(".json")) return "application/json";
+        return "application/octet-stream";
+      };
+
+      const trySave = async () => {
+        if (
+          typeof navigator === "undefined" ||
+          typeof navigator.share !== "function" ||
+          typeof fetch !== "function" ||
+          typeof File !== "function"
+        ) {
+          return false;
+        }
+
+        try {
+          const response = await fetch(exportUrl);
+          if (!response || !response.ok) return false;
+          const blob = await response.blob();
+          if (!blob) return false;
+          const file = new File([blob], exportName, {
+            type: blob.type || detectMimeType(),
+          });
+          const payload = { files: [file], title: exportName };
+          if (typeof navigator.canShare === "function" && !navigator.canShare(payload)) {
+            return false;
+          }
+          await navigator.share(payload);
+          return true;
+        } catch (_) {
+          return false;
+        }
+      };
+
+      if (saveBtn) {
+        saveBtn.addEventListener("click", async function (event) {
+          event.preventDefault();
+          saveBtn.disabled = true;
+          saveBtn.textContent = "Подготовка...";
+          const saved = await trySave();
+          if (saved) {
+            saveBtn.textContent = "Готово";
+            return;
+          }
+          saveBtn.disabled = false;
+          saveBtn.textContent = "Сохранить";
+          window.location.href = exportUrl;
+        });
+      }
 
       if (backBtn) {
         backBtn.addEventListener("click", function () {
