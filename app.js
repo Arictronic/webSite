@@ -13059,198 +13059,92 @@ function resetPendingIosDownloadWindow({ close = false } = {}) {
 async function downloadFromExportModal() {
   const opts = getExportOptsFromUI();
 
-  // 1. СРАЗУ открываем окно для сохранения (синхронно, до всех await!)
-  let downloadWindow = null;
-  try {
-    downloadWindow = window.open("", "_blank");
-  } catch (_) {
-    downloadWindow = null;
-  }
-
-  if (!downloadWindow) {
-    toast("WARN", "Export", "Браузер заблокировал всплывающее окно. Разрешите всплывающие окна.");
-    return;
-  }
-
-  // Показываем страницу ожидания с таймером
-  showDownloadWaitingPage(downloadWindow);
-
   try {
     let finalDataUrl;
     let fileName;
     const stamp = new Date().toISOString().slice(0, 10);
     const time = new Date().toISOString().slice(11, 19).replace(/:/g, "-");
 
-    // Проверяем размер экспорта - для больших размеров используем SVG
-    const isLargeExport = opts.preset &&
-      (opts.preset.w > 4000 || opts.preset.h > 3000);
-
-    // Генерируем изображение с таймаутом
-    let exportResult;
-    try {
-      exportResult = await Promise.race([
-        executeExport({ ...opts, fmt: "svg" }),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Превышено время генерации (60с)")), 60000)
-        ),
-      ]);
-    } catch (genError) {
-      console.error("Export generation error:", genError);
-      toast("WARN", "Export", "Генерация заняла слишком много времени. Используем упрощённый формат.");
-      exportResult = await executeExport({ ...opts, fmt: "svg", compact: true });
-    }
-
-    if (!exportResult || !exportResult.dataUrl) {
-      toast("ERR", "Export", "Не удалось сгенерировать изображение");
-      if (downloadWindow && !downloadWindow.closed) downloadWindow.close();
-      return;
-    }
-
-    // Для больших экспортов или SVG формата - используем SVG напрямую
-    if (opts.fmt === "svg" || isLargeExport) {
-      finalDataUrl = exportResult.dataUrl;
-      fileName = `расписание_${stamp}_${time}.svg`;
-
-      if (isLargeExport && opts.fmt !== "svg") {
-        toast("INFO", "Export", "Большой размер экспорта. Использован формат SVG для совместимости.");
+    // Если есть готовое превью — используем его (быстрее!)
+    if (lastPreview && lastPreview.dataUrl) {
+      finalDataUrl = lastPreview.dataUrl;
+      
+      // Определяем формат из превью
+      const isSvg = lastPreview.fmt === "svg" || lastPreview.dataUrl.startsWith("data:image/svg");
+      if (isSvg) {
+        fileName = `расписание_${stamp}_${time}.svg`;
+      } else {
+        fileName = `расписание_${stamp}_${time}.${opts.fmt === "jpeg" ? "jpg" : "png"}`;
       }
     } else {
-      // Конвертируем SVG в PNG/JPEG
-      let rasterResult = null;
-      try {
-        const canvas = await svgToCanvas(exportResult.dataUrl, opts);
-        rasterResult = convertCanvasToRequestedDataUrl(canvas, opts);
-      } catch (e) {
-        console.warn("svgToCanvas failed:", e);
+      // Превью нет — генерируем новое изображение
+      toast("INFO", "Export", "Генерация изображения...");
+      
+      const exportResult = await executeExport({ ...opts, fmt: "svg" });
+      if (!exportResult || !exportResult.dataUrl) {
+        toast("ERR", "Export", "Не удалось сгенерировать изображение");
+        return;
       }
 
-      if (!rasterResult) {
-        try {
-          const canvas = await exportToRasterCanvas(opts);
-          rasterResult = convertCanvasToRequestedDataUrl(canvas, opts);
-        } catch (e) {
-          console.warn("exportToRasterCanvas failed:", e);
-        }
-      }
+      // Сохраняем как превью для следующего раза
+      lastPreview = {
+        dataUrl: exportResult.dataUrl,
+        fmt: "svg",
+        originalOpts: opts,
+      };
 
-      if (rasterResult && rasterResult.dataUrl) {
-        finalDataUrl = embedDpiInImage(rasterResult.dataUrl, 300);
-        fileName = `расписание_${stamp}_${time}.${opts.fmt === "jpeg" ? "jpg" : "png"}`;
-      } else {
-        // Fallback на SVG
+      // Конвертируем в нужный формат
+      if (opts.fmt === "svg") {
         finalDataUrl = exportResult.dataUrl;
         fileName = `расписание_${stamp}_${time}.svg`;
-        toast("INFO", "Export", "Использован формат SVG для совместимости.");
+      } else {
+        let rasterResult = null;
+        try {
+          const canvas = await svgToCanvas(exportResult.dataUrl, opts);
+          rasterResult = convertCanvasToRequestedDataUrl(canvas, opts);
+        } catch (_) {}
+
+        if (!rasterResult) {
+          try {
+            const canvas = await exportToRasterCanvas(opts);
+            rasterResult = convertCanvasToRequestedDataUrl(canvas, opts);
+          } catch (_) {}
+        }
+
+        if (rasterResult && rasterResult.dataUrl) {
+          finalDataUrl = embedDpiInImage(rasterResult.dataUrl, 300);
+          fileName = `расписание_${stamp}_${time}.${opts.fmt === "jpeg" ? "jpg" : "png"}`;
+        } else {
+          finalDataUrl = exportResult.dataUrl;
+          fileName = `расписание_${stamp}_${time}.svg`;
+        }
       }
     }
 
-    // Обновляем окно с кнопками Сохранить/Назад (как у JSON)
-    if (downloadWindow && !downloadWindow.closed) {
-      writeIosFallbackDownloadPage(downloadWindow, finalDataUrl, fileName);
+    // Для macOS/iOS открываем окно с кнопками Сохранить/Назад
+    if (IS_IOS_WEBKIT || /Mac/.test(navigator.userAgent)) {
+      const downloadWindow = window.open("", "_blank");
+      if (downloadWindow) {
+        writeIosFallbackDownloadPage(downloadWindow, finalDataUrl, fileName);
+        setTimeout(() => closeExportModal(), 200);
+        return;
+      }
     }
 
-    setTimeout(() => {
-      closeExportModal();
-    }, 200);
+    // Для остальных устройств скачиваем напрямую
+    const mode = downloadFile(finalDataUrl, fileName);
+    if (mode === "new-tab") {
+      toast("INFO", "Safari", "Файл открыт в новой вкладке. Используйте «Поделиться».");
+    } else {
+      toast("OK", "Export", `Файл «${fileName}» скачан`);
+    }
 
+    setTimeout(() => closeExportModal(), 500);
   } catch (error) {
     console.error("Export error:", error);
-    if (downloadWindow && !downloadWindow.closed) {
-      downloadWindow.close();
-    }
     toast("ERR", "Download", error?.message || "Ошибка скачивания");
     resetPendingIosDownloadWindow({ close: true });
   }
-}
-
-// Страница ожидания с таймером
-function showDownloadWaitingPage(targetWindow) {
-  if (!targetWindow || targetWindow.closed) return;
-
-  const theme = state.settings.theme;
-  const tokens = theme.mode === "light" ? theme.customTokens :
-    theme.mode === "dark" ? THEME_PRESETS.find(p => p.id === "graphite-dark").tokens : theme.customTokens;
-  const bg = tokens.bg || "#f6f7fb";
-  const card = tokens.card || "#ffffff";
-  const text = tokens.text || "#0f172a";
-  const muted = tokens.muted || "#64748b";
-  const accent = tokens.accent || "#0ea5e9";
-
-  try {
-    targetWindow.document.open();
-    targetWindow.document.write(`<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Подготовка файла...</title>
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{
-      font:16px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-      background:${bg};
-      color:${text};
-      min-height:100vh;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-    }
-    .box{
-      background:${card};
-      border-radius:16px;
-      padding:32px;
-      box-shadow:0 20px 40px rgba(0,0,0,0.1);
-      text-align:center;
-      max-width:400px;
-      width:100%;
-    }
-    .spinner{
-      width:48px;
-      height:48px;
-      border:4px solid ${bg};
-      border-top-color:${accent};
-      border-radius:50%;
-      animation:spin 1s linear infinite;
-      margin:0 auto 20px;
-    }
-    @keyframes spin{to{transform:rotate(360deg)}}
-    .title{font-size:20px;font-weight:700;margin-bottom:8px}
-    .desc{color:${muted};font-size:14px;margin-bottom:16px}
-    .timer{
-      font-size:28px;
-      font-weight:600;
-      color:${accent};
-      font-variant-numeric:tabular-nums;
-    }
-    .hint{color:${muted};font-size:13px;margin-top:16px}
-  </style>
-</head>
-<body>
-  <div class="box">
-    <div class="spinner"></div>
-    <div class="title">Подготовка файла</div>
-    <div class="desc">Генерация изображения...</div>
-    <div class="timer" id="timer">0:00</div>
-    <div class="hint">Это займёт от 5 до 30 секунд<br/>в зависимости от размера</div>
-  </div>
-  <script>
-    (function(){
-      var start = Date.now();
-      var timerEl = document.getElementById('timer');
-      function update(){
-        var elapsed = Math.floor((Date.now() - start) / 1000);
-        var min = Math.floor(elapsed / 60);
-        var sec = elapsed % 60;
-        timerEl.textContent = min + ':' + (sec < 10 ? '0' : '') + sec;
-        requestAnimationFrame(update);
-      }
-      update();
-    })();
-  <\/script>
-</body>
-</html>`);
-    targetWindow.document.close();
-  } catch (_) {}
 }
 async function svgToCanvas(svgDataUrl, opts) {
   try {
