@@ -12927,6 +12927,7 @@ function writeIosFallbackDownloadPage(targetWindow, openUrl, fileName) {
       <button id="saveBtn" type="button" class="btn btn-save">Сохранить</button>
       <button id="backBtn" type="button" class="btn btn-back">← Назад</button>
     </div>
+    <p class="hint" style="color:${muted};font-size:13px;margin-top:12px;line-height:1.4">Нажмите «Сохранить» и выберите куда сохранить файл</p>
   </div>
   <script>
     (function () {
@@ -12944,7 +12945,16 @@ function writeIosFallbackDownloadPage(targetWindow, openUrl, fileName) {
         return "application/octet-stream";
       };
 
+      const isSvg = exportName.toLowerCase().endsWith(".svg");
+      const isLargeFile = exportUrl.length > 5 * 1024 * 1024;
+
       const trySave = async () => {
+        // Для SVG и больших файлов используем прямое скачивание
+        if (isSvg || isLargeFile) {
+          window.location.href = exportUrl;
+          return true;
+        }
+        
         if (
           typeof navigator === "undefined" ||
           typeof navigator.share !== "function" ||
@@ -13267,7 +13277,13 @@ function downloadFile(dataUrl, fileName) {
     const rawUrl = typeof dataUrl === "string" ? dataUrl : "";
     let openUrl = rawUrl;
     let tempObjectUrl = "";
-    if (rawUrl.startsWith("data:")) {
+    
+    // Для больших файлов (>5MB) используем прямой data URL вместо blob
+    // чтобы избежать проблем с памятью при конвертации
+    const isLargeFile = rawUrl.length > 5 * 1024 * 1024;
+    const isSvg = fileName.toLowerCase().endsWith(".svg");
+    
+    if (!isLargeFile && rawUrl.startsWith("data:")) {
       tempObjectUrl = dataUrlToObjectUrl(rawUrl);
       if (tempObjectUrl) {
         openUrl = tempObjectUrl;
