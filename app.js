@@ -13093,7 +13093,7 @@ async function downloadFromExportModal() {
 
     let exportResult = null;
     
-    // Для SVG всегда генерируем preview
+    // Для SVG генерируем preview
     // Для PNG/JPEG на iOS не генерируем preview (сразу конвертируем в canvas)
     if (!skipSvgPreviewForIosRaster) {
       const svgOpts = { ...opts, fmt: "svg" };
@@ -13123,7 +13123,8 @@ async function downloadFromExportModal() {
     } else {
       let rasterResult = null;
 
-      if (lastPreview?.dataUrl) {
+      // Для iOS PNG/JPEG используем direct canvas export
+      if (IS_IOS_WEBKIT && !skipSvgPreviewForIosRaster && lastPreview?.dataUrl) {
         try {
           const canvas = await svgToCanvas(lastPreview.dataUrl, opts);
           if (
@@ -13208,17 +13209,20 @@ async function downloadFromExportModal() {
       if (!pendingIosDownloadWindow || pendingIosDownloadWindow.closed) {
         openPendingIosDownloadWindow();
       }
-      
+
       const iosWindow = pendingIosDownloadWindow && !pendingIosDownloadWindow.closed
         ? pendingIosDownloadWindow
         : null;
-      
+
       if (iosWindow) {
         writeIosImageDownloadPage(iosWindow, finalDataUrl, fileName);
         toast("OK", "Export", "Открыто окно сохранения.");
       }
       // Закрываем модальное окно экспорта
-      closeExportModal();
+      setTimeout(() => {
+        closeExportModal();
+        resetPendingIosDownloadWindow();
+      }, 200);
       return;
     } else {
       const mode = downloadFile(finalDataUrl, fileName);
