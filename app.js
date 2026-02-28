@@ -13132,7 +13132,30 @@ async function downloadFromExportModal() {
       }
     }
 
-    // Скачиваем файл
+    // Для iOS открываем модальное окно как у JSON
+    if (IS_IOS_WEBKIT) {
+      // Открываем окно если ещё не открыто
+      if (!pendingIosDownloadWindow || pendingIosDownloadWindow.closed) {
+        openPendingIosDownloadWindow();
+      }
+
+      const iosWindow = pendingIosDownloadWindow && !pendingIosDownloadWindow.closed
+        ? pendingIosDownloadWindow
+        : null;
+
+      if (iosWindow) {
+        writeIosImageDownloadPage(iosWindow, finalDataUrl, fileName);
+        toast("OK", "Export", "Открыто окно сохранения.");
+      }
+      // Закрываем модальное окно экспорта
+      setTimeout(() => {
+        closeExportModal();
+        resetPendingIosDownloadWindow();
+      }, 200);
+      return;
+    }
+
+    // Для остальных устройств скачиваем файл
     const mode = downloadFile(finalDataUrl, fileName);
     if (mode === "new-tab") {
       toast(
@@ -13150,6 +13173,7 @@ async function downloadFromExportModal() {
   } catch (error) {
     console.error("Download error:", error);
     toast("ERR", "Download", error?.message || "Ошибка скачивания");
+    resetPendingIosDownloadWindow({ close: true });
   }
 }
 async function svgToCanvas(svgDataUrl, opts) {
