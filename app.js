@@ -10943,14 +10943,12 @@ async function buildExportPreview() {
 
     if (IS_APPLE_DOWNLOAD_TAB) {
       const cacheKey = getExportOptionsCacheKey(opts);
-      try {
-        await prepareExportFile(opts, {
-          cacheKey,
-          notifyGeneration: false,
-        });
-      } catch (prepareError) {
+      prepareExportFile(opts, {
+        cacheKey,
+        notifyGeneration: false,
+      }).catch((prepareError) => {
         console.warn("Export file cache preparation failed:", prepareError);
-      }
+      });
     }
 
     toast("OK", "Экспорт", "Предпросмотр готов");
@@ -12873,6 +12871,15 @@ function openPendingIosDownloadWindow() {
         );
         pendingIosDownloadWindow.document.close();
       } catch (_) {}
+      try {
+        // Keep source tab active when possible so heavy export generation can finish.
+        if (typeof pendingIosDownloadWindow.blur === "function") {
+          pendingIosDownloadWindow.blur();
+        }
+        if (typeof window.focus === "function") {
+          window.focus();
+        }
+      } catch (_) {}
     }
     return pendingIosDownloadWindow || null;
   } catch (_) {
@@ -13228,8 +13235,8 @@ async function downloadFromExportModal() {
     !!preparedExportFile && preparedExportFile.key === cacheKey;
 
   try {
-    if (IS_APPLE_DOWNLOAD_TAB && hasPreparedFile) {
-      // Если файл уже подготовлен, открываем вкладку прямо в user gesture.
+    if (IS_APPLE_DOWNLOAD_TAB) {
+      // Open target tab before await to avoid Safari popup blocking.
       openPendingIosDownloadWindow();
     }
 
@@ -13237,11 +13244,6 @@ async function downloadFromExportModal() {
       cacheKey,
       notifyGeneration: !hasPreparedFile,
     });
-
-    if (IS_APPLE_DOWNLOAD_TAB && !hasPreparedFile) {
-      // Пытаемся открыть вкладку после подготовки (один клик).
-      openPendingIosDownloadWindow();
-    }
 
     const mode = downloadFile(prepared.dataUrl, prepared.fileName);
     if (mode === "new-tab") {
@@ -13386,7 +13388,12 @@ function downloadFile(dataUrl, fileName) {
     if (iosTargetWindow && !iosTargetWindow.closed) {
       writeIosFallbackDownloadPage(iosTargetWindow, openUrl, fileName);
     } else {
-      window.location.href = openUrl;
+      // Last resort: render same buttons page in current tab instead of fullscreen file view.
+      try {
+        writeIosFallbackDownloadPage(window, openUrl, fileName);
+      } catch (_) {
+        window.location.href = openUrl;
+      }
     }
 
     if (tempObjectUrl) {
