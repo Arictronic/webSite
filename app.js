@@ -2784,7 +2784,31 @@ function exportJson() {
   const stamp = new Date().toISOString().slice(0, 10);
   const time = new Date().toISOString().slice(11, 19).replace(/:/g, "-");
   const fileName = `расписание_${stamp}_${time}.json`;
-  const mode = downloadFile(url, fileName);
+  let mode = "download";
+
+  // На компьютерах JSON скачиваем сразу, без промежуточной вкладки.
+  if (!IS_IOS_DEVICE) {
+    try {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (_) {
+      mode = downloadFile(url, fileName);
+    }
+  } else {
+    mode = downloadFile(url, fileName);
+  }
+
+  setTimeout(() => {
+    try {
+      URL.revokeObjectURL(url);
+    } catch (_) {}
+  }, 10 * 60 * 1000);
+
   if (mode === "new-tab") {
     toast(
       "INFO",
