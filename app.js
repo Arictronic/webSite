@@ -12624,7 +12624,9 @@ function getCanvas2dContext(canvas, options = null) {
 }
 
 function getSafeMaxCanvasArea() {
-  if (IS_IPHONE_DEVICE) return 5000000;
+  // A4 landscape at 300 DPI is 3508x2480 = 8,699,840 px.
+  // Keep iPhone limit above this so A4 export is not force-downscaled.
+  if (IS_IPHONE_DEVICE) return 10000000;
   if (IS_IPAD_DEVICE) return 8000000;
   if (IS_IOS_DEVICE) return 7000000;
   if (IS_WEBKIT_ENGINE) return 14000000;
