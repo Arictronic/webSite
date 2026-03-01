@@ -10107,7 +10107,7 @@ function updateLogoCSSVariables() {
 }
 
 function invalidateExportPreview() {
-  clearPreviewCache();
+  clearPreviewCache({ clearPrepared: true });
 }
 
 function getExportOptionsCacheKey(opts) {
@@ -10388,7 +10388,23 @@ function openExportModal() {
   syncExportDayBackgroundFromSettings();
 
   setExportMode(EXPORT_MODE_WEEK, { preservePreview: true });
-  invalidateExportPreview();
+  clearPreviewCache({ clearPrepared: false });
+  try {
+    const modalOpts = getExportOptsFromUI();
+    const modalCacheKey = getExportOptionsCacheKey(modalOpts);
+    if (!preparedExportFile || preparedExportFile.key !== modalCacheKey) {
+      preparedExportFile = null;
+      if (
+        exportPreparationPromise &&
+        exportPreparationPromise.key !== modalCacheKey
+      ) {
+        exportPreparationPromise = null;
+      }
+    }
+  } catch (_) {
+    preparedExportFile = null;
+    exportPreparationPromise = null;
+  }
   syncExportModalUI();
   setBackdropVisible(exportBackdrop, true);
   setTimeout(() => {
@@ -10402,7 +10418,7 @@ function openExportModal() {
 
 function closeExportModal() {
   setBackdropVisible(exportBackdrop, false);
-  invalidateExportPreview();
+  clearPreviewCache({ clearPrepared: false });
 }
 
 function syncExportModalUI() {
@@ -11164,7 +11180,7 @@ function displaySvgPreview(svgDataUrl) {
   }
 }
 
-function clearPreviewCache() {
+function clearPreviewCache({ clearPrepared = true } = {}) {
   // Освобождаем object URL если он существует
   if (currentPreviewObjectUrl) {
     URL.revokeObjectURL(currentPreviewObjectUrl);
@@ -11212,8 +11228,10 @@ function clearPreviewCache() {
 
   // Очищаем данные предпросмотра
   lastPreview = null;
-  preparedExportFile = null;
-  exportPreparationPromise = null;
+  if (clearPrepared) {
+    preparedExportFile = null;
+    exportPreparationPromise = null;
+  }
 
   console.log("Кэш предпросмотра очищен");
 }
@@ -11225,7 +11243,7 @@ function setupExportModalEventListeners() {
   exportModal.setAttribute("data-cleanup-bound", "1");
 
   const handleModalClose = () => {
-    clearPreviewCache();
+    clearPreviewCache({ clearPrepared: false });
   };
 
   const closeButtons = exportModal.querySelectorAll(
@@ -13176,14 +13194,23 @@ function buildExportFileName(stamp, time, ext) {
 
 async function prepareExportFile(
   opts,
-  { cacheKey = null, notifyGeneration = true } = {},
+  {
+    cacheKey = null,
+    notifyGeneration = true,
+    forceRebuild = false,
+    forceRegenerateSource = false,
+  } = {},
 ) {
   const resolvedKey = String(cacheKey || getExportOptionsCacheKey(opts));
-  if (preparedExportFile && preparedExportFile.key === resolvedKey) {
+  if (!forceRebuild && preparedExportFile && preparedExportFile.key === resolvedKey) {
     return preparedExportFile;
   }
 
-  if (exportPreparationPromise && exportPreparationPromise.key === resolvedKey) {
+  if (
+    !forceRebuild &&
+    exportPreparationPromise &&
+    exportPreparationPromise.key === resolvedKey
+  ) {
     return exportPreparationPromise.promise;
   }
 
@@ -13191,7 +13218,9 @@ async function prepareExportFile(
     const stamp = new Date().toISOString().slice(0, 10);
     const time = new Date().toISOString().slice(11, 19).replace(/:/g, "-");
     let sourceSvgDataUrl =
-      lastPreview && typeof lastPreview.dataUrl === "string" ? lastPreview.dataUrl : "";
+      !forceRegenerateSource && lastPreview && typeof lastPreview.dataUrl === "string"
+        ? lastPreview.dataUrl
+        : "";
 
     if (!sourceSvgDataUrl) {
       if (notifyGeneration) {
@@ -13265,14 +13294,14 @@ async function prepareExportFile(
 async function downloadFromExportModal() {
   const opts = getExportOptsFromUI();
   const cacheKey = getExportOptionsCacheKey(opts);
-  const hasPreparedFile =
-    !!preparedExportFile && preparedExportFile.key === cacheKey;
 
   try {
     // 1) Сначала полностью подготавливаем файл в переменную/кэш.
     const prepared = await prepareExportFile(opts, {
       cacheKey,
-      notifyGeneration: !hasPreparedFile,
+      notifyGeneration: true,
+      forceRebuild: true,
+      forceRegenerateSource: true,
     });
 
     // 2) Только после подготовки открываем вкладку/страницу скачивания.
