@@ -13269,16 +13269,13 @@ async function downloadFromExportModal() {
     !!preparedExportFile && preparedExportFile.key === cacheKey;
 
   try {
-    if (IS_APPLE_DOWNLOAD_TAB) {
-      // Open target tab before await to avoid Safari popup blocking.
-      openPendingIosDownloadWindow();
-    }
-
+    // 1) Сначала полностью подготавливаем файл в переменную/кэш.
     const prepared = await prepareExportFile(opts, {
       cacheKey,
       notifyGeneration: !hasPreparedFile,
     });
 
+    // 2) Только после подготовки открываем вкладку/страницу скачивания.
     const mode = downloadFile(prepared.dataUrl, prepared.fileName);
     if (mode === "new-tab") {
       toast(
