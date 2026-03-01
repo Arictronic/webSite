@@ -13335,6 +13335,12 @@ async function downloadFromExportModal() {
   const cacheKey = getExportOptionsCacheKey(opts);
 
   try {
+    // В Safari/iOS вкладку нужно открыть в рамках user gesture (до await),
+    // иначе браузер может заблокировать popup и открыть fallback в текущей вкладке.
+    if (IS_APPLE_DOWNLOAD_TAB) {
+      openPendingIosDownloadWindow();
+    }
+
     // 1) Сначала полностью подготавливаем файл в переменную/кэш.
     const prepared = await prepareExportFile(opts, {
       cacheKey,
