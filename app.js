@@ -13130,10 +13130,33 @@ function writeIosFallbackDownloadPage(targetWindow, openUrl, fileName) {
 
       if (backBtn) {
         backBtn.addEventListener("click", function () {
-          window.history.back();
-          setTimeout(() => {
+          try {
+            if (window.opener && !window.opener.closed) {
+              try {
+                window.opener.focus();
+              } catch (_) {}
+              window.close();
+              return;
+            }
+          } catch (_) {}
+
+          if (window.history.length > 1) {
+            window.history.back();
+            setTimeout(() => {
+              try {
+                window.close();
+              } catch (_) {}
+            }, 300);
+            return;
+          }
+
+          try {
             window.close();
-          }, 300);
+          } catch (_) {}
+
+          if (document.referrer) {
+            window.location.href = document.referrer;
+          }
         });
       }
     })();
@@ -13305,16 +13328,7 @@ async function downloadFromExportModal() {
     });
 
     // 2) Только после подготовки открываем вкладку/страницу скачивания.
-    const mode = downloadFile(prepared.dataUrl, prepared.fileName);
-    if (mode === "new-tab") {
-      toast(
-        "INFO",
-        "Export",
-        "Открыто в новой вкладке. В Safari сохраните файл через «Поделиться».",
-      );
-    } else {
-      toast("OK", "Export", `Файл «${prepared.fileName}» скачан`);
-    }
+    downloadFile(prepared.dataUrl, prepared.fileName);
 
     setTimeout(() => closeExportModal(), 500);
   } catch (error) {
