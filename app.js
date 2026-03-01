@@ -13130,12 +13130,28 @@ function writeIosFallbackDownloadPage(targetWindow, openUrl, fileName) {
 
       if (backBtn) {
         backBtn.addEventListener("click", function () {
+          let openerHref = "";
           try {
             if (window.opener && !window.opener.closed) {
               try {
+                openerHref = String(window.opener.location.href || "");
+              } catch (_) {}
+              try {
                 window.opener.focus();
               } catch (_) {}
-              window.close();
+              try {
+                window.close();
+              } catch (_) {}
+              setTimeout(() => {
+                if (window.closed) return;
+                if (openerHref) {
+                  window.location.replace(openerHref);
+                  return;
+                }
+                if (document.referrer) {
+                  window.location.replace(document.referrer);
+                }
+              }, 120);
               return;
             }
           } catch (_) {}
@@ -13150,13 +13166,13 @@ function writeIosFallbackDownloadPage(targetWindow, openUrl, fileName) {
             return;
           }
 
+          if (document.referrer) {
+            window.location.replace(document.referrer);
+            return;
+          }
           try {
             window.close();
           } catch (_) {}
-
-          if (document.referrer) {
-            window.location.href = document.referrer;
-          }
         });
       }
     })();
