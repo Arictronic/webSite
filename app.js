@@ -10538,9 +10538,47 @@ async function ensureFontsLoaded(timeoutMs = 2500, variantsSet = null) {
     }
   } catch (_) {}
 
-  await new Promise((r) =>
-    requestAnimationFrame(() => requestAnimationFrame(r)),
-  );
+  await waitForRenderFrames(2, 220);
+}
+
+function waitForAnimationFrameOrTimeout(timeoutMs = 180) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+
+    const safeTimeout = Math.max(16, Number(timeoutMs) || 180);
+    const fallbackTimer = setTimeout(() => {
+      finish();
+    }, safeTimeout);
+
+    // requestAnimationFrame may pause indefinitely in background tabs on iOS.
+    if (
+      typeof requestAnimationFrame === "function" &&
+      document.visibilityState !== "hidden"
+    ) {
+      requestAnimationFrame(() => {
+        clearTimeout(fallbackTimer);
+        finish();
+      });
+      return;
+    }
+
+    setTimeout(() => {
+      clearTimeout(fallbackTimer);
+      finish();
+    }, 16);
+  });
+}
+
+async function waitForRenderFrames(count = 1, timeoutMs = 180) {
+  const total = Math.max(1, Math.floor(Number(count) || 1));
+  for (let i = 0; i < total; i++) {
+    await waitForAnimationFrameOrTimeout(timeoutMs);
+  }
 }
 
 async function buildFontFaceCssForVariants(
@@ -11552,7 +11590,7 @@ async function prepareDomForExport({
   }
 
   // 6. Даем браузеру пересчитать layout
-  await new Promise((r) => requestAnimationFrame(r));
+  await waitForRenderFrames(1, 220);
   await new Promise((r) => setTimeout(r, 50));
 
   // 7. Измеряем размеры
@@ -11597,7 +11635,7 @@ async function prepareDomForExport({
     clone.style.minHeight = "0";
     scheduleEl.style.height = "auto";
 
-    await new Promise((r) => requestAnimationFrame(r));
+    await waitForRenderFrames(1, 220);
 
     const reRect = scheduleEl.getBoundingClientRect();
     const reWidth = scheduleEl.scrollWidth || reRect.width || width;
@@ -11683,9 +11721,7 @@ async function exportToSvg(opts) {
     await ensureFontsLoaded(3000, usedFonts);
 
     // 7. Ждем перерисовки
-    await new Promise((r) =>
-      requestAnimationFrame(() => requestAnimationFrame(r)),
-    );
+    await waitForRenderFrames(2, 220);
 
     const exportSchedule = clone.querySelector(".schedule");
     if (exportSchedule) {
@@ -11704,7 +11740,7 @@ async function exportToSvg(opts) {
     const lg = state.settings.logo;
     if (lg?.enabled) {
       await applyLogoToExport(clone, lg, metrics, "svg");
-      await new Promise((r) => requestAnimationFrame(r));
+      await waitForRenderFrames(1, 220);
     }
 
     // 8. Собираем CSS для встраивания шрифтов (с data URI если возможно)
@@ -12785,9 +12821,7 @@ async function exportToRasterCanvas(opts) {
 
     const usedFonts = collectUsedFontVariantsFromDom(clone);
     await ensureFontsLoaded(3000, usedFonts);
-    await new Promise((r) =>
-      requestAnimationFrame(() => requestAnimationFrame(r)),
-    );
+    await waitForRenderFrames(2, 220);
 
     const exportSchedule = clone.querySelector(".schedule");
     if (exportSchedule) {
@@ -12805,7 +12839,7 @@ async function exportToRasterCanvas(opts) {
     const lg = state.settings.logo;
     if (lg?.enabled) {
       await applyLogoToExport(clone, lg, metrics, "canvas");
-      await new Promise((r) => requestAnimationFrame(r));
+      await waitForRenderFrames(1, 220);
     }
 
     const fontEmbedCSS = await buildFontFaceCssForVariants(usedFonts, {
